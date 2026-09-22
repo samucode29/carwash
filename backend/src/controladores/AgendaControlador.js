@@ -1,0 +1,96 @@
+/**
+ * Controlador de agenda: citas previas y turnos por orden de llegada
+ * (CU04, CU05, CU06 / RF04-RF07).
+ */
+const AgendaRepositorio = require('../repositorios/AgendaRepositorio');
+const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
+const { obtenerFechaHoy, obtenerFechaHoraActual, obtenerHoraActual } = require('../utilidades/fechas');
+
+// ---------------------------------------------------------------------------
+// Citas
+// ---------------------------------------------------------------------------
+async function listarCitas(req, res) {
+  const citas = await AgendaRepositorio.listarCitas(req.query.fecha);
+  res.json(citas);
+}
+
+async function crearCita(req, res) {
+  const { cliente_id, vehiculo_id, servicio_id, fecha, hora, cliente_nombre, cliente_telefono, placa } = req.body;
+  if (!servicio_id || !fecha || !hora) {
+    return res.status(400).json({ error: 'Servicio, fecha y hora son obligatorios.' });
+  }
+
+  const ocupada = await AgendaRepositorio.existeCitaEnHorario(fecha, hora);
+  if (ocupada) {
+    return res.status(400).json({ error: 'Ya existe una cita agendada para esa fecha y hora. Elija otro horario.' });
+  }
+
+  const nueva = await AgendaRepositorio.crearCita({
+    clienteId: cliente_id ? parseInt(cliente_id, 10) : null,
+    vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
+    servicioId: parseInt(servicio_id, 10),
+    fecha,
+    hora,
+    clienteNombreTemp: cliente_nombre,
+    clienteTelefonoTemp: cliente_telefono,
+    placaTemp: placa ? placa.toUpperCase().trim() : '',
+    registradoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'agendar_cita', `Agendada cita ID ${nueva.id} para ${fecha} ${hora}`);
+  res.status(201).json(nueva);
+}
+
+async function actualizarCita(req, res) {
+  const id = Number(req.params.id);
+  const { estado, fecha, hora } = req.body;
+
+  const cambios = {};
+  if (estado) cambios.estado = estado;
+  if (fecha) cambios.fecha = fecha;
+  if (hora) cambios.hora = hora;
+
+  const cita = await AgendaRepositorio.actualizarCita(id, cambios);
+  if (!cita) return res.status(404).json({ error: 'Cita no encontrada.' });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'modificar_cita', `Cita ID ${id} actualizada a estado: ${cita.estado}`);
+  res.json(cita);
+}
+
+// ---------------------------------------------------------------------------
+// Turnos (walk-in)
+// ---------------------------------------------------------------------------
+async function listarTurnosDeHoy(req, res) {
+  const turnos = await AgendaRepositorio.listarTurnosDeHoy(obtenerFechaHoy());
+  res.json(turnos);
+}
+
+async function crearTurno(req, res) {
+  const { cliente_id, vehiculo_id, placa_temporal, tipo_vehiculo, servicio_id } = req.body;
+  if (!servicio_id) {
+    return res.status(400).json({ error: 'El servicio es obligatorio para generar un turno.' });
+  }
+
+  const nuevo = await AgendaRepositorio.crearTurno({
+    clienteId: cliente_id ? parseInt(cliente_id, 10) : null,
+    vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
+    placaTemporal: placa_temporal ? placa_temporal.toUpperCase().trim() : '',
+    tipoVehiculo: tipo_vehiculo || 'carro',
+    servicioId: parseInt(servicio_id, 10),
+    fecha: obtenerFechaHoy(),
+    horaLlegada: obtenerHoraActual(),
+    registradoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_turno', `Turno generado #${nuevo.id} (${nuevo.placa_temporal})`);
+  res.status(201).json(nuevo);
+}
+
+async function actualizarTurno(req, res) {
+  const id = Number(req.params.id);
+  const turno = await AgendaRepositorio.actualizarTurno(id, req.body.estado ? { estado: req.body.estado } : {});
+  if (!turno) return res.status(404).json({ error: 'Turno no encontrado.' });
+  res.json(turno);
+}
+
+module.exports = { listarCitas, crearCita, actualizarCita, listarTurnosDeHoy, crearTurno, actualizarTurno };

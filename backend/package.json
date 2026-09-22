@@ -1,0 +1,22 @@
+{
+  "name": "carwash-pro-backend",
+  "version": "2.0.0",
+  "description": "API REST de CarWash Pro - Sistema de Gestión para Lavadero de Carros y Motos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["carwash", "pos", "lavadero", "gestion", "express", "mysql"],
+  "author": "Samuel Petro Avalos",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.0",
+    "pdfkit": "^0.15.0"
+  }
+}

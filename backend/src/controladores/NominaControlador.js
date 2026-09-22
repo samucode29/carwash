@@ -1,0 +1,131 @@
+/**
+ * Controlador de nómina: comisiones de lavadores, salarios fijos y
+ * asistencia de personal (CU21-CU27 / RF22, RF25, RF30-RF35).
+ */
+const NominaRepositorio = require('../repositorios/NominaRepositorio');
+const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
+const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
+const { obtenerFechaHoy, obtenerHoraActual } = require('../utilidades/fechas');
+
+// ---------------------------------------------------------------------------
+// Comisiones de lavadores
+// ---------------------------------------------------------------------------
+async function listarResumenLavadores(req, res) {
+  res.json(await NominaRepositorio.resumenComisionesLavadores());
+}
+
+async function generarLiquidacion(req, res) {
+  const { lavador_id, periodo_inicio, periodo_fin, total_comision, descuentos } = req.body;
+  const hoy = obtenerFechaHoy();
+
+  const liquidacion = await NominaRepositorio.crearLiquidacion({
+    lavadorId: parseInt(lavador_id, 10),
+    periodoInicio: periodo_inicio || hoy,
+    periodoFin: periodo_fin || hoy,
+    totalComision: parseFloat(total_comision) || 0,
+    descuentos: parseFloat(descuentos) || 0
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'generar_liquidacion', `Liquidación #${liquidacion.id} para lavador ID ${lavador_id} ($${liquidacion.valor_a_pagar})`);
+  res.status(201).json(liquidacion);
+}
+
+async function pagarLiquidacion(req, res) {
+  const { liquidacion_id, soporte_pago_url, fecha_pago } = req.body;
+  if (!soporte_pago_url) {
+    return res.status(400).json({ error: 'El sistema requiere adjuntar un soporte de pago para cambiar a estado Pagado.' });
+  }
+
+  const liquidacion = await NominaRepositorio.pagarLiquidacion({
+    liquidacionId: parseInt(liquidacion_id, 10),
+    soportePagoUrl: soporte_pago_url,
+    fechaPago: fecha_pago || obtenerFechaHoy()
+  });
+  if (!liquidacion) return res.status(404).json({ error: 'Liquidación no encontrada.' });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pagar_liquidacion', `Pagada liquidación #${liquidacion.id} con soporte: ${soporte_pago_url}`);
+  res.json(liquidacion);
+}
+
+async function listarLiquidaciones(req, res) {
+  res.json(await NominaRepositorio.listarLiquidaciones());
+}
+
+// ---------------------------------------------------------------------------
+// Salarios fijos
+// ---------------------------------------------------------------------------
+async function listarEmpleados(req, res) {
+  res.json(await NominaRepositorio.listarEmpleadosConUltimoPago());
+}
+
+async function pagarSalarioEmpleado(req, res) {
+  const { empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, soporte_pago_url } = req.body;
+  if (!soporte_pago_url) {
+    return res.status(400).json({ error: 'Debe adjuntar el soporte de pago para registrar la nómina como pagada.' });
+  }
+
+  const hoy = obtenerFechaHoy();
+  const pago = await NominaRepositorio.crearPagoSalario({
+    empleadoId: parseInt(empleado_id, 10),
+    periodicidad: periodicidad || 'quincenal',
+    periodoInicio: periodo_inicio || hoy,
+    periodoFin: periodo_fin || hoy,
+    salarioBase: parseFloat(salario_base) || 0,
+    descuentos: parseFloat(descuentos) || 0,
+    soportePagoUrl: soporte_pago_url
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar})`);
+  res.status(201).json(pago);
+}
+
+async function listarPagosSalario(req, res) {
+  res.json(await NominaRepositorio.listarPagosSalario());
+}
+
+// ---------------------------------------------------------------------------
+// Asistencia
+// ---------------------------------------------------------------------------
+async function listarAsistenciaDelDia(req, res) {
+  res.json(await AsistenciaRepositorio.listarPorFecha(req.query.fecha || obtenerFechaHoy()));
+}
+
+/**
+ * Registra entrada, salida o inasistencia de una persona (usuario o
+ * lavador). Crea el registro del día si aún no existe.
+ */
+async function registrarAsistencia(req, res) {
+  const { persona_tipo, persona_id, tipo, inasistencia } = req.body;
+  if (!['usuario', 'lavador'].includes(persona_tipo) || !persona_id) {
+    return res.status(400).json({ error: 'persona_tipo (usuario|lavador) y persona_id son obligatorios.' });
+  }
+
+  const hoy = obtenerFechaHoy();
+  const horaActual = obtenerHoraActual();
+  let registro = await AsistenciaRepositorio.obtenerRegistroDelDia(persona_tipo, persona_id, hoy);
+
+  if (!registro) {
+    registro = await AsistenciaRepositorio.crearRegistro({ personaTipo: persona_tipo, personaId: persona_id, fecha: hoy, horaEntrada: horaActual, inasistencia });
+  } else if (tipo === 'salida') {
+    let horasTrabajadas = 0;
+    if (registro.hora_entrada) {
+      const [h1, m1] = registro.hora_entrada.split(':').map(Number);
+      const [h2, m2] = horaActual.split(':').map(Number);
+      horasTrabajadas = Math.max(0, parseFloat(((h2 + m2 / 60) - (h1 + m1 / 60)).toFixed(2)));
+    }
+    registro = await AsistenciaRepositorio.marcarSalida(registro.id, horaActual, horasTrabajadas);
+  } else if (tipo === 'entrada') {
+    registro = await AsistenciaRepositorio.marcarEntrada(registro.id, horaActual);
+  } else if (inasistencia !== undefined) {
+    registro = await AsistenciaRepositorio.marcarInasistencia(registro.id, inasistencia);
+  }
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'registrar_asistencia', `Asistencia actualizada para ${persona_tipo} ID ${persona_id} (${tipo || 'inasistencia'})`);
+  res.json(registro);
+}
+
+module.exports = {
+  listarResumenLavadores, generarLiquidacion, pagarLiquidacion, listarLiquidaciones,
+  listarEmpleados, pagarSalarioEmpleado, listarPagosSalario,
+  listarAsistenciaDelDia, registrarAsistencia
+};

@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (credenciales de base de datos, JWT_SECRET, etc.)
+.env
+.env.local
+
+# Logs
+npm-debug.log*
+*.log
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Despliegue
+.vercel/

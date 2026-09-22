@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar Sesión - CarWash Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body class="pagina-login">
+  <div class="login-wrapper">
+    <div class="login-card">
+      <div class="login-brand">
+        <span class="logo-icon">🌊</span>
+        <div class="brand-text">
+          <span class="brand-title">CARWASH <span class="accent-text">PRO</span></span>
+          <span class="brand-subtitle">Gestión Integral de Lavadero</span>
+        </div>
+      </div>
+
+      <h2 class="login-title">Iniciar Sesión</h2>
+      <p class="text-muted text-sm mb-3">Ingresa con tu usuario y contraseña asignados por el administrador.</p>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Usuario o Correo:</label>
+          <input type="text" id="loginUsuario" placeholder="admin" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label>Contraseña:</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+
+        <div id="loginError" class="login-error hidden"></div>
+
+        <button type="submit" id="loginBoton" class="btn btn-primary btn-lg" style="width: 100%">Iniciar Sesión</button>
+      </form>
+
+      <p class="text-sm text-muted text-center mt-3">
+        Sistema de gestión para lavadero de carros y motos.
+      </p>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>
