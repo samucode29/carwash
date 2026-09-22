@@ -1,8 +1,7 @@
 /**
  * Genera el PDF descargable de un reporte financiero/operativo y lo transmite
  * directamente sobre la respuesta HTTP (streaming), sin guardar el archivo
- * en disco: ideal para un despliegue serverless (Vercel/Railway) donde el
- * sistema de archivos no es persistente.
+ * en disco.
  */
 const PDFDocument = require('pdfkit');
 

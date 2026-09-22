@@ -9,9 +9,8 @@ Backend y frontend están completamente separados:
 
 ```
 Carwash/
-├── backend/    → API REST en Node.js/Express + MySQL (ver backend/README implícito abajo)
-├── frontend/   → HTML/CSS/JS puro (sin frameworks ni build step)
-└── vercel.json → configuración de despliegue serverless en Vercel
+├── backend/    → API REST en Node.js/Express + MySQL
+└── frontend/   → HTML/CSS/JS puro (sin frameworks ni build step)
 ```
 
 ---
@@ -132,24 +131,33 @@ exigen sesión de administrador.
 
 ---
 
-## 7. Despliegue
+## 7. Despliegue en Railway
 
-### Railway (recomendado para empezar)
-1. Crea un servicio MySQL en Railway (o usa uno externo) y ejecuta
-   `backend/database/schema.sql` contra esa base.
-2. Crea un servicio Node apuntando a la carpeta `backend/` (Root
-   Directory = `backend`). Railway detecta `npm start` automáticamente.
-3. Configura las variables de entorno del `.env.example` en el panel de
-   Railway (usando las credenciales de tu MySQL de Railway).
-4. Sirve `frontend/` como sitio estático (otro servicio en Railway, o
-   Vercel/Netlify apuntando solo a esa carpeta) y ajusta la URL base de la
-   API en `frontend/js/api.js` si el backend queda en otro dominio.
+Railway puede alojar tanto la base de datos MySQL como el backend Node
+(un servidor persistente de verdad, con `app.listen()` — no serverless),
+así que es la opción más simple para este proyecto.
 
-### Vercel
-`vercel.json` ya enruta `/api/*` a `backend/api/index.js` (función
-serverless) y el resto a `frontend/`. Como Vercel no aloja bases de datos,
-necesitas un MySQL externo (Railway, PlanetScale, Aiven, etc.) y configurar
-sus credenciales como variables de entorno del proyecto en Vercel.
+1. **Base de datos**: en tu proyecto de Railway, agrega un plugin/servicio
+   de MySQL. Railway te da host, puerto, usuario, contraseña y nombre de
+   base ya generados. Conéctate con esos datos desde MySQL Workbench (o
+   con el botón "Connect" de Railway) y ejecuta
+   [`backend/database/schema.sql`](backend/database/schema.sql) (y opcionalmente
+   `datos_semilla.sql`) contra esa base, igual que harías en local.
+2. **Backend**: crea un servicio Node a partir de este repositorio, con
+   **Root Directory = `backend`**. Railway detecta `npm start`
+   automáticamente (usa `backend/package.json`).
+3. En la pestaña "Variables" de ese servicio, agrega las mismas variables
+   de [`backend/.env.example`](backend/.env.example) (`DB_HOST`, `DB_PORT`,
+   `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `JWT_SECRET`, `JWT_EXPIRA_EN`,
+   `CORS_ORIGEN`) usando las credenciales del servicio MySQL del paso 1.
+   Railway asigna `PORT` automáticamente, no hace falta declararla.
+4. El backend ya sirve `frontend/` como sitio estático (ver
+   `backend/src/app.js`), así que con un solo servicio de Railway tienes
+   todo funcionando: abre la URL pública que te da Railway y entra por
+   `/login.html`.
+
+No hace falta ningún archivo de configuración adicional (Railway detecta
+un proyecto Node estándar solo con `package.json`).
 
 ---
 
@@ -161,5 +169,5 @@ git add .
 git commit -m "CarWash Pro: backend/frontend separados, login y MySQL"
 ```
 
-`.env` nunca se sube (ver `.gitignore`): cada entorno (tu máquina, Railway,
-Vercel) tiene el suyo propio.
+`.env` nunca se sube (ver `.gitignore`): cada entorno (tu máquina, Railway)
+tiene el suyo propio.
