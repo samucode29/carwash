@@ -6,16 +6,20 @@
 -- en lugar de una base completamente vacía.
 --
 -- Usuarios de acceso creados (contraseñas ya en formato bcrypt):
---   Administrador -> usuario: admin   contraseña: admin123
---   Empleado      -> usuario: laura   contraseña: laura123
+--   Administrador principal -> usuario: admin   contraseña: admin123
+--   Empleado                -> usuario: laura   contraseña: laura123
+--
+-- El administrador principal (es_admin_principal = TRUE) es el único que
+-- puede crear otras cuentas de administrador; cualquier admin puede crear
+-- empleados.
 -- ============================================================================
 
 USE carwash_pro;
 
-INSERT INTO usuarios (nombre, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago)
+INSERT INTO usuarios (nombre, documento, telefono, correo, username, password_hash, rol, es_admin_principal, estado, fecha_ingreso, salario_fijo, periodicidad_pago)
 VALUES
- ('Carlos Ruiz', '1020304050', '3001234567', 'admin@carwash.com', 'admin', '$2b$10$eX4GBMLIsjIMowuFglQUzegdpVfsZ9ytqswgRIN8b9jEfBxxR5aRy', 'administrador', 'activo', CURDATE(), 2500000, 'mensual'),
- ('Laura Gómez', '1098765432', '3123456789', 'laura@carwash.com', 'laura', '$2b$10$0aA8mHN9PojENNxQ2Bao5ergiO9zYGa76EEMinFDHiWt52Rd424Bi', 'empleado', 'activo', CURDATE(), 1400000, 'quincenal');
+ ('Samuel Petro Avalos', '1037120618', '', 'samuelpetroavalos@gmail.com', 'admin', '$2b$10$eX4GBMLIsjIMowuFglQUzegdpVfsZ9ytqswgRIN8b9jEfBxxR5aRy', 'administrador', TRUE, 'activo', CURDATE(), 2500000, 'mensual'),
+ ('Laura Gómez', '1098765432', '3123456789', 'laura@carwash.com', 'laura', '$2b$10$0aA8mHN9PojENNxQ2Bao5ergiO9zYGa76EEMinFDHiWt52Rd424Bi', 'empleado', FALSE, 'activo', CURDATE(), 1400000, 'quincenal');
 
 INSERT INTO lavadores (nombre, documento, telefono, estado, fecha_ingreso, porcentaje_comision, creado_por)
 VALUES

@@ -112,6 +112,27 @@ al sistema.
   registro de asistencia, y su propio perfil (botón "Mi Perfil") donde ve
   su salario y periodicidad de pago. No ve el dashboard financiero, no
   gestiona nómina de terceros ni crea usuarios/insumos/proveedores nuevos.
+  **No puede crear ni empleados ni administradores** (esa ruta exige rol
+  administrador).
+
+### Administrador principal
+
+Dentro de los administradores hay un nivel extra: `es_admin_principal`
+(columna `usuarios.es_admin_principal` en la base de datos). Samuel Petro
+Avalos (usuario `admin`) es el administrador principal por defecto.
+
+- **Cualquier administrador** puede crear cuentas de **empleado**.
+- **Solo el administrador principal** puede crear (o ascender a) otra
+  cuenta de **administrador** — un administrador normal que lo intente
+  recibe `403 Solo el administrador principal puede crear nuevas cuentas
+  de administrador.` Esto se valida en el backend
+  (`PersonalControlador.crearUsuario`/`actualizarUsuario`) y además se
+  oculta la opción "Administrador" en el formulario del frontend si quien
+  tiene la sesión no es el principal.
+- No hay ninguna ruta que permita cambiar `es_admin_principal` por API: si
+  algún día quieres nombrar a otro administrador principal, se hace
+  directamente en la base de datos (`UPDATE usuarios SET
+  es_admin_principal = TRUE WHERE id = ...`).
 
 Este reparto sigue el documento de casos de uso original (`CU01`-`CU29`).
 Si prefieres que el empleado tenga acceso *solo de consulta* (sin poder

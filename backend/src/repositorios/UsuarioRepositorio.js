@@ -6,7 +6,7 @@
 const { pool } = require('../config/baseDeDatos');
 
 const COLUMNAS_PUBLICAS = `
-  id, nombre, documento, telefono, correo, username, rol, estado,
+  id, nombre, documento, telefono, correo, username, rol, es_admin_principal, estado,
   fecha_ingreso, salario_fijo, periodicidad_pago, creado_en
 `;
 

@@ -33,7 +33,8 @@ async function iniciarSesion(req, res) {
       nombre: usuario.nombre,
       rol: usuario.rol,
       correo: usuario.correo,
-      username: usuario.username
+      username: usuario.username,
+      esAdminPrincipal: !!usuario.es_admin_principal
     }
   });
 }

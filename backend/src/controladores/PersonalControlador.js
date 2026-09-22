@@ -31,6 +31,11 @@ async function crearUsuario(req, res) {
   if (!['administrador', 'empleado'].includes(rol)) {
     return res.status(400).json({ error: "El rol debe ser 'administrador' o 'empleado'." });
   }
+  // Solo el administrador principal puede crear nuevas cuentas de administrador;
+  // cualquier administrador puede crear empleados.
+  if (rol === 'administrador' && !req.usuarioAutenticado.esAdminPrincipal) {
+    return res.status(403).json({ error: 'Solo el administrador principal puede crear nuevas cuentas de administrador.' });
+  }
 
   const existente = await UsuarioRepositorio.obtenerPorDocumento(documento);
   if (existente) {
@@ -57,6 +62,10 @@ async function crearUsuario(req, res) {
 async function actualizarUsuario(req, res) {
   const id = Number(req.params.id);
   const { nombre, telefono, correo, rol, estado, salarioFijo, periodicidadPago, password } = req.body;
+
+  if (rol === 'administrador' && !req.usuarioAutenticado.esAdminPrincipal) {
+    return res.status(403).json({ error: 'Solo el administrador principal puede otorgar el rol de administrador.' });
+  }
 
   const cambios = {};
   if (nombre) cambios.nombre = nombre;

@@ -39,10 +39,15 @@ const app = {
   pintarBarraSesion() {
     const esAdmin = this.currentUser.rol === 'administrador';
     document.getElementById('sesionNombre').textContent = this.currentUser.nombre;
-    document.getElementById('sesionRolBadge').textContent = esAdmin ? 'ADMIN' : 'EMPLEADO';
+    document.getElementById('sesionRolBadge').textContent = this.currentUser.esAdminPrincipal ? 'ADMIN PRINCIPAL' : (esAdmin ? 'ADMIN' : 'EMPLEADO');
     document.getElementById('sesionRolBadge').style.background = esAdmin
       ? 'linear-gradient(135deg, #0077b6, #00b4d8)'
       : 'linear-gradient(135deg, #059669, #10b981)';
+
+    // Solo el administrador principal puede crear otras cuentas de administrador.
+    const opcionAdmin = document.getElementById('usrRolOpcionAdmin');
+    if (opcionAdmin) opcionAdmin.classList.toggle('hidden', !this.currentUser.esAdminPrincipal);
+
     this.updateRolePermissions();
   },
 
@@ -88,13 +93,13 @@ const app = {
   },
 
   initTheme() {
+    // Por defecto (sin preferencia guardada) se usa Modo Claro. El usuario
+    // puede cambiar a Modo Oscuro con el botón del header; esa elección
+    // queda guardada y se respeta en las próximas visitas.
     const saved = localStorage.getItem('carwash_theme');
-    if (saved === 'light') {
-      document.body.classList.add('light-mode');
-      this.updateThemeButton(true);
-    } else {
-      this.updateThemeButton(false);
-    }
+    const modoOscuro = saved === 'dark';
+    document.body.classList.toggle('light-mode', !modoOscuro);
+    this.updateThemeButton(!modoOscuro);
   },
 
   toggleTheme() {
@@ -146,7 +151,7 @@ const app = {
     try {
       const perfil = await ApiCliente.get('/api/personal/mi-perfil');
       document.getElementById('miPerfilNombre').textContent = perfil.nombre;
-      document.getElementById('miPerfilRol').textContent = perfil.rol.toUpperCase();
+      document.getElementById('miPerfilRol').textContent = perfil.es_admin_principal ? 'ADMINISTRADOR PRINCIPAL' : perfil.rol.toUpperCase();
       document.getElementById('miPerfilDocumento').textContent = perfil.documento;
       document.getElementById('miPerfilIngreso').textContent = perfil.fecha_ingreso;
       document.getElementById('miPerfilSalario').textContent = this.formatMoney(perfil.salario_fijo);

@@ -4,10 +4,10 @@
    ========================================================================== */
 
 :root {
-  /* Paleta Marina / Agua */
-  --color-ocean-dark: #071324;
-  --color-ocean-card: #0d1e36;
-  --color-ocean-surface: #122847;
+  /* Modo oscuro: gris oscuro neutro (no azul marino) + acentos marinos */
+  --color-ocean-dark: #19191c;
+  --color-ocean-card: #232327;
+  --color-ocean-surface: #2c2c31;
   --color-primary: #0077b6;
   --color-primary-hover: #0096c7;
   --color-accent: #00b4d8;
@@ -35,8 +35,8 @@
   /* Sombras y Efectos */
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 8px 30px rgba(0, 119, 182, 0.2);
-  --glass-bg: rgba(13, 30, 54, 0.75);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --glass-bg: rgba(35, 35, 39, 0.75);
   --glass-border: 1px solid rgba(255, 255, 255, 0.08);
 
   /* Tipografía */
@@ -59,9 +59,9 @@
 body {
   font-family: var(--font-body);
   background-color: var(--color-ocean-dark);
-  background-image: 
-    radial-gradient(circle at 10% 20%, rgba(0, 119, 182, 0.12) 0%, transparent 40%),
-    radial-gradient(circle at 90% 80%, rgba(0, 180, 216, 0.08) 0%, transparent 40%);
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.04) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(255, 255, 255, 0.025) 0%, transparent 40%);
   color: var(--text-main);
   min-height: 100vh;
   line-height: 1.5;
@@ -110,7 +110,7 @@ body {
 
 .theme-toggle-btn:hover {
   background: var(--color-accent);
-  color: #071324;
+  color: #19191c;
   transform: translateY(-1px);
   box-shadow: 0 4px 14px var(--color-accent-glow);
 }
@@ -219,35 +219,10 @@ body {
   50% { opacity: 0.3; }
 }
 
-.role-selector-card {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  background: rgba(18, 40, 71, 0.8);
-  border: 1px solid var(--border-light);
-  padding: 0.35rem 0.75rem;
-  border-radius: var(--radius-md);
-}
-
 .role-label {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-weight: 600;
-}
-
-.role-selector-card select {
-  background: transparent;
-  color: #fff;
-  border: none;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  outline: none;
-}
-
-.role-selector-card select option {
-  background: var(--color-ocean-card);
-  color: #fff;
 }
 
 .role-badge {
@@ -263,7 +238,7 @@ body {
    NAVEGACIÓN POR PESTAÑAS (TABS)
    ========================================================================== */
 .main-tabs {
-  background: rgba(13, 30, 54, 0.6);
+  background: rgba(35, 35, 39, 0.6);
   border-bottom: var(--glass-border);
   padding: 0.5rem 1.75rem;
   display: flex;
@@ -446,7 +421,7 @@ input[type="time"],
 select,
 textarea {
   width: 100%;
-  background: rgba(13, 30, 54, 0.8);
+  background: rgba(35, 35, 39, 0.8);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   padding: 0.6rem 0.85rem;
@@ -779,7 +754,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .kanban-col {
-  background: rgba(13, 30, 54, 0.6);
+  background: rgba(35, 35, 39, 0.6);
   border: var(--glass-border);
   border-radius: var(--radius-lg);
   padding: 1rem;
@@ -1189,7 +1164,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .profit-formula-card {
-  background: linear-gradient(135deg, #071324, #0d213a);
+  background: linear-gradient(135deg, #19191c, #2a2a2f);
   border: 1px solid var(--border-glow);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
@@ -1564,19 +1539,6 @@ body.light-mode .live-clock {
   border: 1px solid rgba(2, 132, 199, 0.2);
 }
 
-body.light-mode .role-selector-card {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-}
-
-body.light-mode .role-selector-card select {
-  color: #0f172a;
-}
-
-body.light-mode .role-selector-card select option {
-  background: #ffffff;
-  color: #0f172a;
-}
 
 body.light-mode .pos-card,
 body.light-mode .card-table-wrapper,

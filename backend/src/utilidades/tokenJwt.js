@@ -9,7 +9,7 @@ const EXPIRA_EN = process.env.JWT_EXPIRA_EN || '8h';
 
 function firmarToken(usuario) {
   return jwt.sign(
-    { id: usuario.id, rol: usuario.rol, nombre: usuario.nombre },
+    { id: usuario.id, rol: usuario.rol, nombre: usuario.nombre, esAdminPrincipal: !!usuario.es_admin_principal },
     SECRETO,
     { expiresIn: EXPIRA_EN }
   );
