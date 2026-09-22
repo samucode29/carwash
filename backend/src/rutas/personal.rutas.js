@@ -11,6 +11,7 @@ router.use(exigirAutenticacion);
 router.get('/usuarios', permitirRoles('administrador'), envolverAsync(PersonalControlador.listarUsuarios));
 router.post('/usuarios', permitirRoles('administrador'), envolverAsync(PersonalControlador.crearUsuario));
 router.put('/usuarios/:id', permitirRoles('administrador'), envolverAsync(PersonalControlador.actualizarUsuario));
+router.post('/usuarios/:id/reiniciar-contrasena', permitirRoles('administrador'), envolverAsync(PersonalControlador.reiniciarContrasena));
 
 // Perfil propio (cualquier usuario autenticado ve su propio salario/datos)
 router.get('/mi-perfil', envolverAsync(PersonalControlador.obtenerMiPerfil));

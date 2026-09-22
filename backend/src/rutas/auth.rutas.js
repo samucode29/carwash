@@ -7,5 +7,6 @@ const router = express.Router();
 
 router.post('/login', envolverAsync(AuthControlador.iniciarSesion));
 router.get('/perfil', exigirAutenticacion, envolverAsync(AuthControlador.obtenerPerfilActual));
+router.post('/cambiar-contrasena', exigirAutenticacion, envolverAsync(AuthControlador.cambiarMiContrasena));
 
 module.exports = router;

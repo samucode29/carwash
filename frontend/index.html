@@ -1073,8 +1073,8 @@
               <input type="text" id="usrUsername" placeholder="Ej: camilo">
             </div>
             <div class="form-group flex-1">
-              <label>Contraseña: *</label>
-              <input type="password" id="usrPassword" placeholder="Mínimo 6 caracteres">
+              <label>Contraseña (opcional):</label>
+              <input type="password" id="usrPassword" placeholder="Si se deja vacío: carwash + cédula">
             </div>
           </div>
         </div>
@@ -1201,7 +1201,36 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn btn-outline" onclick="app.closeModal('modalMiPerfil'); app.openModal('modalCambiarContrasena')">🔑 Cambiar Contraseña</button>
         <button class="btn btn-secondary" onclick="app.closeModal('modalMiPerfil')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 15: Cambiar mi Contraseña (disponible para admin y empleado) -->
+  <div id="modalCambiarContrasena" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🔑 Cambiar Mi Contraseña</h3>
+        <button class="close-btn" onclick="app.closeModal('modalCambiarContrasena')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Contraseña Actual:</label>
+          <input type="password" id="cambioPassActual" placeholder="Tu contraseña actual">
+        </div>
+        <div class="form-group">
+          <label>Contraseña Nueva:</label>
+          <input type="password" id="cambioPassNueva" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="form-group">
+          <label>Confirmar Contraseña Nueva:</label>
+          <input type="password" id="cambioPassConfirmar" placeholder="Repite la contraseña nueva">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalCambiarContrasena')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.cambiarMiContrasena()">Guardar Nueva Contraseña</button>
       </div>
     </div>
   </div>

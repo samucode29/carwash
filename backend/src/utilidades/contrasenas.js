@@ -14,4 +14,13 @@ function compararContrasena(textoPlano, hash) {
   return bcrypt.compareSync(textoPlano, hash);
 }
 
-module.exports = { hashearContrasena, compararContrasena };
+/**
+ * Contraseña por defecto para cuentas nuevas y para el "reinicio" que hace
+ * el administrador cuando alguien olvida su contraseña: "carwash" seguido
+ * del número de documento/cédula del usuario, sin espacios.
+ */
+function generarPasswordPorDefecto(documento) {
+  return `carwash${documento}`;
+}
+
+module.exports = { hashearContrasena, compararContrasena, generarPasswordPorDefecto };

@@ -23,6 +23,12 @@ async function obtenerPorId(id) {
   return filas[0] || null;
 }
 
+/** Incluye password_hash; solo para verificar la contraseña actual al cambiarla uno mismo. */
+async function obtenerConHashPorId(id) {
+  const [filas] = await pool.query(`SELECT id, password_hash FROM usuarios WHERE id = ?`, [id]);
+  return filas[0] || null;
+}
+
 async function obtenerPorDocumento(documento) {
   const [filas] = await pool.query(`SELECT id FROM usuarios WHERE documento = ?`, [documento]);
   return filas[0] || null;
@@ -68,6 +74,7 @@ async function actualizar(id, cambios) {
 module.exports = {
   buscarPorUsernameOCorreo,
   obtenerPorId,
+  obtenerConHashPorId,
   obtenerPorDocumento,
   listar,
   crear,

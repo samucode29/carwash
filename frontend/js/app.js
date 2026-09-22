@@ -848,7 +848,10 @@ const app = {
               <td><strong>${this.formatMoney(e.salario_fijo)}</strong></td>
               <td>${(e.periodicidad_pago || '').toUpperCase()}</td>
               <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
-              <td><button class="btn btn-sm btn-primary" onclick="app.pagarSalarioEmpleado(${e.empleado_id}, '${e.nombre}', ${e.salario_fijo})">Pagar Salario</button></td>
+              <td>
+                <button class="btn btn-sm btn-primary" onclick="app.pagarSalarioEmpleado(${e.empleado_id}, '${e.nombre}', ${e.salario_fijo})">Pagar Salario</button>
+                <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">🔑 Reiniciar Contraseña</button>
+              </td>
             </tr>
           `).join('');
         }
@@ -1229,21 +1232,62 @@ const app = {
       if (rol === 'lavador') {
         const porcentajeComision = document.getElementById('usrComision').value;
         await ApiCliente.post('/api/personal/lavadores', { nombre, documento, telefono, porcentajeComision });
+        this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       } else {
         const username = document.getElementById('usrUsername').value;
-        const password = document.getElementById('usrPassword').value;
+        const password = document.getElementById('usrPassword').value; // opcional: si se deja vacío, el backend asigna "carwash"+cédula
         const salarioFijo = document.getElementById('usrSalario').value;
         const periodicidadPago = document.getElementById('usrPeriodicidad').value;
-        if (!username || !password) { this.toast('Usuario y contraseña son obligatorios para crear un acceso al sistema.', 'warning'); return; }
-        await ApiCliente.post('/api/personal/usuarios', { nombre, documento, telefono, rol, username, password, salarioFijo, periodicidadPago });
+        if (!username) { this.toast('El usuario (nombre de acceso) es obligatorio.', 'warning'); return; }
+
+        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombre, documento, telefono, rol, username, password, salarioFijo, periodicidadPago });
+        if (nuevo.passwordAsignada) {
+          alert(`Cuenta creada para ${nombre}.\n\nUsuario: ${username}\nContraseña temporal: ${nuevo.passwordAsignada}\n\nCompártela con la persona; puede cambiarla desde "Mi Perfil" → "Cambiar Contraseña".`);
+        }
+        this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       }
 
-      this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       this.closeModal('modalNuevoUsuario');
       this.loadWashers();
       this.loadNomina();
     } catch (err) {
       this.toast(err.message || 'Error al crear usuario.', 'error');
+    }
+  },
+
+  // ===========================================================================
+  // CONTRASEÑAS: cambio propio (todos los roles) y reinicio por el admin
+  // ===========================================================================
+  async cambiarMiContrasena() {
+    const contrasenaActual = document.getElementById('cambioPassActual').value;
+    const contrasenaNueva = document.getElementById('cambioPassNueva').value;
+    const contrasenaConfirmar = document.getElementById('cambioPassConfirmar').value;
+
+    if (!contrasenaActual || !contrasenaNueva) { this.toast('Complete la contraseña actual y la nueva.', 'warning'); return; }
+    if (contrasenaNueva !== contrasenaConfirmar) { this.toast('La confirmación no coincide con la nueva contraseña.', 'warning'); return; }
+    if (contrasenaNueva.length < 6) { this.toast('La nueva contraseña debe tener al menos 6 caracteres.', 'warning'); return; }
+
+    try {
+      await ApiCliente.post('/api/auth/cambiar-contrasena', { contrasenaActual, contrasenaNueva });
+      this.toast('Contraseña actualizada correctamente.', 'success');
+      document.getElementById('cambioPassActual').value = '';
+      document.getElementById('cambioPassNueva').value = '';
+      document.getElementById('cambioPassConfirmar').value = '';
+      this.closeModal('modalCambiarContrasena');
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cambiar la contraseña.', 'error');
+    }
+  },
+
+  /** Botón visible solo para admin: reinicia la contraseña de otro usuario al valor por defecto. */
+  async reiniciarContrasenaUsuario(id, nombre) {
+    if (!confirm(`¿Reiniciar la contraseña de ${nombre} al valor por defecto (carwash + su cédula)?`)) return;
+    try {
+      const data = await ApiCliente.post(`/api/personal/usuarios/${id}/reiniciar-contrasena`, {});
+      alert(`Contraseña de ${nombre} reiniciada.\n\nNueva contraseña temporal: ${data.passwordAsignada}`);
+      this.toast('Contraseña reiniciada.', 'success');
+    } catch (err) {
+      this.toast(err.message || 'No se pudo reiniciar la contraseña.', 'error');
     }
   }
 };

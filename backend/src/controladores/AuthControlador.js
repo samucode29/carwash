@@ -4,7 +4,7 @@
  */
 const UsuarioRepositorio = require('../repositorios/UsuarioRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
-const { compararContrasena } = require('../utilidades/contrasenas');
+const { compararContrasena, hashearContrasena } = require('../utilidades/contrasenas');
 const { firmarToken } = require('../utilidades/tokenJwt');
 
 async function iniciarSesion(req, res) {
@@ -46,4 +46,27 @@ async function obtenerPerfilActual(req, res) {
   res.json(usuario);
 }
 
-module.exports = { iniciarSesion, obtenerPerfilActual };
+/**
+ * Cambio de contraseña por el propio usuario (cualquier rol: administrador
+ * o empleado). Exige conocer la contraseña actual.
+ */
+async function cambiarMiContrasena(req, res) {
+  const { contrasenaActual, contrasenaNueva } = req.body;
+  if (!contrasenaActual || !contrasenaNueva) {
+    return res.status(400).json({ error: 'Debe indicar la contraseña actual y la nueva.' });
+  }
+  if (contrasenaNueva.length < 6) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  const usuario = await UsuarioRepositorio.obtenerConHashPorId(req.usuarioAutenticado.id);
+  if (!usuario || !compararContrasena(contrasenaActual, usuario.password_hash)) {
+    return res.status(401).json({ error: 'La contraseña actual no es correcta.' });
+  }
+
+  await UsuarioRepositorio.actualizar(usuario.id, { password_hash: hashearContrasena(contrasenaNueva) });
+  await AuditoriaRepositorio.registrar(usuario.id, 'cambiar_contrasena', 'El usuario cambió su propia contraseña.');
+  res.json({ mensaje: 'Contraseña actualizada correctamente.' });
+}
+
+module.exports = { iniciarSesion, obtenerPerfilActual, cambiarMiContrasena };

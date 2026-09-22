@@ -140,6 +140,22 @@ operar el POS ni el tablero), es un cambio acotado: basta con envolver
 esas rutas en el backend con `permitirRoles('administrador')` igual que ya
 se hizo con catálogo, proveedores y reportes.
 
+### Contraseñas
+
+- **Contraseña por defecto**: toda cuenta nueva (administrador o empleado)
+  que se crea sin especificar contraseña recibe automáticamente
+  `carwash` + su número de documento (ej. documento `123456` → contraseña
+  `carwash123456`).
+- **Cambiar mi contraseña**: cualquier usuario, sin importar el rol, puede
+  cambiar su propia contraseña desde "Mi Perfil" → "Cambiar Contraseña"
+  (pide la contraseña actual).
+- **Reiniciar contraseña**: en la pestaña Personal & Nómina → Empleados, el
+  administrador tiene un botón "Reiniciar Contraseña" por cada cuenta, que
+  la regresa al mismo formato por defecto (`carwash` + documento). La única
+  excepción es la cuenta del administrador principal: nadie más que él
+  mismo puede reiniciarla (para que otro administrador no pueda
+  apropiarse de esa cuenta).
+
 ---
 
 ## 6. Reportes y PDF
