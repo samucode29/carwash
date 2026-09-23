@@ -1,18 +1,31 @@
 /**
  * Helpers de fecha/hora compartidos por controladores y repositorios.
- * Todo el sistema trabaja en hora local del servidor (Colombia).
+ * Todo el sistema trabaja en hora LOCAL del servidor (Colombia, UTC-5).
+ *
+ * Importante: nunca usar toISOString() para obtener "la fecha de hoy",
+ * porque esa función siempre devuelve la fecha en UTC. En Colombia
+ * (UTC-5), entre las 7:00 p.m. y la medianoche locales, UTC ya está en
+ * el día siguiente, así que toISOString() adelantaría la fecha un día
+ * completo todas las tardes/noches (rompiendo asistencia, nómina, etc.).
  */
 
+function formatearFechaLocal(fecha) {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  return `${anio}-${mes}-${dia}`;
+}
+
 function obtenerFechaHoy() {
-  return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  return formatearFechaLocal(new Date()); // YYYY-MM-DD en hora local
 }
 
 function obtenerFechaHoraActual() {
-  return new Date().toISOString().replace('T', ' ').substring(0, 19); // YYYY-MM-DD HH:mm:ss
+  return `${obtenerFechaHoy()} ${new Date().toTimeString().substring(0, 8)}`; // YYYY-MM-DD HH:mm:ss local
 }
 
 function obtenerHoraActual() {
-  return new Date().toTimeString().substring(0, 5); // HH:mm
+  return new Date().toTimeString().substring(0, 5); // HH:mm local
 }
 
 /**
@@ -29,8 +42,8 @@ function calcularRangoPorPeriodo(tipoPeriodo, fechaInicioPersonalizada, fechaFin
       return { inicio: hoyStr, fin: hoyStr };
 
     case 'semana': {
-      const hace7Dias = new Date(hoy.getTime() - 6 * 24 * 60 * 60 * 1000);
-      return { inicio: hace7Dias.toISOString().split('T')[0], fin: hoyStr };
+      const hace7Dias = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 6);
+      return { inicio: formatearFechaLocal(hace7Dias), fin: hoyStr };
     }
 
     case 'mes':

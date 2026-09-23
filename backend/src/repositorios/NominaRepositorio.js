@@ -3,6 +3,7 @@
  * empleados/administradores (CU21-CU26 / RF22, RF25, RF30-RF34).
  */
 const { pool } = require('../config/baseDeDatos');
+const { obtenerFechaHoy } = require('../utilidades/fechas');
 
 // ---------------------------------------------------------------------------
 // Comisiones de lavadores
@@ -92,9 +93,13 @@ async function listarEmpleadosConUltimoPago() {
       nombre: emp.nombre,
       rol: emp.rol,
       documento: emp.documento,
+      telefono: emp.telefono || '',
+      correo: emp.correo || '',
       salario_fijo: emp.salario_fijo || 0,
       periodicidad_pago: emp.periodicidad_pago || 'quincenal',
       fecha_ingreso: emp.fecha_ingreso,
+      es_admin_principal: !!emp.es_admin_principal,
+      estado: emp.estado || 'activo',
       ultimo_pago: pagosDelEmpleado[pagosDelEmpleado.length - 1] || null
     };
   });
@@ -102,7 +107,7 @@ async function listarEmpleadosConUltimoPago() {
 
 async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, soportePagoUrl }) {
   const valorAPagar = Math.max(0, salarioBase - descuentos);
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = obtenerFechaHoy();
 
   const [resultado] = await pool.query(
     `INSERT INTO pagos_salario

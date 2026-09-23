@@ -6,6 +6,19 @@
  * sesión activa. Las secciones están organizadas igual que los módulos del
  * backend para que sea fácil ubicar la lógica de cada pantalla.
  */
+
+/**
+ * Fecha de hoy en formato YYYY-MM-DD, en hora LOCAL del navegador.
+ * OJO: no usar new Date().toISOString() para esto porque esa función
+ * siempre da la fecha en UTC; en Colombia (UTC-5), entre las 7 p.m. y
+ * medianoche locales, UTC ya está en el día siguiente y el campo de
+ * fecha quedaría adelantado un día.
+ */
+function fechaLocalHoy() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const app = {
   currentUser: null,
   activeTab: 'pos',
@@ -19,6 +32,7 @@ const app = {
   editingServiceId: null,
   servicioInsumosSeleccionados: [],
   editingWasherId: null,
+  editingEmpleadoId: null,
 
   // ===========================================================================
   // INICIALIZACIÓN Y SESIÓN
@@ -141,7 +155,7 @@ const app = {
   },
 
   setupDatePickers() {
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = fechaLocalHoy();
     ['citasFechaFiltro', 'citaFechaInput', 'pagLiqFecha', 'reporteFechaInicio', 'reporteFechaFin'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = hoy;
@@ -1063,6 +1077,7 @@ const app = {
               <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
               <td>
                 <button class="btn btn-sm btn-primary" onclick="app.pagarSalarioEmpleado(${e.empleado_id}, '${e.nombre}', ${e.salario_fijo})">Pagar Salario</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${(e.telefono || '').replace(/'/g, "\\'")}', '${(e.correo || '').replace(/'/g, "\\'")}', ${e.salario_fijo}, '${e.periodicidad_pago}')">Editar</button>
                 <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">Reiniciar Contraseña</button>
                 ${(e.empleado_id === this.currentUser.id || e.es_admin_principal)
                   ? ''
@@ -1137,7 +1152,7 @@ const app = {
     document.getElementById('liqTotalComision').value = comisionPendiente;
     document.getElementById('liqDescuentos').value = 0;
     this.recalcLiqTotal();
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = fechaLocalHoy();
     document.getElementById('liqPeriodoInicio').value = hoy;
     document.getElementById('liqPeriodoFin').value = hoy;
     this.openModal('modalLiquidarLavador');
@@ -1555,6 +1570,35 @@ const app = {
       this.toast('Contraseña reiniciada.', 'success');
     } catch (err) {
       this.toast(err.message || 'No se pudo reiniciar la contraseña.', 'error');
+    }
+  },
+
+  /** Botón visible solo para admin: edita los datos de un empleado (el empleado mismo solo puede cambiar su contraseña). */
+  abrirModalEditarEmpleado(id, nombre, telefono, correo, salarioFijo, periodicidadPago) {
+    this.editingEmpleadoId = id;
+    document.getElementById('editEmpNombre').value = nombre;
+    document.getElementById('editEmpTelefono').value = telefono;
+    document.getElementById('editEmpCorreo').value = correo;
+    document.getElementById('editEmpSalario').value = salarioFijo;
+    document.getElementById('editEmpPeriodicidad').value = periodicidadPago;
+    this.openModal('modalEditarEmpleado');
+  },
+
+  async guardarEdicionEmpleado() {
+    const nombre = document.getElementById('editEmpNombre').value.trim();
+    const telefono = document.getElementById('editEmpTelefono').value.trim();
+    const correo = document.getElementById('editEmpCorreo').value.trim();
+    const salarioFijo = document.getElementById('editEmpSalario').value;
+    const periodicidadPago = document.getElementById('editEmpPeriodicidad').value;
+    if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
+
+    try {
+      await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombre, telefono, correo, salarioFijo, periodicidadPago });
+      this.toast('Datos del empleado actualizados.', 'success');
+      this.closeModal('modalEditarEmpleado');
+      this.loadNomina();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo actualizar el empleado.', 'error');
     }
   }
 };
