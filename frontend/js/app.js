@@ -17,6 +17,7 @@ const app = {
   liquidatingWasher: null,
   payingLiqId: null,
   editingServiceId: null,
+  servicioInsumosSeleccionados: [],
 
   // ===========================================================================
   // INICIALIZACIÓN Y SESIÓN
@@ -857,12 +858,15 @@ const app = {
 
   abrirModalNuevoServicio() {
     this.editingServiceId = null;
+    this.servicioInsumosSeleccionados = [];
     document.getElementById('modalServicioTitulo').textContent = 'Nuevo Servicio';
     document.getElementById('servNombre').value = '';
     document.getElementById('servTipoVehiculo').value = 'carro';
     document.getElementById('servDuracion').value = 30;
     document.getElementById('servPrecio').value = 0;
     document.getElementById('servDescripcion').value = '';
+    this.poblarSelectInsumosServicio();
+    this.renderInsumosServicioLista();
     this.openModal('modalServicio');
   },
 
@@ -870,13 +874,75 @@ const app = {
     const s = (this.servicios || []).find(item => item.id === id);
     if (!s) return;
     this.editingServiceId = id;
+    this.servicioInsumosSeleccionados = (s.insumos_consumo || []).map(x => ({
+      insumo_id: x.insumo_id,
+      nombre: x.nombre_insumo,
+      unidad_medida: x.unidad_medida,
+      cantidad: Number(x.cantidad_consumida)
+    }));
     document.getElementById('modalServicioTitulo').textContent = `Editar Servicio: ${s.nombre}`;
     document.getElementById('servNombre').value = s.nombre;
     document.getElementById('servTipoVehiculo').value = s.tipo_vehiculo;
     document.getElementById('servDuracion').value = s.duracion_estimada_min;
     document.getElementById('servPrecio').value = s.precio;
     document.getElementById('servDescripcion').value = s.descripcion || '';
+    this.poblarSelectInsumosServicio();
+    this.renderInsumosServicioLista();
     this.openModal('modalServicio');
+  },
+
+  /** Llena el selector de insumos del modal de servicio con el inventario ya cargado. */
+  poblarSelectInsumosServicio() {
+    const select = document.getElementById('servInsumoSelect');
+    if (!select) return;
+    select.innerHTML = (this.insumos || []).map(i => `
+      <option value="${i.id}" data-nombre="${i.nombre}" data-unidad="${i.unidad_medida}">${i.nombre} (${i.unidad_medida})</option>
+    `).join('');
+  },
+
+  /** Agrega o actualiza la cantidad de un insumo en la lista del servicio que se está editando/creando. */
+  agregarInsumoAServicio() {
+    const select = document.getElementById('servInsumoSelect');
+    const cantidadInput = document.getElementById('servInsumoCantidad');
+    const insumoId = parseInt(select.value, 10);
+    const cantidad = parseFloat(cantidadInput.value);
+
+    if (!insumoId || !cantidad || cantidad <= 0) { this.toast('Seleccione un insumo y una cantidad válida.', 'warning'); return; }
+
+    const opcion = select.options[select.selectedIndex];
+    const existente = this.servicioInsumosSeleccionados.find(x => x.insumo_id === insumoId);
+    if (existente) {
+      existente.cantidad = cantidad;
+    } else {
+      this.servicioInsumosSeleccionados.push({
+        insumo_id: insumoId,
+        nombre: opcion.dataset.nombre,
+        unidad_medida: opcion.dataset.unidad,
+        cantidad
+      });
+    }
+    cantidadInput.value = '';
+    this.renderInsumosServicioLista();
+  },
+
+  quitarInsumoDeServicio(insumoId) {
+    this.servicioInsumosSeleccionados = this.servicioInsumosSeleccionados.filter(x => x.insumo_id !== insumoId);
+    this.renderInsumosServicioLista();
+  },
+
+  renderInsumosServicioLista() {
+    const cont = document.getElementById('servInsumosLista');
+    if (!cont) return;
+    if (!this.servicioInsumosSeleccionados || this.servicioInsumosSeleccionados.length === 0) {
+      cont.innerHTML = '<p class="text-sm text-muted">Este servicio todavía no tiene insumos configurados.</p>';
+      return;
+    }
+    cont.innerHTML = this.servicioInsumosSeleccionados.map(x => `
+      <div class="servicio-insumo-row">
+        <span>${x.nombre} — ${x.cantidad} ${x.unidad_medida}</span>
+        <button type="button" class="btn btn-sm btn-danger" onclick="app.quitarInsumoDeServicio(${x.insumo_id})">Quitar</button>
+      </div>
+    `).join('');
   },
 
   async guardarServicio() {
@@ -885,15 +951,16 @@ const app = {
     const duracion_estimada_min = document.getElementById('servDuracion').value;
     const precio = document.getElementById('servPrecio').value;
     const descripcion = document.getElementById('servDescripcion').value;
+    const insumos_consumo = (this.servicioInsumosSeleccionados || []).map(x => ({ insumo_id: x.insumo_id, cantidad: x.cantidad }));
 
     if (!nombre || !precio) { this.toast('Nombre y precio son obligatorios.', 'warning'); return; }
 
     try {
       if (this.editingServiceId) {
-        await ApiCliente.put(`/api/servicios/${this.editingServiceId}`, { nombre, tipo_vehiculo, duracion_estimada_min, precio, descripcion });
+        await ApiCliente.put(`/api/servicios/${this.editingServiceId}`, { nombre, tipo_vehiculo, duracion_estimada_min, precio, descripcion, insumos_consumo });
         this.toast('Servicio actualizado.', 'success');
       } else {
-        await ApiCliente.post('/api/servicios', { nombre, tipo_vehiculo, duracion_estimada_min, precio, descripcion });
+        await ApiCliente.post('/api/servicios', { nombre, tipo_vehiculo, duracion_estimada_min, precio, descripcion, insumos_consumo });
         this.toast('Servicio creado.', 'success');
       }
       this.closeModal('modalServicio');

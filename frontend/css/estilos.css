@@ -709,6 +709,24 @@ input:focus, select:focus, textarea:focus {
   gap: 0.5rem;
 }
 
+.servicio-insumos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.servicio-insumo-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-ocean-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
+}
+
 .washer-pill {
   padding: 0.4rem 0.8rem;
   border-radius: var(--radius-full);
@@ -744,7 +762,7 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(7, 19, 36, 0.9);
+  background: rgba(25, 25, 28, 0.9);
   padding: 1.25rem 1.5rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-glow);
@@ -1411,7 +1429,7 @@ input:focus, select:focus, textarea:focus {
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border-light);
-  background: rgba(7, 19, 36, 0.6);
+  background: rgba(25, 25, 28, 0.6);
 }
 
 .modal-divider {
