@@ -17,16 +17,29 @@ async function listarOrdenes(req, res) {
   res.json(await OrdenServicioRepositorio.listarOrdenes({ estado, fecha }));
 }
 
+const MAX_LAVADORES_POR_ORDEN = 3;
+
 /**
  * Decide qué lavador(es) atienden la orden: si el cliente eligió lavadores
- * manualmente se respeta esa elección; si no, se asigna automáticamente al
- * primer lavador activo que no tenga ninguna orden "en_proceso" (RF23, RF28).
+ * manualmente se respeta esa elección (máximo 3 por orden); si no, se
+ * asigna automáticamente al primer lavador activo que no tenga ninguna
+ * orden "en_proceso" (RF23, RF28).
  *
  * En ambos casos solo se considera "disponible" al lavador que ya registró
  * su entrada hoy y no ha marcado salida todavía (RF35): un lavador que no
  * ha llegado no puede quedar asignado a un servicio.
+ *
+ * Comisión: si atiende un solo lavador, se le paga su propio porcentaje
+ * configurado (60% por defecto, o el que el admin le haya asignado). Si
+ * atienden varios lavadores el mismo servicio, la comisión total es un
+ * 60% plano del precio del servicio, dividido en partes iguales entre
+ * todos — no se suman los porcentajes individuales de cada uno.
  */
 async function calcularAsignacionLavadores(lavadoresIds, precioServicio) {
+  if (Array.isArray(lavadoresIds) && lavadoresIds.length > MAX_LAVADORES_POR_ORDEN) {
+    throw Object.assign(new Error(`Un servicio admite máximo ${MAX_LAVADORES_POR_ORDEN} lavadores.`), { codigoHttp: 400 });
+  }
+
   const presentesIds = new Set(await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy()));
   let lavadoresElegidos = [];
 
@@ -52,8 +65,10 @@ async function calcularAsignacionLavadores(lavadoresIds, precioServicio) {
     if (libre) lavadoresElegidos.push({ lavador: libre, automatica: true });
   }
 
+  const esGrupo = lavadoresElegidos.length > 1;
+
   return lavadoresElegidos.map(({ lavador, automatica }) => {
-    const porcentaje = Number(lavador.porcentaje_comision) || 60;
+    const porcentaje = esGrupo ? 60 : (Number(lavador.porcentaje_comision) || 60);
     const valorComision = (precioServicio * (porcentaje / 100)) / lavadoresElegidos.length;
     return { lavadorId: lavador.id, nombre: lavador.nombre, automatica, porcentajeComision: porcentaje, valorComision };
   });

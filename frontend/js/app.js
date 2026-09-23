@@ -32,6 +32,9 @@ const app = {
   editingServiceId: null,
   editingWasherId: null,
   editingEmpleadoId: null,
+  pendingOrdenPayload: null,
+  pendingOrdenOnSuccess: null,
+  selectedWashersAsignacion: [],
 
   // ===========================================================================
   // INICIALIZACIÓN Y SESIÓN
@@ -430,6 +433,7 @@ const app = {
     if (this.selectedWashers.includes(id)) {
       this.selectedWashers = this.selectedWashers.filter(wid => wid !== id);
     } else {
+      if (this.selectedWashers.length >= 3) { this.toast('Máximo 3 lavadores por servicio.', 'warning'); return; }
       this.selectedWashers.push(id);
     }
     this.renderWashersSelection();
@@ -505,16 +509,11 @@ const app = {
     } catch (err) { console.error(err); }
   },
 
-  async atenderTurno(turnoId, servicioId, placa, tipo) {
-    try {
-      await ApiCliente.post('/api/ordenes', { turno_id: turnoId, servicio_id: servicioId, es_venta_anonima: true, placa_anonima: placa, tipo_vehiculo_anonimo: tipo });
-      this.toast('Turno iniciado e ingresado al tablero de lavado.', 'success');
-      this.loadTurnos();
-      this.loadOrders();
-      this.setTab('tablero');
-    } catch (err) {
-      this.toast('Error al atender el turno.', 'error');
-    }
+  atenderTurno(turnoId, servicioId, placa, tipo) {
+    this.abrirModalAsignarLavador(
+      { turno_id: turnoId, servicio_id: servicioId, es_venta_anonima: true, placa_anonima: placa, tipo_vehiculo_anonimo: tipo },
+      () => { this.loadTurnos(); this.loadOrders(); this.setTab('tablero'); }
+    );
   },
 
   async guardarNuevoTurno() {
@@ -692,16 +691,11 @@ const app = {
     }
   },
 
-  async iniciarCita(citaId, servicioId, clienteId, vehiculoId) {
-    try {
-      await ApiCliente.post('/api/ordenes', { cita_id: citaId, servicio_id: servicioId, cliente_id: clienteId, vehiculo_id: vehiculoId });
-      this.toast('Cita convertida en orden de servicio activa.', 'success');
-      this.loadCitas();
-      this.loadOrders();
-      this.setTab('tablero');
-    } catch (err) {
-      this.toast('Error al iniciar atención de la cita.', 'error');
-    }
+  iniciarCita(citaId, servicioId, clienteId, vehiculoId) {
+    this.abrirModalAsignarLavador(
+      { cita_id: citaId, servicio_id: servicioId, cliente_id: clienteId, vehiculo_id: vehiculoId },
+      () => { this.loadCitas(); this.loadOrders(); this.setTab('tablero'); }
+    );
   },
 
   async cancelarCita(citaId) {
@@ -712,6 +706,84 @@ const app = {
       this.loadCitas();
     } catch (err) {
       this.toast('Error al cancelar cita.', 'error');
+    }
+  },
+
+  /**
+   * Modal compartido para atender una cita o un turno: al final los dos
+   * casos crean una orden (POST /api/ordenes) igual que la venta directa
+   * del POS, así que reutilizan la misma elección de lavador(es)
+   * automática o manual (1 a 3).
+   */
+  async abrirModalAsignarLavador(payloadBase, onSuccess) {
+    this.pendingOrdenPayload = payloadBase;
+    this.pendingOrdenOnSuccess = onSuccess;
+    this.selectedWashersAsignacion = [];
+    document.getElementById('asignLavAutoCheck').checked = true;
+    document.getElementById('asignLavManualWrapper').classList.add('hidden');
+    document.getElementById('asignLavAutoIndicator').classList.remove('hidden');
+    await this.loadWashers(); // refresca disponible_hoy antes de mostrar el picker
+    this.renderAsignLavPills();
+    this.openModal('modalAsignarLavador');
+  },
+
+  toggleAsignLavAuto() {
+    const isAuto = document.getElementById('asignLavAutoCheck').checked;
+    const manualWrap = document.getElementById('asignLavManualWrapper');
+    const autoInd = document.getElementById('asignLavAutoIndicator');
+    if (isAuto) {
+      manualWrap.classList.add('hidden');
+      autoInd.classList.remove('hidden');
+      this.selectedWashersAsignacion = [];
+    } else {
+      manualWrap.classList.remove('hidden');
+      autoInd.classList.add('hidden');
+      this.renderAsignLavPills();
+    }
+  },
+
+  renderAsignLavPills() {
+    const list = document.getElementById('asignLavPillsList');
+    if (!list) return;
+    list.innerHTML = (this.washers || []).map(w => {
+      const selected = this.selectedWashersAsignacion.includes(w.id);
+      const disponible = !!w.disponible_hoy;
+      const clases = ['washer-pill'];
+      if (selected) clases.push('selected');
+      if (!disponible) clases.push('disabled');
+      return `
+        <div class="${clases.join(' ')}" onclick="app.toggleAsignLavSelection(${w.id}, ${disponible})" title="${disponible ? '' : 'No ha registrado entrada hoy'}">
+          <span class="washer-status-dot"></span>
+          <span>${w.nombre.split(' ')[0]} (${w.porcentaje_comision}%)${disponible ? '' : ' — sin entrada'}</span>
+        </div>
+      `;
+    }).join('');
+  },
+
+  toggleAsignLavSelection(id, disponible) {
+    if (!disponible) { this.toast('Este lavador no ha registrado entrada hoy y no puede ser asignado.', 'warning'); return; }
+    if (this.selectedWashersAsignacion.includes(id)) {
+      this.selectedWashersAsignacion = this.selectedWashersAsignacion.filter(wid => wid !== id);
+    } else {
+      if (this.selectedWashersAsignacion.length >= 3) { this.toast('Máximo 3 lavadores por servicio.', 'warning'); return; }
+      this.selectedWashersAsignacion.push(id);
+    }
+    this.renderAsignLavPills();
+  },
+
+  async confirmarAsignacionLavador() {
+    const isAuto = document.getElementById('asignLavAutoCheck').checked;
+    const payload = { ...this.pendingOrdenPayload, lavadores_ids: isAuto ? [] : this.selectedWashersAsignacion };
+
+    try {
+      await ApiCliente.post('/api/ordenes', payload);
+      this.toast('Orden de servicio iniciada con éxito.', 'success');
+      this.closeModal('modalAsignarLavador');
+      if (this.pendingOrdenOnSuccess) this.pendingOrdenOnSuccess();
+      this.pendingOrdenPayload = null;
+      this.pendingOrdenOnSuccess = null;
+    } catch (err) {
+      this.toast(err.message || 'Error al iniciar la orden.', 'error');
     }
   },
 
