@@ -49,6 +49,38 @@ datos real (no simulada) con scripts en Node que golpean la API en
 `http://localhost:3000`, y los datos de prueba generados se limpiaron
 después.
 
+9. **Rediseño de interfaz** (segunda ronda de pedidos del usuario):
+   - Sidebar vertical desplegable (antes era una barra horizontal de
+     pestañas); botón hamburguesa que recuerda si está colapsado.
+   - Se quitaron todos los iconos/emoji decorativos; solo queda el logo
+     de la marca (🌊) en el sidebar.
+   - "Dashboard & Ganancias" renombrado a "Reportes" (visualmente; por
+     dentro sigue usando el id `dashboard` en el código para no romper
+     nada).
+   - Nueva pestaña "Servicios" (solo admin): editar nombre, tipo de
+     vehículo, precio, duración, descripción; activar/inactivar (nunca
+     eliminar).
+   - Autogestión de cuenta: el admin puede editar sus propios datos
+     (nombre/teléfono/correo/usuario) desde "Mi Perfil" → "Editar Mis
+     Datos"; el empleado solo puede cambiar su contraseña (ya existía).
+   - Usuario y contraseña de cuentas nuevas ahora **siempre** se
+     autogeneran (ya no se escriben a mano en el formulario): usuario =
+     `primernombre.primerapellido` (+ número si ya existe), contraseña =
+     `documento + "carwash"` (ojo: el orden es cédula primero, distinto
+     del `carwash+cédula` de la ronda anterior — el usuario lo corrigió
+     explícitamente).
+   - Empleados y lavadores se pueden activar/inactivar desde su
+     tabla/tarjeta (nunca se eliminan, igual que los servicios).
+   - Salvaguarda agregada por iniciativa propia: nadie puede inactivar su
+     propia cuenta, y el administrador principal no puede ser inactivado
+     ni tener su contraseña reiniciada por otro administrador (se
+     detectó probando la función "Inactivar" contra la propia cuenta de
+     Samuel en el navegador).
+
+Todo lo anterior también se probó en el navegador real (login, sidebar,
+crear personal sin escribir usuario/clave, editar servicio, editar
+perfil propio) contra la base de datos local, no simulada.
+
 ## 2. Estado actual (en esta máquina, ahora mismo)
 
 - **Backend corriendo** en `http://localhost:3000` (proceso Node en
@@ -64,7 +96,7 @@ después.
 - `backend/.env` existe en disco con las credenciales reales de tu MySQL
   local (usuario `root`, contraseña la que me diste) y un `JWT_SECRET`
   aleatorio ya generado. **Ese archivo no está en git** (por diseño).
-- Git: 4 commits en `master`, working tree limpio (todo lo de código está
+- Git: 6 commits en `master`, working tree limpio (todo lo de código está
   commiteado). Repo solo local, no se ha configurado ningún remoto ni se
   ha desplegado a Railway todavía.
 
