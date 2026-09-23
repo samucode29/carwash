@@ -130,16 +130,6 @@ CREATE TABLE insumos (
     CONSTRAINT fk_insumo_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedores(id)
 ) ENGINE=InnoDB;
 
--- Consumo estándar de insumos por servicio (para el descuento automático)
-CREATE TABLE servicio_insumos (
-    servicio_id         INT NOT NULL,
-    insumo_id           INT NOT NULL,
-    cantidad_consumida  DECIMAL(12,2) NOT NULL,
-    PRIMARY KEY (servicio_id, insumo_id),
-    CONSTRAINT fk_si_servicio FOREIGN KEY (servicio_id) REFERENCES servicios(id) ON DELETE CASCADE,
-    CONSTRAINT fk_si_insumo   FOREIGN KEY (insumo_id)   REFERENCES insumos(id)
-) ENGINE=InnoDB;
-
 -- ============================================================================
 -- 6. AGENDAMIENTO: CITAS Y TURNOS (orden de llegada)
 -- ============================================================================

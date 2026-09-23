@@ -49,14 +49,6 @@ VALUES
  ('Lavado Especial Moto + Cera', 'moto', 'Lavado detallado, desengrasado de cadena y motor, cera protectora en tanques y carenajes.', 18000, 35, TRUE),
  ('Polichado & Encerado Diamante', 'ambos', 'Descontaminado de pintura, polichado a máquina y sellado cerámico de cera.', 50000, 60, TRUE);
 
-INSERT INTO servicio_insumos (servicio_id, insumo_id, cantidad_consumida)
-VALUES
- (1, 1, 80), (1, 6, 10),
- (2, 1, 120), (2, 2, 30), (2, 3, 50), (2, 4, 40), (2, 6, 20),
- (3, 1, 50), (3, 3, 30),
- (4, 1, 70), (4, 2, 20), (4, 3, 50),
- (5, 2, 60), (5, 4, 50);
-
 INSERT INTO clientes (nombre, telefono, correo, creado_por)
 VALUES
  ('Samuel Petro Avalos', '3114567890', 'samuel.petro@email.com', 1),

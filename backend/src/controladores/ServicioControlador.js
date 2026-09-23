@@ -6,12 +6,12 @@ const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 
 async function listarServicios(req, res) {
-  const servicios = await ServicioRepositorio.listarConInsumos();
+  const servicios = await ServicioRepositorio.listar();
   res.json(servicios);
 }
 
 async function crearServicio(req, res) {
-  const { nombre, tipo_vehiculo, descripcion, precio, duracion_estimada_min, insumos_consumo } = req.body;
+  const { nombre, tipo_vehiculo, descripcion, precio, duracion_estimada_min } = req.body;
   if (!nombre || !precio || !tipo_vehiculo) {
     return res.status(400).json({ error: 'Nombre, tipo de vehículo y precio son obligatorios.' });
   }
@@ -21,8 +21,7 @@ async function crearServicio(req, res) {
     tipoVehiculo: tipo_vehiculo,
     descripcion,
     precio: parseFloat(precio),
-    duracionEstimadaMin: parseInt(duracion_estimada_min, 10),
-    insumosConsumo: insumos_consumo
+    duracionEstimadaMin: parseInt(duracion_estimada_min, 10)
   });
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_servicio', `Creado servicio ${nombre} ($${precio})`);
@@ -31,7 +30,7 @@ async function crearServicio(req, res) {
 
 async function actualizarServicio(req, res) {
   const id = Number(req.params.id);
-  const { nombre, tipo_vehiculo, descripcion, precio, duracion_estimada_min, activo, insumos_consumo } = req.body;
+  const { nombre, tipo_vehiculo, descripcion, precio, duracion_estimada_min, activo } = req.body;
 
   const cambios = {};
   if (nombre) cambios.nombre = nombre;
@@ -41,7 +40,7 @@ async function actualizarServicio(req, res) {
   if (duracion_estimada_min !== undefined) cambios.duracion_estimada_min = parseInt(duracion_estimada_min, 10);
   if (activo !== undefined) cambios.activo = !!activo;
 
-  const servicio = await ServicioRepositorio.actualizar(id, cambios, insumos_consumo);
+  const servicio = await ServicioRepositorio.actualizar(id, cambios);
   if (!servicio) return res.status(404).json({ error: 'Servicio no encontrado.' });
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_servicio', `Actualizado servicio ID ${id}`);

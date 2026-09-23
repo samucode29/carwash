@@ -1,14 +1,13 @@
 /**
  * Controlador del Punto de Venta (POS) y del tablero Kanban de órdenes de
- * servicio. Aquí vive la regla de negocio de asignación de lavadores y el
- * descuento automático de insumos al terminar un lavado (CU02, CU07-CU10 /
- * RF08-RF11, RF21-RF24, RF28, RF36).
+ * servicio. Aquí vive la regla de negocio de asignación de lavadores
+ * (CU02, CU07-CU10 / RF08-RF11, RF21-RF24, RF28). Los insumos se entregan
+ * al lavador directamente desde Inventario (entregas), no van asociados a
+ * un servicio ni se descuentan automáticamente al terminar una orden.
  */
-const { pool } = require('../config/baseDeDatos');
 const OrdenServicioRepositorio = require('../repositorios/OrdenServicioRepositorio');
 const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
 const LavadorRepositorio = require('../repositorios/LavadorRepositorio');
-const InsumoRepositorio = require('../repositorios/InsumoRepositorio');
 const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
@@ -89,9 +88,7 @@ async function crearOrden(req, res) {
 }
 
 /**
- * Cambia el estado de una orden. Al pasar a "terminado" descuenta
- * automáticamente del inventario los insumos configurados para ese
- * servicio (RF10, RF36), todo dentro de una transacción.
+ * Cambia el estado de una orden (RF10).
  */
 async function actualizarEstadoOrden(req, res) {
   const id = Number(req.params.id);
@@ -105,32 +102,7 @@ async function actualizarEstadoOrden(req, res) {
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
 
   const estadoAnterior = orden.estado;
-
-  if (estado === 'terminado' && estadoAnterior !== 'terminado') {
-    const consumo = await ServicioRepositorio.obtenerConsumoInsumos(orden.servicio_id);
-    const conexion = await pool.getConnection();
-    try {
-      await conexion.beginTransaction();
-      for (const item of consumo) {
-        await InsumoRepositorio.registrarSalida(conexion, {
-          insumoId: item.insumo_id,
-          cantidad: item.cantidad_consumida,
-          ordenId: id,
-          usuarioId: req.usuarioAutenticado.id,
-          observacion: `Consumo automático Orden #${id}`
-        });
-      }
-      await conexion.query(`UPDATE ordenes_servicio SET estado = ? WHERE id = ?`, [estado, id]);
-      await conexion.commit();
-    } catch (err) {
-      await conexion.rollback();
-      throw err;
-    } finally {
-      conexion.release();
-    }
-  } else {
-    await OrdenServicioRepositorio.actualizarEstado(id, estado);
-  }
+  await OrdenServicioRepositorio.actualizarEstado(id, estado);
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_estado_orden', `Orden #${id} cambió de ${estadoAnterior} a ${estado}`);
 

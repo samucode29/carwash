@@ -1402,25 +1402,6 @@
           <label>Descripción:</label>
           <textarea id="servDescripcion" rows="2" placeholder="Detalle del servicio"></textarea>
         </div>
-
-        <hr class="modal-divider">
-        <h4 class="mb-2">Insumos que consume este servicio</h4>
-        <p class="text-sm text-muted mb-2">Se descuentan solos del inventario cada vez que una orden con este servicio pasa a "Terminado".</p>
-        <div class="form-row">
-          <div class="form-group flex-2">
-            <label>Insumo:</label>
-            <select id="servInsumoSelect"></select>
-          </div>
-          <div class="form-group flex-1">
-            <label>Cantidad:</label>
-            <input type="number" id="servInsumoCantidad" min="0.01" step="any" placeholder="Ej: 80">
-          </div>
-          <div class="form-group flex-1">
-            <label>&nbsp;</label>
-            <button type="button" class="btn btn-outline" onclick="app.agregarInsumoAServicio()">+ Agregar</button>
-          </div>
-        </div>
-        <div id="servInsumosLista" class="servicio-insumos-lista"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalServicio')">Cancelar</button>
