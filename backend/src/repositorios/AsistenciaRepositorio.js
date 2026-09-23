@@ -64,11 +64,27 @@ async function marcarInasistencia(id, inasistencia) {
   return filas[0];
 }
 
+/**
+ * IDs de personas que hoy ya registraron entrada, no han marcado salida
+ * y no están reportadas como inasistencia: son las "disponibles" para
+ * que se les asigne trabajo (CU07-CU10 / RF23, RF35).
+ */
+async function listarIdsPresentesHoy(personaTipo, fecha) {
+  const [filas] = await pool.query(
+    `SELECT persona_id FROM asistencia
+     WHERE persona_tipo = ? AND fecha = ? AND hora_entrada IS NOT NULL
+       AND hora_salida IS NULL AND inasistencia = FALSE`,
+    [personaTipo, fecha]
+  );
+  return filas.map(f => f.persona_id);
+}
+
 module.exports = {
   listarPorFecha,
   obtenerRegistroDelDia,
   crearRegistro,
   marcarSalida,
   marcarEntrada,
-  marcarInasistencia
+  marcarInasistencia,
+  listarIdsPresentesHoy
 };

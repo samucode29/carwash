@@ -9,7 +9,9 @@ const OrdenServicioRepositorio = require('../repositorios/OrdenServicioRepositor
 const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
 const LavadorRepositorio = require('../repositorios/LavadorRepositorio');
 const InsumoRepositorio = require('../repositorios/InsumoRepositorio');
+const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
+const { obtenerFechaHoy } = require('../utilidades/fechas');
 
 async function listarOrdenes(req, res) {
   const { estado, fecha } = req.query;
@@ -20,19 +22,34 @@ async function listarOrdenes(req, res) {
  * Decide qué lavador(es) atienden la orden: si el cliente eligió lavadores
  * manualmente se respeta esa elección; si no, se asigna automáticamente al
  * primer lavador activo que no tenga ninguna orden "en_proceso" (RF23, RF28).
+ *
+ * En ambos casos solo se considera "disponible" al lavador que ya registró
+ * su entrada hoy y no ha marcado salida todavía (RF35): un lavador que no
+ * ha llegado no puede quedar asignado a un servicio.
  */
 async function calcularAsignacionLavadores(lavadoresIds, precioServicio) {
+  const presentesIds = new Set(await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy()));
   let lavadoresElegidos = [];
 
   if (Array.isArray(lavadoresIds) && lavadoresIds.length > 0) {
+    const noDisponibles = [];
     for (const idCrudo of lavadoresIds) {
       const lavador = await LavadorRepositorio.obtenerActivoPorId(parseInt(idCrudo, 10));
-      if (lavador) lavadoresElegidos.push({ lavador, automatica: false });
+      if (!lavador) continue;
+      if (!presentesIds.has(lavador.id)) {
+        noDisponibles.push(lavador.nombre);
+        continue;
+      }
+      lavadoresElegidos.push({ lavador, automatica: false });
+    }
+    if (noDisponibles.length > 0) {
+      const verbo = noDisponibles.length > 1 ? 'no han registrado entrada hoy' : 'no ha registrado entrada hoy';
+      throw Object.assign(new Error(`${noDisponibles.join(', ')} ${verbo} y no puede ser asignado a un servicio.`), { codigoHttp: 400 });
     }
   } else {
     const idsOcupados = new Set(await LavadorRepositorio.obtenerIdsOcupados());
     const activos = await LavadorRepositorio.listar({ soloActivos: true });
-    const libre = activos.find(l => !idsOcupados.has(l.id));
+    const libre = activos.find(l => presentesIds.has(l.id) && !idsOcupados.has(l.id));
     if (libre) lavadoresElegidos.push({ lavador: libre, automatica: true });
   }
 

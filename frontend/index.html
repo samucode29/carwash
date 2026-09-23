@@ -406,7 +406,7 @@
               <p class="text-muted">Cálculo de comisiones automáticas (60/40), salarios fijos y liquidaciones con soporte.</p>
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-outline" onclick="app.openModal('modalAsistencia')">Registrar Asistencia (RF35)</button>
+              <button class="btn btn-outline" onclick="app.abrirModalAsistencia()">Registrar Asistencia (RF35)</button>
               <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoUsuario')">+ Registrar Personal</button>
             </div>
           </div>
@@ -993,6 +993,34 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalLiquidarLavador')">Cancelar</button>
         <button class="btn btn-primary" onclick="app.guardarLiquidacionLavador()">Generar Liquidación (Pendiente)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Editar Datos de Lavador (RF22, RF27) -->
+  <div id="modalEditarLavador" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Editar Lavador</h3>
+        <button class="close-btn" onclick="app.closeModal('modalEditarLavador')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre Completo:</label>
+          <input type="text" id="editLavNombre">
+        </div>
+        <div class="form-group">
+          <label>Teléfono:</label>
+          <input type="text" id="editLavTelefono">
+        </div>
+        <div class="form-group">
+          <label>Porcentaje de Comisión (% propio de este lavador, default 60%):</label>
+          <input type="number" id="editLavComision" min="1" max="100">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalEditarLavador')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.guardarEdicionLavador()">Guardar Cambios</button>
       </div>
     </div>
   </div>

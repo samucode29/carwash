@@ -11,7 +11,9 @@ const { obtenerFechaHoy, obtenerHoraActual } = require('../utilidades/fechas');
 // Comisiones de lavadores
 // ---------------------------------------------------------------------------
 async function listarResumenLavadores(req, res) {
-  res.json(await NominaRepositorio.resumenComisionesLavadores());
+  const resumen = await NominaRepositorio.resumenComisionesLavadores();
+  const presentesIds = new Set(await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy()));
+  res.json(resumen.map(l => ({ ...l, disponible_hoy: presentesIds.has(l.lavador_id) })));
 }
 
 async function generarLiquidacion(req, res) {

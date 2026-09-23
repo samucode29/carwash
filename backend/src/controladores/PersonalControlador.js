@@ -4,9 +4,11 @@
  */
 const UsuarioRepositorio = require('../repositorios/UsuarioRepositorio');
 const LavadorRepositorio = require('../repositorios/LavadorRepositorio');
+const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { hashearContrasena, generarPasswordPorDefecto } = require('../utilidades/contrasenas');
 const { normalizarParaUsername } = require('../utilidades/texto');
+const { obtenerFechaHoy } = require('../utilidades/fechas');
 
 /**
  * Genera un nombre de usuario único a partir del nombre completo:
@@ -182,7 +184,8 @@ async function reiniciarContrasena(req, res) {
 async function listarLavadores(req, res) {
   const soloActivos = req.query.activos === 'true';
   const lavadores = await LavadorRepositorio.listar({ soloActivos });
-  res.json(lavadores);
+  const presentesIds = new Set(await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy()));
+  res.json(lavadores.map(l => ({ ...l, disponible_hoy: presentesIds.has(l.id) })));
 }
 
 async function crearLavador(req, res) {

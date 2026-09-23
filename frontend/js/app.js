@@ -18,6 +18,7 @@ const app = {
   payingLiqId: null,
   editingServiceId: null,
   servicioInsumosSeleccionados: [],
+  editingWasherId: null,
 
   // ===========================================================================
   // INICIALIZACIÓN Y SESIÓN
@@ -398,16 +399,21 @@ const app = {
     if (!list) return;
     list.innerHTML = (this.washers || []).map(w => {
       const selected = this.selectedWashers.includes(w.id);
+      const disponible = !!w.disponible_hoy;
+      const clases = ['washer-pill'];
+      if (selected) clases.push('selected');
+      if (!disponible) clases.push('disabled');
       return `
-        <div class="washer-pill ${selected ? 'selected' : ''}" onclick="app.toggleWasherSelection(${w.id})">
+        <div class="${clases.join(' ')}" onclick="app.toggleWasherSelection(${w.id}, ${disponible})" title="${disponible ? '' : 'No ha registrado entrada hoy'}">
           <span class="washer-status-dot"></span>
-          <span>${w.nombre.split(' ')[0]} (${w.porcentaje_comision}%)</span>
+          <span>${w.nombre.split(' ')[0]} (${w.porcentaje_comision}%)${disponible ? '' : ' — sin entrada'}</span>
         </div>
       `;
     }).join('');
   },
 
-  toggleWasherSelection(id) {
+  toggleWasherSelection(id, disponible) {
+    if (!disponible) { this.toast('Este lavador no ha registrado entrada hoy y no puede ser asignado.', 'warning'); return; }
     if (this.selectedWashers.includes(id)) {
       this.selectedWashers = this.selectedWashers.filter(wid => wid !== id);
     } else {
@@ -1004,6 +1010,7 @@ const app = {
               </div>
               <div class="text-sm text-muted">Doc: ${w.documento} • Tel: ${w.telefono}</div>
               <div class="text-sm text-muted">Comisión configurada: <strong>${w.porcentaje_comision}%</strong></div>
+              <div class="text-sm mt-1">${w.disponible_hoy ? '<span class="role-badge" style="background: #10b981">DISPONIBLE HOY</span>' : '<span class="role-badge" style="background: #ef4444">SIN ENTRADA HOY</span>'}</div>
               <div class="commission-highlight">
                 <div>
                   <span class="text-sm text-muted" style="display: block">Por Cobrar (Pendiente):</span>
@@ -1013,6 +1020,7 @@ const app = {
               </div>
               <div class="d-flex gap-2 mt-2">
                 <button class="btn btn-sm btn-primary admin-only" style="flex: 1" onclick="app.abrirModalLiquidar(${w.lavador_id}, '${w.nombre}', ${w.comision_pendiente})">Liquidar Comisión</button>
+                <button class="btn btn-sm btn-outline admin-only" onclick="app.abrirModalEditarLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}', '${(w.telefono || '').replace(/'/g, "\\'")}', ${w.porcentaje_comision})">Editar</button>
                 <button class="btn btn-sm btn-outline admin-only" onclick="app.toggleEstadoLavador(${w.lavador_id}, '${w.estado}', '${w.nombre}')">${w.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
               </div>
             </div>
@@ -1192,6 +1200,11 @@ const app = {
     }
   },
 
+  async abrirModalAsistencia() {
+    await this.cargarPersonalParaAsistencia();
+    this.openModal('modalAsistencia');
+  },
+
   async guardarAsistencia() {
     const [persona_tipo, persona_id] = document.getElementById('asistPersonalSelect').value.split(':');
     const tipo = document.getElementById('asistTipoSelect').value;
@@ -1245,6 +1258,31 @@ const app = {
       this.loadWashers();
     } catch (err) {
       this.toast('No se pudo cambiar el estado.', 'error');
+    }
+  },
+
+  abrirModalEditarLavador(id, nombre, telefono, porcentajeComision) {
+    this.editingWasherId = id;
+    document.getElementById('editLavNombre').value = nombre;
+    document.getElementById('editLavTelefono').value = telefono;
+    document.getElementById('editLavComision').value = porcentajeComision;
+    this.openModal('modalEditarLavador');
+  },
+
+  async guardarEdicionLavador() {
+    const nombre = document.getElementById('editLavNombre').value.trim();
+    const telefono = document.getElementById('editLavTelefono').value.trim();
+    const porcentajeComision = document.getElementById('editLavComision').value;
+    if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
+
+    try {
+      await ApiCliente.put(`/api/personal/lavadores/${this.editingWasherId}`, { nombre, telefono, porcentajeComision });
+      this.toast('Datos del lavador actualizados.', 'success');
+      this.closeModal('modalEditarLavador');
+      this.loadNomina();
+      this.loadWashers();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo actualizar el lavador.', 'error');
     }
   },
 
