@@ -79,7 +79,7 @@
       <main class="content-wrapper">
 
         <!-- ========================================== -->
-        <!-- 1. MÓDULO POS & TURNOS (CU01, CU02, CU05) -->
+        <!-- 1. MÓDULO POS & TURNOS -->
         <!-- ========================================== -->
         <section id="tab-pos" class="tab-view active">
           <div class="pos-layout">
@@ -108,7 +108,7 @@
                 </label>
                 <label class="radio-label">
                   <input type="radio" name="posClientType" value="anonimo" onchange="app.toggleClientMode()">
-                  <span>Venta Rápida / Anónima (RF02)</span>
+                  <span>Venta Rápida / Anónima</span>
                 </label>
               </div>
 
@@ -161,13 +161,13 @@
                 </div>
               </div>
 
-              <!-- Asignación de Lavadores (RF09, RF23, RF24, RF28) -->
+              <!-- Asignación de Lavadores -->
               <div class="washers-assign-box mt-3">
                 <div class="d-flex justify-between align-center mb-2">
                   <label class="label-bold">Asignación de Lavador(es):</label>
                   <label class="checkbox-label">
                     <input type="checkbox" id="posAutoAssignCheck" checked onchange="app.toggleAutoAssign()">
-                    <span>Asignación Automática Inteligente (RF23)</span>
+                    <span>Asignación Automática Inteligente</span>
                   </label>
                 </div>
                 <div id="posManualWashersWrapper" class="hidden">
@@ -191,7 +191,7 @@
               </div>
             </div>
 
-            <!-- Panel Derecho: Fila de Turnos por Orden de Llegada (CU05, CU06) -->
+            <!-- Panel Derecho: Fila de Turnos por Orden de Llegada -->
             <div class="pos-card queue-panel">
               <div class="panel-header">
                 <h3>Fila de Turnos del Día (Walk-In)</h3>
@@ -207,7 +207,7 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- 2. TABLERO DE LAVADO (KANBAN) (CU08, CU09, CU10) -->
+        <!-- 2. TABLERO DE LAVADO (KANBAN) -->
         <!-- ========================================== -->
         <section id="tab-tablero" class="tab-view">
           <div class="section-top-bar">
@@ -264,7 +264,7 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- 3. AGENDA DE CITAS (CU04, CU06) -->
+        <!-- 3. AGENDA DE CITAS -->
         <!-- ========================================== -->
         <section id="tab-citas" class="tab-view">
           <div class="section-top-bar">
@@ -299,17 +299,17 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- 4. INVENTARIO PERPETUO (CU13, CU14, CU15, CU28 / RF14, RF36) -->
+        <!-- 4. INVENTARIO PERPETUO -->
         <!-- ========================================== -->
         <section id="tab-inventario" class="tab-view">
           <div class="section-top-bar">
             <div>
               <h2>Control de Insumos e Inventario Perpetuo</h2>
-              <p class="text-muted">Descuento automático por servicio terminado y alertas de stock mínimo en tiempo real.</p>
+              <p class="text-muted">Entregas de insumos a lavadores, entradas por compra y alertas de stock mínimo en tiempo real.</p>
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-outline" onclick="app.openModal('modalEntregaInsumo')">Entregar a Lavador (RF36)</button>
-              <button class="btn btn-secondary" onclick="app.openModal('modalEntradaInsumo')">Entrada por Compra (RF13)</button>
+              <button class="btn btn-outline" onclick="app.openModal('modalEntregaInsumo')">Entregar a Lavador</button>
+              <button class="btn btn-secondary" onclick="app.openModal('modalEntradaInsumo')">Entrada por Compra</button>
               <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoInsumo')">+ Nuevo Insumo</button>
             </div>
           </div>
@@ -347,7 +347,7 @@
 
             <div class="card-table-wrapper">
               <div class="panel-header">
-                <h4>Dotación Entregada a Lavadores (RF36)</h4>
+                <h4>Dotación Entregada a Lavadores</h4>
               </div>
               <table class="data-table data-table-sm">
                 <thead>
@@ -366,7 +366,7 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- 5. CATÁLOGO DE SERVICIOS (CU12 / RF16) -->
+        <!-- 5. CATÁLOGO DE SERVICIOS -->
         <!-- ========================================== -->
         <section id="tab-servicios" class="tab-view admin-only">
           <div class="section-top-bar">
@@ -397,7 +397,7 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- 6. PERSONAL & NÓMINA (CU21-CU27 / RF22, RF30-RF35) -->
+        <!-- 6. PERSONAL & NÓMINA -->
         <!-- ========================================== -->
         <section id="tab-nomina" class="tab-view">
           <div class="section-top-bar">
@@ -405,7 +405,7 @@
               <h2>Gestión de Personal, Asistencia y Nómina</h2>
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-outline" onclick="app.abrirModalAsistencia()">Registrar Asistencia (RF35)</button>
+              <button class="btn btn-outline" onclick="app.abrirModalAsistencia()">Registrar Asistencia</button>
               <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoUsuario')">+ Registrar Personal</button>
             </div>
           </div>
@@ -413,13 +413,13 @@
           <!-- Sub-pestañas de nómina -->
           <div class="sub-tabs mt-3">
             <button class="sub-tab-btn active" onclick="app.setSubTabNomina('lavadores')">
-              Lavadores &amp; Comisiones (RF22, RF30)
+              Lavadores &amp; Comisiones
             </button>
             <button class="sub-tab-btn admin-only" onclick="app.setSubTabNomina('empleados')">
-              Empleados &amp; Salario Fijo (RF32)
+              Empleados &amp; Salario Fijo
             </button>
             <button class="sub-tab-btn" onclick="app.setSubTabNomina('asistencia')">
-              Registro de Asistencia Diaria (RF35)
+              Registro de Asistencia Diaria
             </button>
           </div>
 
@@ -441,7 +441,7 @@
                     <th>Descuentos</th>
                     <th>A Pagar</th>
                     <th>Estado</th>
-                    <th>Soporte de Pago (RF31)</th>
+                    <th>Soporte de Pago</th>
                     <th>Acción</th>
                   </tr>
                 </thead>
@@ -520,7 +520,7 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- 7. CAJA DIARIA (CU20 / RF12) -->
+        <!-- 7. CAJA DIARIA -->
         <!-- ========================================== -->
         <section id="tab-caja" class="tab-view">
           <div class="section-top-bar">
@@ -586,7 +586,7 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- 8. REPORTES (CU18, CU19, CU29 / RF19, RF20, RF25, RF26) -->
+        <!-- 8. REPORTES -->
         <!-- ========================================== -->
         <section id="tab-dashboard" class="tab-view admin-only">
           <div class="section-top-bar">
@@ -614,7 +614,7 @@
             <button class="btn btn-outline" onclick="app.descargarReportePdf()">Descargar Reporte en PDF</button>
           </div>
 
-          <!-- Fórmula de Ganancia Neta Destacada (RF20 / CU19) -->
+          <!-- Fórmula de Ganancia Neta Destacada -->
           <div class="profit-formula-card mt-3">
             <div class="formula-item">
               <span class="formula-label">Ingresos Totales</span>
@@ -643,7 +643,7 @@
             </div>
           </div>
 
-          <!-- Gráficos y Distribución (RF26) -->
+          <!-- Gráficos y Distribución -->
           <div class="grid-3-cols mt-4">
             <!-- 1. Distribución Carros vs Motos -->
             <div class="chart-card">
@@ -700,7 +700,7 @@
 
             <div class="card-table-wrapper">
               <div class="panel-header">
-                <h4>Registro de Auditoría y Seguridad (CU10 / RF18)</h4>
+                <h4>Registro de Auditoría y Seguridad</h4>
               </div>
               <table class="data-table data-table-sm">
                 <thead>
@@ -765,7 +765,7 @@
     </div>
   </div>
 
-  <!-- Modal 2: Nuevo Cliente y Vehículo (CU01) -->
+  <!-- Modal 2: Nuevo Cliente y Vehículo -->
   <div id="modalNuevoCliente" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -820,7 +820,7 @@
     </div>
   </div>
 
-  <!-- Modal 3: Nueva Cita (CU04) -->
+  <!-- Modal 3: Nueva Cita -->
   <div id="modalNuevaCita" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -866,7 +866,7 @@
     </div>
   </div>
 
-  <!-- Modal 4: Nuevo Turno Rápido (CU05) -->
+  <!-- Modal 4: Nuevo Turno Rápido -->
   <div id="modalNuevoTurno" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -897,7 +897,7 @@
     </div>
   </div>
 
-  <!-- Modal 5: Entrada de Insumos (Compra) (CU13 / RF13) -->
+  <!-- Modal 5: Entrada de Insumos (Compra) -->
   <div id="modalEntradaInsumo" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -929,11 +929,11 @@
     </div>
   </div>
 
-  <!-- Modal 6: Entregar Insumo a Lavador (CU28 / RF36) -->
+  <!-- Modal 6: Entregar Insumo a Lavador -->
   <div id="modalEntregaInsumo" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>Entregar Insumo a Lavador (RF36)</h3>
+        <h3>Entregar Insumo a Lavador</h3>
         <button class="close-btn" onclick="app.closeModal('modalEntregaInsumo')">&times;</button>
       </div>
       <div class="modal-body">
@@ -957,7 +957,7 @@
     </div>
   </div>
 
-  <!-- Modal 7: Liquidar Comisiones de Lavador (CU22 / RF30) -->
+  <!-- Modal 7: Liquidar Comisiones de Lavador -->
   <div id="modalLiquidarLavador" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -981,7 +981,7 @@
           <input type="number" id="liqTotalComision" readonly class="input-readonly">
         </div>
         <div class="form-group">
-          <label>Descuentos (Anticipos, daños, etc. RF34):</label>
+          <label>Descuentos (Anticipos, daños, etc.):</label>
           <input type="number" id="liqDescuentos" value="0" min="0" oninput="app.recalcLiqTotal()">
         </div>
         <div class="pay-summary">
@@ -996,7 +996,7 @@
     </div>
   </div>
 
-  <!-- Modal: Editar Datos de Lavador (RF22, RF27) -->
+  <!-- Modal: Editar Datos de Lavador -->
   <div id="modalEditarLavador" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -1024,7 +1024,7 @@
     </div>
   </div>
 
-  <!-- Modal: Editar Datos de Empleado (solo administrador, RF17) -->
+  <!-- Modal: Editar Datos de Empleado (solo administrador) -->
   <div id="modalEditarEmpleado" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -1066,11 +1066,11 @@
     </div>
   </div>
 
-  <!-- Modal 8: Pagar Liquidación con Soporte (CU23 / RF31) -->
+  <!-- Modal 8: Pagar Liquidación con Soporte -->
   <div id="modalPagarLiquidacion" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>Registrar Pago de Liquidación (RF31)</h3>
+        <h3>Registrar Pago de Liquidación</h3>
         <button class="close-btn" onclick="app.closeModal('modalPagarLiquidacion')">&times;</button>
       </div>
       <div class="modal-body">
@@ -1091,7 +1091,7 @@
     </div>
   </div>
 
-  <!-- Modal 9: Cierre de Caja (CU20 / RF12) -->
+  <!-- Modal 9: Cierre de Caja -->
   <div id="modalCerrarCaja" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -1116,7 +1116,7 @@
     </div>
   </div>
 
-  <!-- Modal 10: Registrar Personal (CU16, CU26 / RF17, RF27) -->
+  <!-- Modal 10: Registrar Personal -->
   <div id="modalNuevoUsuario" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -1150,7 +1150,7 @@
         </div>
         <div id="usrLavadorFields">
           <div class="form-group">
-            <label>Porcentaje de Comisión (% para el trabajador, default 60% RF22):</label>
+            <label>Porcentaje de Comisión (% para el trabajador, default 60%):</label>
             <input type="number" id="usrComision" value="60" min="1" max="100">
           </div>
         </div>
@@ -1183,7 +1183,7 @@
     </div>
   </div>
 
-  <!-- Modal 11: Registrar Asistencia (CU27 / RF35) -->
+  <!-- Modal 11: Registrar Asistencia -->
   <div id="modalAsistencia" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -1368,7 +1368,7 @@
     </div>
   </div>
 
-  <!-- Modal 17: Nuevo / Editar Servicio (CU12 / RF16) -->
+  <!-- Modal 17: Nuevo / Editar Servicio -->
   <div id="modalServicio" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
