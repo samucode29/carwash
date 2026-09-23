@@ -49,11 +49,15 @@ const app = {
     this.startClock();
     this.setupDatePickers();
     this.loadInitialData();
+    this.mostrarAlertaCitasDelDia();
+    this.revisarRecordatoriosCitas();
 
     setInterval(() => {
       if (this.activeTab === 'tablero') this.loadOrders();
       if (this.activeTab === 'pos') this.loadTurnos();
     }, 30000);
+
+    setInterval(() => this.revisarRecordatoriosCitas(), 60000);
   },
 
   pintarBarraSesion() {
@@ -707,6 +711,76 @@ const app = {
     } catch (err) {
       this.toast('Error al cancelar cita.', 'error');
     }
+  },
+
+  /** Alerta única al abrir la app cada día: cuántas citas hay agendadas para hoy. */
+  async mostrarAlertaCitasDelDia() {
+    const hoy = fechaLocalHoy();
+    const YA_MOSTRADA_KEY = 'carwash_alerta_citas_dia';
+    try {
+      if (localStorage.getItem(YA_MOSTRADA_KEY) === hoy) return;
+    } catch (err) { /* localStorage no disponible: seguimos igual, solo no deduplicamos */ }
+
+    try {
+      const citas = await ApiCliente.get(`/api/citas?fecha=${hoy}`);
+      const pendientes = citas.filter(c => c.estado === 'agendada' || c.estado === 'reprogramada');
+      alert(pendientes.length > 0
+        ? `Hoy tienes ${pendientes.length} cita(s) agendada(s).`
+        : 'No hay citas agendadas para hoy.');
+      try { localStorage.setItem(YA_MOSTRADA_KEY, hoy); } catch (err) { /* ignorar */ }
+    } catch (err) { console.error(err); }
+  },
+
+  /** Recordatorios ya disparados hoy (para no repetir la misma alerta), persistidos por si se recarga la página. */
+  obtenerRecordatoriosCitasDisparados() {
+    try {
+      const data = JSON.parse(localStorage.getItem('carwash_citas_recordatorios') || '{}');
+      return new Set(data[fechaLocalHoy()] || []);
+    } catch (err) {
+      return new Set();
+    }
+  },
+
+  guardarRecordatoriosCitasDisparados(set) {
+    try {
+      localStorage.setItem('carwash_citas_recordatorios', JSON.stringify({ [fechaLocalHoy()]: Array.from(set) }));
+    } catch (err) { /* ignorar */ }
+  },
+
+  /**
+   * Revisa las citas de hoy que todavía no han sido atendidas y lanza una
+   * alerta a 1 hora, 30 minutos y 10 minutos antes de la hora agendada.
+   * Se llama al iniciar la app y luego cada minuto mientras siga abierta.
+   */
+  async revisarRecordatoriosCitas() {
+    const UMBRALES_MINUTOS = [60, 30, 10];
+    try {
+      const hoy = fechaLocalHoy();
+      const citas = await ApiCliente.get(`/api/citas?fecha=${hoy}`);
+      const pendientes = citas.filter(c => c.estado === 'agendada' || c.estado === 'reprogramada');
+      if (pendientes.length === 0) return;
+
+      const disparados = this.obtenerRecordatoriosCitasDisparados();
+      const ahora = new Date();
+      let huboNuevos = false;
+
+      for (const c of pendientes) {
+        const horaCita = new Date(`${c.fecha}T${c.hora}`);
+        const minutosFaltantes = (horaCita - ahora) / 60000;
+        if (minutosFaltantes < 0) continue; // ya pasó la hora, no seguimos avisando
+
+        for (const umbral of UMBRALES_MINUTOS) {
+          const clave = `${c.id}:${umbral}`;
+          if (minutosFaltantes <= umbral && !disparados.has(clave)) {
+            alert(`Recordatorio: la cita de ${c.cliente_nombre} (${c.placa}) es a las ${c.hora.substring(0, 5)} (en ${Math.max(0, Math.round(minutosFaltantes))} min) y todavía no ha sido atendida.`);
+            disparados.add(clave);
+            huboNuevos = true;
+          }
+        }
+      }
+
+      if (huboNuevos) this.guardarRecordatoriosCitasDisparados(disparados);
+    } catch (err) { console.error(err); }
   },
 
   /**
