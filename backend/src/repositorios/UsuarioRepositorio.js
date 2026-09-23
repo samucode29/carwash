@@ -34,6 +34,11 @@ async function obtenerPorDocumento(documento) {
   return filas[0] || null;
 }
 
+async function obtenerPorUsername(username) {
+  const [filas] = await pool.query(`SELECT id FROM usuarios WHERE username = ?`, [username]);
+  return filas[0] || null;
+}
+
 async function listar(rol) {
   if (rol) {
     const [filas] = await pool.query(`SELECT ${COLUMNAS_PUBLICAS} FROM usuarios WHERE rol = ? ORDER BY nombre`, [rol]);
@@ -76,6 +81,7 @@ module.exports = {
   obtenerPorId,
   obtenerConHashPorId,
   obtenerPorDocumento,
+  obtenerPorUsername,
   listar,
   crear,
   actualizar

@@ -16,11 +16,11 @@ function compararContrasena(textoPlano, hash) {
 
 /**
  * Contraseña por defecto para cuentas nuevas y para el "reinicio" que hace
- * el administrador cuando alguien olvida su contraseña: "carwash" seguido
- * del número de documento/cédula del usuario, sin espacios.
+ * el administrador cuando alguien olvida su contraseña: el número de
+ * documento/cédula del usuario seguido de "carwash", sin espacios.
  */
 function generarPasswordPorDefecto(documento) {
-  return `carwash${documento}`;
+  return `${documento}carwash`;
 }
 
 module.exports = { hashearContrasena, compararContrasena, generarPasswordPorDefecto };

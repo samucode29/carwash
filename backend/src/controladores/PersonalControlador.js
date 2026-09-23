@@ -6,6 +6,28 @@ const UsuarioRepositorio = require('../repositorios/UsuarioRepositorio');
 const LavadorRepositorio = require('../repositorios/LavadorRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { hashearContrasena, generarPasswordPorDefecto } = require('../utilidades/contrasenas');
+const { normalizarParaUsername } = require('../utilidades/texto');
+
+/**
+ * Genera un nombre de usuario único a partir del nombre completo:
+ * "primernombre.primerapellido", y si ya existe le agrega un número
+ * (primernombre.primerapellido2, 3, ...) hasta encontrar uno libre.
+ */
+async function generarUsernameUnico(nombreCompleto) {
+  const partes = (nombreCompleto || '').trim().split(/\s+/);
+  const primerNombre = normalizarParaUsername(partes[0]) || 'usuario';
+  const primerApellido = normalizarParaUsername(partes[1]);
+  const base = primerApellido ? `${primerNombre}.${primerApellido}` : primerNombre;
+
+  let candidato = base;
+  let contador = 1;
+  // eslint-disable-next-line no-await-in-loop
+  while (await UsuarioRepositorio.obtenerPorUsername(candidato)) {
+    contador += 1;
+    candidato = `${base}${contador}`;
+  }
+  return candidato;
+}
 
 // ---------------------------------------------------------------------------
 // Usuarios (administrador / empleado)
@@ -23,7 +45,7 @@ async function obtenerMiPerfil(req, res) {
 }
 
 async function crearUsuario(req, res) {
-  const { nombre, documento, telefono, correo, username, password, rol, salarioFijo, periodicidadPago } = req.body;
+  const { nombre, documento, telefono, correo, rol, salarioFijo, periodicidadPago } = req.body;
 
   if (!nombre || !documento || !rol) {
     return res.status(400).json({ error: 'Nombre, documento y rol son obligatorios.' });
@@ -42,17 +64,19 @@ async function crearUsuario(req, res) {
     return res.status(400).json({ error: 'Ya existe un usuario con este documento de identidad.' });
   }
 
-  // Si no se indica contraseña, la cuenta se crea con la contraseña por
-  // defecto del sistema: "carwash" + número de documento.
-  const passwordUsada = password || generarPasswordPorDefecto(documento);
-  const nombreUsuario = username || (nombre.split(' ')[0].toLowerCase() + Math.floor(Math.random() * 1000));
+  // El usuario y la contraseña siempre se asignan automáticamente, no los
+  // escribe el administrador: usuario = primernombre.primerapellido (con
+  // un número si ya existe), contraseña = documento + "carwash".
+  const nombreUsuario = await generarUsernameUnico(nombre);
+  const passwordAsignada = generarPasswordPorDefecto(documento);
+
   const nuevoUsuario = await UsuarioRepositorio.crear({
     nombre,
     documento,
     telefono,
     correo: correo || `${nombreUsuario}@carwash.com`,
     username: nombreUsuario,
-    passwordHash: hashearContrasena(passwordUsada),
+    passwordHash: hashearContrasena(passwordAsignada),
     rol,
     salarioFijo: salarioFijo ? parseFloat(salarioFijo) : 1400000,
     periodicidadPago: periodicidadPago || 'quincenal'
@@ -60,9 +84,9 @@ async function crearUsuario(req, res) {
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_usuario', `Creado usuario ${nombre} con rol ${rol}`);
   // Se devuelve la contraseña en texto plano SOLO en esta respuesta (no se
-  // guarda en ningún lado) para que el administrador se la pueda entregar
-  // a la persona; si fue autogenerada, el frontend la muestra una vez.
-  res.status(201).json({ ...nuevoUsuario, passwordAsignada: password ? null : passwordUsada });
+  // guarda en ningún lado) para que el administrador se la entregue a la
+  // persona; el frontend la muestra una única vez.
+  res.status(201).json({ ...nuevoUsuario, passwordAsignada });
 }
 
 async function actualizarUsuario(req, res) {
@@ -71,6 +95,18 @@ async function actualizarUsuario(req, res) {
 
   if (rol === 'administrador' && !req.usuarioAutenticado.esAdminPrincipal) {
     return res.status(403).json({ error: 'Solo el administrador principal puede otorgar el rol de administrador.' });
+  }
+
+  // Nadie puede inactivar su propia cuenta (se quedaría sin poder volver a
+  // entrar), y al administrador principal solo lo puede inactivar él mismo.
+  if (estado === 'inactivo') {
+    if (id === req.usuarioAutenticado.id) {
+      return res.status(400).json({ error: 'No puedes inactivar tu propia cuenta.' });
+    }
+    const objetivo = await UsuarioRepositorio.obtenerPorId(id);
+    if (objetivo && objetivo.es_admin_principal) {
+      return res.status(403).json({ error: 'El administrador principal no puede ser inactivado por otra cuenta.' });
+    }
   }
 
   const cambios = {};
@@ -87,6 +123,33 @@ async function actualizarUsuario(req, res) {
   if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado.' });
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_usuario', `Actualizado usuario ID ${id}`);
+  res.json(usuario);
+}
+
+/**
+ * Autoedición de perfil: el propio administrador cambia su nombre,
+ * teléfono, correo o nombre de usuario. Exclusivo de administrador (el
+ * empleado solo puede cambiar su contraseña, ver AuthControlador).
+ */
+async function actualizarMiPerfil(req, res) {
+  const { nombre, telefono, correo, username } = req.body;
+  const idPropio = req.usuarioAutenticado.id;
+
+  if (username) {
+    const existente = await UsuarioRepositorio.obtenerPorUsername(username);
+    if (existente && existente.id !== idPropio) {
+      return res.status(400).json({ error: 'Ese nombre de usuario ya está en uso.' });
+    }
+  }
+
+  const cambios = {};
+  if (nombre) cambios.nombre = nombre;
+  if (telefono !== undefined) cambios.telefono = telefono;
+  if (correo) cambios.correo = correo;
+  if (username) cambios.username = username;
+
+  const usuario = await UsuarioRepositorio.actualizar(idPropio, cambios);
+  await AuditoriaRepositorio.registrar(idPropio, 'actualizar_mi_perfil', 'El usuario editó los datos de su propio perfil.');
   res.json(usuario);
 }
 
@@ -167,6 +230,7 @@ module.exports = {
   obtenerMiPerfil,
   crearUsuario,
   actualizarUsuario,
+  actualizarMiPerfil,
   reiniciarContrasena,
   listarLavadores,
   crearLavador,

@@ -13,8 +13,11 @@ router.post('/usuarios', permitirRoles('administrador'), envolverAsync(PersonalC
 router.put('/usuarios/:id', permitirRoles('administrador'), envolverAsync(PersonalControlador.actualizarUsuario));
 router.post('/usuarios/:id/reiniciar-contrasena', permitirRoles('administrador'), envolverAsync(PersonalControlador.reiniciarContrasena));
 
-// Perfil propio (cualquier usuario autenticado ve su propio salario/datos)
+// Perfil propio (cualquier usuario autenticado ve su propio salario/datos).
+// Editarlo (nombre/teléfono/correo/usuario) es exclusivo de administrador;
+// el empleado solo puede cambiar su contraseña (ver /api/auth/cambiar-contrasena).
 router.get('/mi-perfil', envolverAsync(PersonalControlador.obtenerMiPerfil));
+router.put('/mi-perfil', permitirRoles('administrador'), envolverAsync(PersonalControlador.actualizarMiPerfil));
 
 // Lavadores: cualquier usuario autenticado puede listarlos (se necesitan
 // para asignar servicios en el POS); solo admin los crea o edita.

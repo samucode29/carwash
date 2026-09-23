@@ -16,6 +16,7 @@ const app = {
   payingOrderId: null,
   liquidatingWasher: null,
   payingLiqId: null,
+  editingServiceId: null,
 
   // ===========================================================================
   // INICIALIZACIÓN Y SESIÓN
@@ -26,6 +27,7 @@ const app = {
 
     this.pintarBarraSesion();
     this.initTheme();
+    this.initSidebar();
     this.startClock();
     this.setupDatePickers();
     this.loadInitialData();
@@ -62,8 +64,8 @@ const app = {
 
   // Navegación de pestañas
   setTab(tabId) {
-    if (tabId === 'dashboard' && this.currentUser.rol !== 'administrador') {
-      this.toast('Acceso denegado: el dashboard financiero es exclusivo para Administrador.', 'error');
+    if ((tabId === 'dashboard' || tabId === 'servicios') && this.currentUser.rol !== 'administrador') {
+      this.toast('Acceso denegado: esta sección es exclusiva para Administrador.', 'error');
       return;
     }
 
@@ -76,6 +78,7 @@ const app = {
       case 'tablero': this.loadOrders(); break;
       case 'citas': this.loadCitas(); break;
       case 'inventario': this.loadInsumos(); break;
+      case 'servicios': this.loadServicios(); break;
       case 'nomina': this.loadNomina(); break;
       case 'caja': this.loadCaja(); break;
       case 'dashboard': this.loadDashboard(); break;
@@ -90,6 +93,21 @@ const app = {
     const target = document.getElementById(`subtab-${subtab}`);
     if (target) target.classList.add('active');
     this.loadNomina();
+  },
+
+  // ===========================================================================
+  // BARRA LATERAL (vertical, desplegable) Y TEMA
+  // ===========================================================================
+  initSidebar() {
+    const guardado = localStorage.getItem('carwash_sidebar');
+    if (guardado === 'colapsado') {
+      document.getElementById('appShell').classList.add('sidebar-collapsed');
+    }
+  },
+
+  toggleSidebar() {
+    const colapsado = document.getElementById('appShell').classList.toggle('sidebar-collapsed');
+    localStorage.setItem('carwash_sidebar', colapsado ? 'colapsado' : 'expandido');
   },
 
   initTheme() {
@@ -109,12 +127,8 @@ const app = {
   },
 
   updateThemeButton(isLight) {
-    const icon = document.getElementById('themeIcon');
     const text = document.getElementById('themeText');
-    if (icon && text) {
-      icon.textContent = isLight ? '🌙' : '☀️';
-      text.textContent = isLight ? 'Modo Oscuro' : 'Modo Claro';
-    }
+    if (text) text.textContent = isLight ? 'Modo Oscuro' : 'Modo Claro';
   },
 
   startClock() {
@@ -145,13 +159,14 @@ const app = {
   },
 
   // ===========================================================================
-  // MI PERFIL (ver mi propio salario / datos)
+  // MI PERFIL (ver datos propios) Y AUTOEDICIÓN
   // ===========================================================================
   async abrirMiPerfil() {
     try {
       const perfil = await ApiCliente.get('/api/personal/mi-perfil');
       document.getElementById('miPerfilNombre').textContent = perfil.nombre;
       document.getElementById('miPerfilRol').textContent = perfil.es_admin_principal ? 'ADMINISTRADOR PRINCIPAL' : perfil.rol.toUpperCase();
+      document.getElementById('miPerfilUsername').textContent = perfil.username;
       document.getElementById('miPerfilDocumento').textContent = perfil.documento;
       document.getElementById('miPerfilIngreso').textContent = perfil.fecha_ingreso;
       document.getElementById('miPerfilSalario').textContent = this.formatMoney(perfil.salario_fijo);
@@ -162,6 +177,43 @@ const app = {
     }
   },
 
+  /** Solo administrador: abre el formulario para editar sus propios datos. */
+  async abrirEditarPerfil() {
+    this.closeModal('modalMiPerfil');
+    try {
+      const perfil = await ApiCliente.get('/api/personal/mi-perfil');
+      document.getElementById('editPerfilNombre').value = perfil.nombre;
+      document.getElementById('editPerfilTelefono').value = perfil.telefono || '';
+      document.getElementById('editPerfilCorreo').value = perfil.correo || '';
+      document.getElementById('editPerfilUsername').value = perfil.username;
+      this.openModal('modalEditarPerfil');
+    } catch (err) {
+      this.toast('No se pudo cargar tu perfil.', 'error');
+    }
+  },
+
+  async guardarEdicionPerfil() {
+    const nombre = document.getElementById('editPerfilNombre').value;
+    const telefono = document.getElementById('editPerfilTelefono').value;
+    const correo = document.getElementById('editPerfilCorreo').value;
+    const username = document.getElementById('editPerfilUsername').value;
+
+    if (!nombre || !username) { this.toast('Nombre y usuario son obligatorios.', 'warning'); return; }
+
+    try {
+      const actualizado = await ApiCliente.put('/api/personal/mi-perfil', { nombre, telefono, correo, username });
+      this.toast('Tus datos se actualizaron correctamente.', 'success');
+      this.closeModal('modalEditarPerfil');
+
+      // Refresca el nombre visible en la sesión local (usado en la barra superior).
+      this.currentUser.nombre = actualizado.nombre;
+      ApiCliente.guardarSesion(ApiCliente.obtenerToken(), this.currentUser);
+      this.pintarBarraSesion();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo actualizar tu perfil.', 'error');
+    }
+  },
+
   // ===========================================================================
   // TOAST NOTIFICATIONS & MODALS
   // ===========================================================================
@@ -169,11 +221,7 @@ const app = {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    let icon = 'ℹ️';
-    if (type === 'success') icon = '✅';
-    if (type === 'error') icon = '❌';
-    if (type === 'warning') icon = '⚠️';
-    toast.innerHTML = `<span>${icon}</span> <span>${msg}</span>`;
+    toast.innerHTML = `<span>${msg}</span>`;
     container.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';
@@ -233,7 +281,7 @@ const app = {
         <div class="service-card-desc">${s.descripcion || 'Sin descripción'}</div>
         <div class="service-card-footer">
           <span class="service-card-price">${this.formatMoney(s.precio)}</span>
-          <span class="service-card-time">⏱️ ${s.duracion_estimada_min} min</span>
+          <span class="service-card-time">${s.duracion_estimada_min} min</span>
         </div>
       </div>
     `).join('');
@@ -309,7 +357,7 @@ const app = {
 
       if (data.encontrado) {
         banner.innerHTML = `
-          <strong>✅ Vehículo Encontrado:</strong> ${data.vehiculo.placa} (${data.vehiculo.marca} - ${data.vehiculo.color})<br>
+          <strong>Vehículo Encontrado:</strong> ${data.vehiculo.placa} (${data.vehiculo.marca} - ${data.vehiculo.color})<br>
           <strong>Propietario:</strong> ${data.cliente ? data.cliente.nombre : 'Sin propietario registrado'}<br>
           <strong>Historial:</strong> ${data.historial.length} servicios anteriores realizados.
         `;
@@ -322,7 +370,7 @@ const app = {
         }
       } else {
         banner.innerHTML = `
-          <strong>ℹ️ Placa no registrada:</strong> "${placa}" es nueva.<br>
+          <strong>Placa no registrada:</strong> "${placa}" es nueva.<br>
           Puede registrar al cliente con el botón <em>+ Nuevo Cliente</em> o realizar una <em>Venta Rápida / Anónima</em>.
         `;
         document.getElementById('posAnonPlaca').value = placa;
@@ -402,7 +450,7 @@ const app = {
 
     try {
       const data = await ApiCliente.post('/api/ordenes', payload);
-      this.toast(`¡Orden de Lavado #${data.id} iniciada con éxito!`, 'success');
+      this.toast(`Orden de Lavado #${data.id} iniciada con éxito.`, 'success');
       this.selectedServiceId = null;
       this.selectedWashers = [];
       this.renderPosServices();
@@ -505,14 +553,14 @@ const app = {
     let actionButtons = '';
 
     if (o.estado === 'recibido') {
-      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'en_proceso')">▶️ Iniciar Lavado</button>`;
+      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'en_proceso')">Iniciar Lavado</button>`;
     } else if (o.estado === 'en_proceso') {
-      actionButtons = `<button class="btn btn-sm btn-success" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'terminado')">🏁 Terminar Lavado (Descuenta Insumos)</button>`;
+      actionButtons = `<button class="btn btn-sm btn-success" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'terminado')">Terminar Lavado (Descuenta Insumos)</button>`;
     } else if (o.estado === 'terminado') {
-      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.openPayModal(${o.id}, ${o.total})">💳 Cobrar y Entregar Vehículo</button>`;
+      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.openPayModal(${o.id}, ${o.total})">Cobrar y Entregar Vehículo</button>`;
     } else if (o.estado === 'entregado') {
       const metodo = o.pago ? o.pago.metodo_pago.toUpperCase() : 'PAGADO';
-      actionButtons = `<span class="text-sm text-success" style="font-weight: 700">✓ Entregado • Pago: ${metodo}</span>`;
+      actionButtons = `<span class="text-sm text-success" style="font-weight: 700">Entregado • Pago: ${metodo}</span>`;
     }
 
     return `
@@ -521,8 +569,8 @@ const app = {
         <span class="order-plate-tag">${o.placa || 'SIN PLACA'}</span>
       </div>
       <div class="order-service-title">${o.servicio_nombre}</div>
-      <div class="order-meta-info"><span>👤 ${o.cliente_nombre}</span> • <span>${this.formatMoney(o.total)}</span></div>
-      <div class="order-washers-info">🚿 Lavador(es): <strong>${lavadoresNombres}</strong></div>
+      <div class="order-meta-info"><span>Cliente: ${o.cliente_nombre}</span> • <span>${this.formatMoney(o.total)}</span></div>
+      <div class="order-washers-info">Lavador(es): <strong>${lavadoresNombres}</strong></div>
       <div class="order-actions">${actionButtons}</div>
     `;
   },
@@ -531,7 +579,7 @@ const app = {
     try {
       await ApiCliente.put(`/api/ordenes/${orderId}/estado`, { estado: nuevoEstado });
       if (nuevoEstado === 'terminado') {
-        this.toast(`¡Orden #${orderId} terminada! Insumos descontados automáticamente del inventario.`, 'success');
+        this.toast(`Orden #${orderId} terminada. Insumos descontados automáticamente del inventario.`, 'success');
         this.loadInsumos();
       } else {
         this.toast(`Orden #${orderId} actualizada a estado: ${nuevoEstado}`, 'info');
@@ -554,7 +602,7 @@ const app = {
     const metodo = document.querySelector('input[name="payMetodo"]:checked').value;
     try {
       await ApiCliente.post('/api/caja/pagos', { orden_id: this.payingOrderId, metodo_pago: metodo });
-      this.toast(`¡Pago de orden #${this.payingOrderId} registrado con éxito vía ${metodo.toUpperCase()}!`, 'success');
+      this.toast(`Pago de orden #${this.payingOrderId} registrado con éxito vía ${metodo.toUpperCase()}.`, 'success');
       this.closeModal('modalPagarOrden');
       this.payingOrderId = null;
       this.loadOrders();
@@ -681,7 +729,7 @@ const app = {
             <div class="insumo-card ${isLow ? 'critical' : ''}">
               <div class="insumo-header">
                 <span class="insumo-name">${i.nombre}</span>
-                <span class="role-badge" style="background: ${isLow ? '#ef4444' : '#10b981'}">${isLow ? '⚠️ BAJO STOCK' : 'EN ORDEN'}</span>
+                <span class="role-badge" style="background: ${isLow ? '#ef4444' : '#10b981'}">${isLow ? 'BAJO STOCK' : 'EN ORDEN'}</span>
               </div>
               <div class="insumo-stock-val">${Number(i.stock_actual).toLocaleString()} <span class="insumo-unit">${i.unidad_medida}</span></div>
               <div class="text-sm text-muted">Stock Mínimo: ${i.stock_minimo} ${i.unidad_medida}</div>
@@ -783,7 +831,93 @@ const app = {
   },
 
   // ===========================================================================
-  // 5. NÓMINA, LIQUIDACIONES Y ASISTENCIA (CU21-CU27)
+  // 5. CATÁLOGO DE SERVICIOS (CU12 / RF16) — solo administrador
+  // ===========================================================================
+  async loadServicios() {
+    try {
+      this.servicios = await ApiCliente.get('/api/servicios');
+      const tbody = document.getElementById('serviciosTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = this.servicios.map(s => `
+        <tr>
+          <td><strong>${s.nombre}</strong>${s.descripcion ? `<br><span class="text-sm text-muted">${s.descripcion}</span>` : ''}</td>
+          <td>${s.tipo_vehiculo}</td>
+          <td>${this.formatMoney(s.precio)}</td>
+          <td>${s.duracion_estimada_min} min</td>
+          <td><span class="role-badge" style="background: ${s.activo ? '#10b981' : '#ef4444'}">${s.activo ? 'ACTIVO' : 'INACTIVO'}</span></td>
+          <td>
+            <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarServicio(${s.id})">Editar</button>
+            <button class="btn btn-sm btn-secondary" onclick="app.toggleEstadoServicio(${s.id}, ${s.activo ? 1 : 0})">${s.activo ? 'Inactivar' : 'Activar'}</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) { console.error(err); }
+  },
+
+  abrirModalNuevoServicio() {
+    this.editingServiceId = null;
+    document.getElementById('modalServicioTitulo').textContent = 'Nuevo Servicio';
+    document.getElementById('servNombre').value = '';
+    document.getElementById('servTipoVehiculo').value = 'carro';
+    document.getElementById('servDuracion').value = 30;
+    document.getElementById('servPrecio').value = 0;
+    document.getElementById('servDescripcion').value = '';
+    this.openModal('modalServicio');
+  },
+
+  abrirModalEditarServicio(id) {
+    const s = (this.servicios || []).find(item => item.id === id);
+    if (!s) return;
+    this.editingServiceId = id;
+    document.getElementById('modalServicioTitulo').textContent = `Editar Servicio: ${s.nombre}`;
+    document.getElementById('servNombre').value = s.nombre;
+    document.getElementById('servTipoVehiculo').value = s.tipo_vehiculo;
+    document.getElementById('servDuracion').value = s.duracion_estimada_min;
+    document.getElementById('servPrecio').value = s.precio;
+    document.getElementById('servDescripcion').value = s.descripcion || '';
+    this.openModal('modalServicio');
+  },
+
+  async guardarServicio() {
+    const nombre = document.getElementById('servNombre').value;
+    const tipo_vehiculo = document.getElementById('servTipoVehiculo').value;
+    const duracion_estimada_min = document.getElementById('servDuracion').value;
+    const precio = document.getElementById('servPrecio').value;
+    const descripcion = document.getElementById('servDescripcion').value;
+
+    if (!nombre || !precio) { this.toast('Nombre y precio son obligatorios.', 'warning'); return; }
+
+    try {
+      if (this.editingServiceId) {
+        await ApiCliente.put(`/api/servicios/${this.editingServiceId}`, { nombre, tipo_vehiculo, duracion_estimada_min, precio, descripcion });
+        this.toast('Servicio actualizado.', 'success');
+      } else {
+        await ApiCliente.post('/api/servicios', { nombre, tipo_vehiculo, duracion_estimada_min, precio, descripcion });
+        this.toast('Servicio creado.', 'success');
+      }
+      this.closeModal('modalServicio');
+      this.loadServicios();
+      this.loadServices(); // refresca el catálogo que usa el POS
+    } catch (err) {
+      this.toast(err.message || 'Error al guardar el servicio.', 'error');
+    }
+  },
+
+  /** Los servicios nunca se eliminan: solo se activan o inactivan. */
+  async toggleEstadoServicio(id, activoActual) {
+    try {
+      await ApiCliente.put(`/api/servicios/${id}`, { activo: !activoActual });
+      this.toast(`Servicio ${activoActual ? 'inactivado' : 'activado'}.`, 'success');
+      this.loadServicios();
+      this.loadServices();
+    } catch (err) {
+      this.toast('No se pudo cambiar el estado del servicio.', 'error');
+    }
+  },
+
+  // ===========================================================================
+  // 6. NÓMINA, LIQUIDACIONES Y ASISTENCIA (CU21-CU27)
   // ===========================================================================
   async loadNomina() {
     try {
@@ -810,7 +944,10 @@ const app = {
                 </div>
                 <div class="text-sm text-muted text-right">${w.servicios_realizados} lavados<br>Total Ganado: ${this.formatMoney(w.comision_historica_total)}</div>
               </div>
-              <button class="btn btn-sm btn-primary admin-only" style="width: 100%" onclick="app.abrirModalLiquidar(${w.lavador_id}, '${w.nombre}', ${w.comision_pendiente})">📑 Liquidar Comisión</button>
+              <div class="d-flex gap-2 mt-2">
+                <button class="btn btn-sm btn-primary admin-only" style="flex: 1" onclick="app.abrirModalLiquidar(${w.lavador_id}, '${w.nombre}', ${w.comision_pendiente})">Liquidar Comisión</button>
+                <button class="btn btn-sm btn-outline admin-only" onclick="app.toggleEstadoLavador(${w.lavador_id}, '${w.estado}', '${w.nombre}')">${w.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
+              </div>
             </div>
           `).join('');
         }
@@ -826,8 +963,8 @@ const app = {
               <td>${this.formatMoney(l.descuentos)}</td>
               <td><strong class="text-success">${this.formatMoney(l.valor_a_pagar)}</strong></td>
               <td><span class="role-badge" style="background: ${l.estado === 'pagado' ? '#10b981' : '#f59e0b'}">${l.estado.toUpperCase()}</span></td>
-              <td class="text-sm">${l.soporte_pago_url ? `📎 ${l.soporte_pago_url}` : '<span class="text-muted">Pendiente de soporte</span>'}</td>
-              <td>${l.estado === 'pendiente' ? `<button class="btn btn-sm btn-success admin-only" onclick="app.abrirModalPagarLiq(${l.id})">Pagar (Adjuntar Soporte)</button>` : '<span class="text-success text-sm">✓ Pagado</span>'}</td>
+              <td class="text-sm">${l.soporte_pago_url ? `Soporte: ${l.soporte_pago_url}` : '<span class="text-muted">Pendiente de soporte</span>'}</td>
+              <td>${l.estado === 'pendiente' ? `<button class="btn btn-sm btn-success admin-only" onclick="app.abrirModalPagarLiq(${l.id})">Pagar (Adjuntar Soporte)</button>` : '<span class="text-success text-sm">Pagado</span>'}</td>
             </tr>
           `).join('');
         }
@@ -847,10 +984,14 @@ const app = {
               <td><span class="role-badge">${e.rol.toUpperCase()}</span></td>
               <td><strong>${this.formatMoney(e.salario_fijo)}</strong></td>
               <td>${(e.periodicidad_pago || '').toUpperCase()}</td>
+              <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
               <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
               <td>
                 <button class="btn btn-sm btn-primary" onclick="app.pagarSalarioEmpleado(${e.empleado_id}, '${e.nombre}', ${e.salario_fijo})">Pagar Salario</button>
-                <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">🔑 Reiniciar Contraseña</button>
+                <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">Reiniciar Contraseña</button>
+                ${(e.empleado_id === this.currentUser.id || e.es_admin_principal)
+                  ? ''
+                  : `<button class="btn btn-sm btn-outline" onclick="app.toggleEstadoUsuario(${e.empleado_id}, '${e.estado || 'activo'}', '${e.nombre}')">${(e.estado || 'activo') === 'activo' ? 'Inactivar' : 'Activar'}</button>`}
               </td>
             </tr>
           `).join('');
@@ -865,7 +1006,7 @@ const app = {
               <td>${p.fecha_pago_real}</td>
               <td><strong>${this.formatMoney(p.valor_a_pagar)}</strong></td>
               <td>${this.formatMoney(p.descuentos)}</td>
-              <td>📎 ${p.soporte_pago_url}</td>
+              <td>${p.soporte_pago_url}</td>
               <td><span class="role-badge" style="background: #10b981">PAGADO</span></td>
             </tr>
           `).join('');
@@ -1013,7 +1154,35 @@ const app = {
   },
 
   // ===========================================================================
-  // 6. CONTROL DE CAJA DIARIA (CU20)
+  // ACTIVAR / INACTIVAR PERSONAL (nunca se elimina, solo se inactiva)
+  // ===========================================================================
+  async toggleEstadoUsuario(id, estadoActual, nombre) {
+    const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+    if (!confirm(`¿${nuevoEstado === 'activo' ? 'Activar' : 'Inactivar'} a ${nombre}?`)) return;
+    try {
+      await ApiCliente.put(`/api/personal/usuarios/${id}`, { estado: nuevoEstado });
+      this.toast(`${nombre} ahora está ${nuevoEstado}.`, 'success');
+      this.loadNomina();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cambiar el estado.', 'error');
+    }
+  },
+
+  async toggleEstadoLavador(id, estadoActual, nombre) {
+    const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+    if (!confirm(`¿${nuevoEstado === 'activo' ? 'Activar' : 'Inactivar'} a ${nombre}?`)) return;
+    try {
+      await ApiCliente.put(`/api/personal/lavadores/${id}`, { estado: nuevoEstado });
+      this.toast(`${nombre} ahora está ${nuevoEstado}.`, 'success');
+      this.loadNomina();
+      this.loadWashers();
+    } catch (err) {
+      this.toast('No se pudo cambiar el estado.', 'error');
+    }
+  },
+
+  // ===========================================================================
+  // 7. CONTROL DE CAJA DIARIA (CU20)
   // ===========================================================================
   async loadCaja() {
     try {
@@ -1032,10 +1201,10 @@ const app = {
       const btnCerrar = document.getElementById('btnCerrarCaja');
       if (data.esta_cerrada) {
         btnCerrar.disabled = true;
-        btnCerrar.innerHTML = '🔒 Caja de Hoy Ya Cerrada';
+        btnCerrar.textContent = 'Caja de Hoy Ya Cerrada';
       } else {
         btnCerrar.disabled = false;
-        btnCerrar.innerHTML = '🔒 Realizar Cierre de Caja';
+        btnCerrar.textContent = 'Realizar Cierre de Caja';
       }
       document.getElementById('modalCierreTotalGeneral').textContent = this.formatMoney(data.total_general);
 
@@ -1070,7 +1239,7 @@ const app = {
   },
 
   // ===========================================================================
-  // 7. DASHBOARD, GANANCIAS Y REPORTES DESCARGABLES (CU18, CU19, CU29)
+  // 8. REPORTES: GANANCIAS Y DESCARGA EN PDF (CU18, CU19, CU29)
   // ===========================================================================
   setDashboardPeriod(period) {
     this.dashboardPeriod = period;
@@ -1203,20 +1372,18 @@ const app = {
     }
   },
 
-  // Crear Personal (usuario con login o lavador sin login)
+  // Crear Personal (usuario con login o lavador sin login). Usuario y
+  // contraseña siempre se asignan automáticamente (ver modal).
   onUsrRolChange() {
     const rol = document.getElementById('usrRol').value;
     const lavFields = document.getElementById('usrLavadorFields');
     const empFields = document.getElementById('usrEmpleadoFields');
-    const credencialesFields = document.getElementById('usrCredencialesFields');
     if (rol === 'lavador') {
       lavFields.classList.remove('hidden');
       empFields.classList.add('hidden');
-      credencialesFields.classList.add('hidden');
     } else {
       lavFields.classList.add('hidden');
       empFields.classList.remove('hidden');
-      credencialesFields.classList.remove('hidden');
     }
   },
 
@@ -1234,16 +1401,11 @@ const app = {
         await ApiCliente.post('/api/personal/lavadores', { nombre, documento, telefono, porcentajeComision });
         this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       } else {
-        const username = document.getElementById('usrUsername').value;
-        const password = document.getElementById('usrPassword').value; // opcional: si se deja vacío, el backend asigna "carwash"+cédula
         const salarioFijo = document.getElementById('usrSalario').value;
         const periodicidadPago = document.getElementById('usrPeriodicidad').value;
-        if (!username) { this.toast('El usuario (nombre de acceso) es obligatorio.', 'warning'); return; }
 
-        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombre, documento, telefono, rol, username, password, salarioFijo, periodicidadPago });
-        if (nuevo.passwordAsignada) {
-          alert(`Cuenta creada para ${nombre}.\n\nUsuario: ${username}\nContraseña temporal: ${nuevo.passwordAsignada}\n\nCompártela con la persona; puede cambiarla desde "Mi Perfil" → "Cambiar Contraseña".`);
-        }
+        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombre, documento, telefono, rol, salarioFijo, periodicidadPago });
+        alert(`Cuenta creada para ${nombre}.\n\nUsuario: ${nuevo.username}\nContraseña temporal: ${nuevo.passwordAsignada}\n\nCompártela con la persona; puede cambiarla desde "Mi Perfil" -> "Cambiar Contraseña".`);
         this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       }
 
@@ -1281,7 +1443,7 @@ const app = {
 
   /** Botón visible solo para admin: reinicia la contraseña de otro usuario al valor por defecto. */
   async reiniciarContrasenaUsuario(id, nombre) {
-    if (!confirm(`¿Reiniciar la contraseña de ${nombre} al valor por defecto (carwash + su cédula)?`)) return;
+    if (!confirm(`¿Reiniciar la contraseña de ${nombre} al valor por defecto (cédula + carwash)?`)) return;
     try {
       const data = await ApiCliente.post(`/api/personal/usuarios/${id}/reiniciar-contrasena`, {});
       alert(`Contraseña de ${nombre} reiniciada.\n\nNueva contraseña temporal: ${data.passwordAsignada}`);

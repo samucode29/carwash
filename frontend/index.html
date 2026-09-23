@@ -10,679 +10,716 @@
   <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
-  <!-- BARRA SUPERIOR DE NAVEGACIÓN Y PERFIL -->
-  <header class="top-nav">
-    <div class="nav-brand">
-      <div class="brand-logo">
-        <span class="logo-icon">🌊</span>
-        <div class="brand-text">
-          <span class="brand-title">CARWASH <span class="accent-text">PRO</span></span>
-          <span class="brand-subtitle">Gestión Integral de Lavadero</span>
+  <div class="app-shell" id="appShell">
+
+    <!-- ========================================== -->
+    <!-- BARRA LATERAL VERTICAL (desplegable) -->
+    <!-- ========================================== -->
+    <aside class="sidebar-nav" id="sidebarNav">
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <span class="logo-icon">🌊</span>
+          <div class="brand-text">
+            <span class="brand-title">CARWASH <span class="accent-text">PRO</span></span>
+            <span class="brand-subtitle">Gestión Integral de Lavadero</span>
+          </div>
         </div>
       </div>
-      <!-- Botón de Modo Claro / Oscuro al lado de CarWash Pro -->
-      <button id="themeToggleBtn" class="theme-toggle-btn" onclick="app.toggleTheme()" title="Cambiar a Modo Claro / Oscuro">
-        <span class="theme-icon" id="themeIcon">☀️</span>
-        <span class="theme-text" id="themeText">Modo Claro</span>
-      </button>
-    </div>
 
-    <!-- Indicadores y selector de rol -->
-    <div class="nav-controls">
-      <div class="live-clock" id="liveClock">--:--:--</div>
+      <nav class="sidebar-links">
+        <button class="tab-btn active" data-tab="pos" onclick="app.setTab('pos')">POS &amp; Turnos</button>
+        <button class="tab-btn" data-tab="tablero" onclick="app.setTab('tablero')">
+          Tablero de Lavado <span class="badge-counter" id="activeOrdersCount">0</span>
+        </button>
+        <button class="tab-btn" data-tab="citas" onclick="app.setTab('citas')">Agenda de Citas</button>
+        <button class="tab-btn" data-tab="inventario" onclick="app.setTab('inventario')">Inventario Perpetuo</button>
+        <button class="tab-btn admin-only" data-tab="servicios" onclick="app.setTab('servicios')">Servicios</button>
+        <button class="tab-btn" data-tab="nomina" onclick="app.setTab('nomina')">Personal &amp; Nómina</button>
+        <button class="tab-btn" data-tab="caja" onclick="app.setTab('caja')">Caja Diaria</button>
+        <button class="tab-btn admin-only" data-tab="dashboard" onclick="app.setTab('dashboard')">Reportes</button>
+      </nav>
+    </aside>
 
-      <div class="nav-pill alert-pill" id="stockAlertsPill" onclick="app.setTab('inventario')">
-        <span class="pill-dot"></span>
-        <span id="stockAlertCount">0</span> Alertas de Stock
-      </div>
+    <div class="app-main">
+      <!-- ========================================== -->
+      <!-- BARRA SUPERIOR: controles globales -->
+      <!-- ========================================== -->
+      <header class="top-nav">
+        <div class="top-nav-left">
+          <button class="hamburger-btn" id="sidebarToggleBtn" onclick="app.toggleSidebar()" title="Mostrar/ocultar menú" aria-label="Mostrar/ocultar menú">
+            <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          </button>
+        </div>
 
-      <!-- Sesión real del usuario autenticado -->
-      <div class="sesion-usuario-card">
-        <button class="btn btn-sm btn-outline" onclick="app.abrirMiPerfil()">👤 Mi Perfil</button>
-        <span class="sesion-usuario-nombre" id="sesionNombre">--</span>
-        <span class="role-badge" id="sesionRolBadge">--</span>
-        <button class="btn-logout" onclick="app.cerrarSesion()">Cerrar sesión</button>
-      </div>
-    </div>
-  </header>
+        <div class="nav-controls">
+          <div class="live-clock" id="liveClock">--:--:--</div>
 
-  <!-- NAVEGACIÓN POR PESTAÑAS -->
-  <nav class="main-tabs">
-    <button class="tab-btn active" data-tab="pos" onclick="app.setTab('pos')">
-      <span class="tab-icon">⚡</span> POS & Turnos
-    </button>
-    <button class="tab-btn" data-tab="tablero" onclick="app.setTab('tablero')">
-      <span class="tab-icon">📋</span> Tablero de Lavado <span class="badge-counter" id="activeOrdersCount">0</span>
-    </button>
-    <button class="tab-btn" data-tab="citas" onclick="app.setTab('citas')">
-      <span class="tab-icon">📅</span> Agenda de Citas
-    </button>
-    <button class="tab-btn" data-tab="inventario" onclick="app.setTab('inventario')">
-      <span class="tab-icon">📦</span> Inventario Perpetuo
-    </button>
-    <button class="tab-btn" data-tab="nomina" onclick="app.setTab('nomina')">
-      <span class="tab-icon">👥</span> Personal & Nómina
-    </button>
-    <button class="tab-btn" data-tab="caja" onclick="app.setTab('caja')">
-      <span class="tab-icon">💵</span> Caja Diaria
-    </button>
-    <button class="tab-btn admin-only" data-tab="dashboard" onclick="app.setTab('dashboard')">
-      <span class="tab-icon">📊</span> Dashboard & Ganancias
-    </button>
-  </nav>
-
-  <!-- CONTENEDOR PRINCIPAL DE MÓDULOS -->
-  <main class="content-wrapper">
-
-    <!-- ========================================== -->
-    <!-- 1. MÓDULO POS & TURNOS (CU01, CU02, CU05) -->
-    <!-- ========================================== -->
-    <section id="tab-pos" class="tab-view active">
-      <div class="pos-layout">
-        <!-- Panel Izquierdo: Formulario de Registro de Orden / Venta -->
-        <div class="pos-card form-panel">
-          <div class="panel-header">
-            <h3>⚡ Registrar Venta / Orden de Lavado</h3>
-            <span class="tag-live">Punto de Venta Directo</span>
+          <div class="nav-pill alert-pill" id="stockAlertsPill" onclick="app.setTab('inventario')">
+            <span class="pill-dot"></span>
+            <span id="stockAlertCount">0</span> Alertas de Stock
           </div>
 
-          <!-- Búsqueda rápida por Placa -->
-          <div class="plate-search-box">
-            <label>🔍 Buscar Vehículo por Placa:</label>
-            <div class="search-input-group">
-              <input type="text" id="posPlacaInput" placeholder="Ej: KLS-842" maxlength="10" oninput="this.value = this.value.toUpperCase()">
-              <button type="button" class="btn btn-secondary" onclick="app.buscarPorPlaca()">Consultar</button>
-            </div>
-            <div id="plateSearchResult" class="plate-result-banner hidden"></div>
-          </div>
+          <button id="themeToggleBtn" class="theme-toggle-btn" onclick="app.toggleTheme()" title="Cambiar a Modo Claro / Oscuro">
+            <span class="theme-text" id="themeText">Modo Claro</span>
+          </button>
 
-          <!-- Opciones de Tipo de Cliente -->
-          <div class="client-mode-toggle">
-            <label class="radio-label">
-              <input type="radio" name="posClientType" value="registrado" checked onchange="app.toggleClientMode()">
-              <span>Cliente Registrado</span>
-            </label>
-            <label class="radio-label">
-              <input type="radio" name="posClientType" value="anonimo" onchange="app.toggleClientMode()">
-              <span>Venta Rápida / Anónima (RF02)</span>
-            </label>
+          <!-- Sesión real del usuario autenticado -->
+          <div class="sesion-usuario-card">
+            <button class="btn btn-sm btn-outline" onclick="app.abrirMiPerfil()">Mi Perfil</button>
+            <span class="sesion-usuario-nombre" id="sesionNombre">--</span>
+            <span class="role-badge" id="sesionRolBadge">--</span>
+            <button class="btn-logout" onclick="app.cerrarSesion()">Cerrar sesión</button>
           </div>
+        </div>
+      </header>
 
-          <!-- Campos de Cliente Registrado -->
-          <div id="posRegisteredFields">
-            <div class="form-row">
-              <div class="form-group flex-2">
-                <label>Seleccionar Cliente:</label>
-                <select id="posClienteSelect" onchange="app.onPosClienteChange()">
-                  <option value="">-- Seleccione un cliente --</option>
-                </select>
+      <!-- ========================================== -->
+      <!-- CONTENEDOR PRINCIPAL DE MÓDULOS -->
+      <!-- ========================================== -->
+      <main class="content-wrapper">
+
+        <!-- ========================================== -->
+        <!-- 1. MÓDULO POS & TURNOS (CU01, CU02, CU05) -->
+        <!-- ========================================== -->
+        <section id="tab-pos" class="tab-view active">
+          <div class="pos-layout">
+            <!-- Panel Izquierdo: Formulario de Registro de Orden / Venta -->
+            <div class="pos-card form-panel">
+              <div class="panel-header">
+                <h3>Registrar Venta / Orden de Lavado</h3>
+                <span class="tag-live">Punto de Venta Directo</span>
               </div>
-              <div class="form-group flex-1">
-                <label>&nbsp;</label>
-                <button type="button" class="btn btn-outline" onclick="app.openModal('modalNuevoCliente')">+ Nuevo Cliente</button>
+
+              <!-- Búsqueda rápida por Placa -->
+              <div class="plate-search-box">
+                <label>Buscar Vehículo por Placa:</label>
+                <div class="search-input-group">
+                  <input type="text" id="posPlacaInput" placeholder="Ej: KLS-842" maxlength="10" oninput="this.value = this.value.toUpperCase()">
+                  <button type="button" class="btn btn-secondary" onclick="app.buscarPorPlaca()">Consultar</button>
+                </div>
+                <div id="plateSearchResult" class="plate-result-banner hidden"></div>
+              </div>
+
+              <!-- Opciones de Tipo de Cliente -->
+              <div class="client-mode-toggle">
+                <label class="radio-label">
+                  <input type="radio" name="posClientType" value="registrado" checked onchange="app.toggleClientMode()">
+                  <span>Cliente Registrado</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="posClientType" value="anonimo" onchange="app.toggleClientMode()">
+                  <span>Venta Rápida / Anónima (RF02)</span>
+                </label>
+              </div>
+
+              <!-- Campos de Cliente Registrado -->
+              <div id="posRegisteredFields">
+                <div class="form-row">
+                  <div class="form-group flex-2">
+                    <label>Seleccionar Cliente:</label>
+                    <select id="posClienteSelect" onchange="app.onPosClienteChange()">
+                      <option value="">-- Seleccione un cliente --</option>
+                    </select>
+                  </div>
+                  <div class="form-group flex-1">
+                    <label>&nbsp;</label>
+                    <button type="button" class="btn btn-outline" onclick="app.openModal('modalNuevoCliente')">+ Nuevo Cliente</button>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label>Vehículo Asociado:</label>
+                    <select id="posVehiculoSelect">
+                      <option value="">-- Seleccione el vehículo --</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Campos para Venta Anónima -->
+              <div id="posAnonymousFields" class="hidden">
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label>Placa (Opcional):</label>
+                    <input type="text" id="posAnonPlaca" placeholder="ABC-123" oninput="this.value = this.value.toUpperCase()">
+                  </div>
+                  <div class="form-group flex-1">
+                    <label>Tipo de Vehículo:</label>
+                    <select id="posAnonTipo" onchange="app.filterServicesByVehicleType()">
+                      <option value="carro">Carro / Camioneta</option>
+                      <option value="moto">Moto</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Selección de Servicio -->
+              <div class="form-group mt-3">
+                <label class="label-bold">Seleccionar Servicio de Lavado:</label>
+                <div class="services-grid" id="posServicesGrid">
+                  <!-- Renderizado dinámico de tarjetas de servicio -->
+                </div>
+              </div>
+
+              <!-- Asignación de Lavadores (RF09, RF23, RF24, RF28) -->
+              <div class="washers-assign-box mt-3">
+                <div class="d-flex justify-between align-center mb-2">
+                  <label class="label-bold">Asignación de Lavador(es):</label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="posAutoAssignCheck" checked onchange="app.toggleAutoAssign()">
+                    <span>Asignación Automática Inteligente (RF23)</span>
+                  </label>
+                </div>
+                <div id="posManualWashersWrapper" class="hidden">
+                  <p class="text-muted text-sm mb-2">Seleccione 1 o más lavadores activos disponibles:</p>
+                  <div class="washers-pill-list" id="posWashersList"></div>
+                </div>
+                <div id="posAutoAssignIndicator" class="auto-assign-tag">
+                  El sistema asignará automáticamente al lavador disponible con menos carga actual (Comisión: 60%).
+                </div>
+              </div>
+
+              <!-- Resumen y Botón de Creación -->
+              <div class="pos-summary-bar mt-4">
+                <div class="summary-total">
+                  <span>Total a Cobrar:</span>
+                  <span class="total-amount" id="posTotalDisplay">$0</span>
+                </div>
+                <button type="button" class="btn btn-primary btn-lg" onclick="app.submitPosOrder()">
+                  Iniciar Servicio de Lavado
+                </button>
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Vehículo Asociado:</label>
-                <select id="posVehiculoSelect">
-                  <option value="">-- Seleccione el vehículo --</option>
-                </select>
+
+            <!-- Panel Derecho: Fila de Turnos por Orden de Llegada (CU05, CU06) -->
+            <div class="pos-card queue-panel">
+              <div class="panel-header">
+                <h3>Fila de Turnos del Día (Walk-In)</h3>
+                <button class="btn btn-sm btn-outline" onclick="app.openModal('modalNuevoTurno')">+ Turno Rápido</button>
+              </div>
+              <p class="text-muted text-sm">Clientes en espera de atención por orden de llegada.</p>
+
+              <div class="queue-list mt-3" id="turnosQueueList">
+                <!-- Renderizado dinámico de turnos -->
               </div>
             </div>
           </div>
+        </section>
 
-          <!-- Campos para Venta Anónima -->
-          <div id="posAnonymousFields" class="hidden">
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label>Placa (Opcional):</label>
-                <input type="text" id="posAnonPlaca" placeholder="ABC-123" oninput="this.value = this.value.toUpperCase()">
+        <!-- ========================================== -->
+        <!-- 2. TABLERO DE LAVADO (KANBAN) (CU08, CU09, CU10) -->
+        <!-- ========================================== -->
+        <section id="tab-tablero" class="tab-view">
+          <div class="section-top-bar">
+            <div>
+              <h2>Tablero Operativo en Vivo</h2>
+              <p class="text-muted">Control de flujo: Recibido → En Proceso → Terminado (descuenta insumos) → Entregado/Cobrado</p>
+            </div>
+            <div class="kanban-filters">
+              <button class="btn btn-sm btn-secondary" onclick="app.loadOrders()">Actualizar Tablero</button>
+            </div>
+          </div>
+
+          <div class="kanban-board">
+            <!-- Columna 1: Recibido -->
+            <div class="kanban-col col-recibido">
+              <div class="col-header">
+                <span class="col-dot"></span>
+                <h4>1. RECIBIDO</h4>
+                <span class="col-count" id="countRecibido">0</span>
               </div>
-              <div class="form-group flex-1">
-                <label>Tipo de Vehículo:</label>
-                <select id="posAnonTipo" onchange="app.filterServicesByVehicleType()">
-                  <option value="carro">🚗 Carro / Camioneta</option>
-                  <option value="moto">🏍️ Moto</option>
-                </select>
+              <div class="col-cards" id="cardsRecibido"></div>
+            </div>
+
+            <!-- Columna 2: En Proceso -->
+            <div class="kanban-col col-proceso">
+              <div class="col-header">
+                <span class="col-dot"></span>
+                <h4>2. EN PROCESO</h4>
+                <span class="col-count" id="countProceso">0</span>
               </div>
+              <div class="col-cards" id="cardsProceso"></div>
+            </div>
+
+            <!-- Columna 3: Terminado -->
+            <div class="kanban-col col-terminado">
+              <div class="col-header">
+                <span class="col-dot"></span>
+                <h4>3. TERMINADO (Listo p/ Entrega)</h4>
+                <span class="col-count" id="countTerminado">0</span>
+              </div>
+              <div class="col-cards" id="cardsTerminado"></div>
+            </div>
+
+            <!-- Columna 4: Entregado & Cobrado -->
+            <div class="kanban-col col-entregado">
+              <div class="col-header">
+                <span class="col-dot"></span>
+                <h4>4. ENTREGADO Y COBRADO</h4>
+                <span class="col-count" id="countEntregado">0</span>
+              </div>
+              <div class="col-cards" id="cardsEntregado"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 3. AGENDA DE CITAS (CU04, CU06) -->
+        <!-- ========================================== -->
+        <section id="tab-citas" class="tab-view">
+          <div class="section-top-bar">
+            <div>
+              <h2>Agendamiento de Citas Previas</h2>
+              <p class="text-muted">Citas programadas por fecha y hora con validación de horarios.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <input type="date" id="citasFechaFiltro" class="date-input" onchange="app.loadCitas()">
+              <button class="btn btn-primary" onclick="app.openModal('modalNuevaCita')">+ Agendar Cita</button>
             </div>
           </div>
 
-          <!-- Selección de Servicio -->
-          <div class="form-group mt-3">
-            <label class="label-bold">Seleccionar Servicio de Lavado:</label>
-            <div class="services-grid" id="posServicesGrid">
-              <!-- Renderizado dinámico de tarjetas de servicio -->
+          <div class="citas-table-card mt-3">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Hora</th>
+                  <th>Vehículo / Placa</th>
+                  <th>Cliente</th>
+                  <th>Servicio</th>
+                  <th>Valor</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="citasTableBody">
+                <!-- Filas dinámicas -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 4. INVENTARIO PERPETUO (CU13, CU14, CU15, CU28 / RF14, RF36) -->
+        <!-- ========================================== -->
+        <section id="tab-inventario" class="tab-view">
+          <div class="section-top-bar">
+            <div>
+              <h2>Control de Insumos e Inventario Perpetuo</h2>
+              <p class="text-muted">Descuento automático por servicio terminado y alertas de stock mínimo en tiempo real.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline" onclick="app.openModal('modalEntregaInsumo')">Entregar a Lavador (RF36)</button>
+              <button class="btn btn-secondary" onclick="app.openModal('modalEntradaInsumo')">Entrada por Compra (RF13)</button>
+              <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoInsumo')">+ Nuevo Insumo</button>
             </div>
           </div>
 
-          <!-- Asignación de Lavadores (RF09, RF23, RF24, RF28) -->
-          <div class="washers-assign-box mt-3">
-            <div class="d-flex justify-between align-center mb-2">
-              <label class="label-bold">Asignación de Lavador(es):</label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="posAutoAssignCheck" checked onchange="app.toggleAutoAssign()">
-                <span>Asignación Automática Inteligente (RF23)</span>
-              </label>
-            </div>
-            <div id="posManualWashersWrapper" class="hidden">
-              <p class="text-muted text-sm mb-2">Seleccione 1 o más lavadores activos disponibles:</p>
-              <div class="washers-pill-list" id="posWashersList"></div>
-            </div>
-            <div id="posAutoAssignIndicator" class="auto-assign-tag">
-              ⚡ El sistema asignará automáticamente al lavador disponible con menos carga actual (Comisión: 60%).
+          <!-- Alerta Destacada de Stock Crítico -->
+          <div id="bannerStockCritico" class="alert-banner-critico hidden">
+            <div>
+              <strong>¡Alerta de Reabastecimiento Inmediato!</strong>
+              <p id="bannerStockCriticoTexto">Hay productos con stock por debajo o igual al mínimo requerido.</p>
             </div>
           </div>
 
-          <!-- Resumen y Botón de Creación -->
-          <div class="pos-summary-bar mt-4">
-            <div class="summary-total">
-              <span>Total a Cobrar:</span>
-              <span class="total-amount" id="posTotalDisplay">$0</span>
+          <!-- Grid de Insumos -->
+          <div class="insumos-grid mt-4" id="insumosCardsGrid"></div>
+
+          <!-- Tabla de Movimientos y Entregas -->
+          <div class="grid-2-cols mt-5">
+            <div class="card-table-wrapper">
+              <div class="panel-header">
+                <h4>Historial de Movimientos (Entradas / Salidas)</h4>
+              </div>
+              <table class="data-table data-table-sm">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Insumo</th>
+                    <th>Tipo</th>
+                    <th>Cant.</th>
+                    <th>Detalle</th>
+                  </tr>
+                </thead>
+                <tbody id="movimientosTableBody"></tbody>
+              </table>
             </div>
-            <button type="button" class="btn btn-primary btn-lg" onclick="app.submitPosOrder()">
-              🚀 Iniciar Servicio de Lavado
+
+            <div class="card-table-wrapper">
+              <div class="panel-header">
+                <h4>Dotación Entregada a Lavadores (RF36)</h4>
+              </div>
+              <table class="data-table data-table-sm">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Lavador</th>
+                    <th>Insumo</th>
+                    <th>Cant.</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="entregasTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 5. CATÁLOGO DE SERVICIOS (CU12 / RF16) -->
+        <!-- ========================================== -->
+        <section id="tab-servicios" class="tab-view admin-only">
+          <div class="section-top-bar">
+            <div>
+              <h2>Catálogo de Servicios</h2>
+              <p class="text-muted">Editar precio, duración y estado. Los servicios no se eliminan, solo se activan o inactivan.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary" onclick="app.abrirModalNuevoServicio()">+ Nuevo Servicio</button>
+            </div>
+          </div>
+
+          <div class="card-table-wrapper mt-3">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Servicio</th>
+                  <th>Tipo</th>
+                  <th>Precio</th>
+                  <th>Duración</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="serviciosTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 6. PERSONAL & NÓMINA (CU21-CU27 / RF22, RF30-RF35) -->
+        <!-- ========================================== -->
+        <section id="tab-nomina" class="tab-view">
+          <div class="section-top-bar">
+            <div>
+              <h2>Gestión de Personal, Asistencia y Nómina</h2>
+              <p class="text-muted">Cálculo de comisiones automáticas (60/40), salarios fijos y liquidaciones con soporte.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline" onclick="app.openModal('modalAsistencia')">Registrar Asistencia (RF35)</button>
+              <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoUsuario')">+ Registrar Personal</button>
+            </div>
+          </div>
+
+          <!-- Sub-pestañas de nómina -->
+          <div class="sub-tabs mt-3">
+            <button class="sub-tab-btn active" onclick="app.setSubTabNomina('lavadores')">
+              Lavadores &amp; Comisiones (RF22, RF30)
+            </button>
+            <button class="sub-tab-btn admin-only" onclick="app.setSubTabNomina('empleados')">
+              Empleados &amp; Salario Fijo (RF32)
+            </button>
+            <button class="sub-tab-btn" onclick="app.setSubTabNomina('asistencia')">
+              Registro de Asistencia Diaria (RF35)
             </button>
           </div>
-        </div>
 
-        <!-- Panel Derecho: Fila de Turnos por Orden de Llegada (CU05, CU06) -->
-        <div class="pos-card queue-panel">
-          <div class="panel-header">
-            <h3>⏳ Fila de Turnos del Día (Walk-In)</h3>
-            <button class="btn btn-sm btn-outline" onclick="app.openModal('modalNuevoTurno')">+ Turno Rápido</button>
-          </div>
-          <p class="text-muted text-sm">Clientes en espera de atención por orden de llegada.</p>
+          <!-- Contenido 1: Lavadores & Comisiones -->
+          <div id="subtab-lavadores" class="subtab-content active mt-3">
+            <div class="cards-lavadores-grid" id="lavadoresCardsGrid"></div>
 
-          <div class="queue-list mt-3" id="turnosQueueList">
-            <!-- Renderizado dinámico de turnos -->
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========================================== -->
-    <!-- 2. TABLERO DE LAVADO (KANBAN) (CU08, CU09, CU10) -->
-    <!-- ========================================== -->
-    <section id="tab-tablero" class="tab-view">
-      <div class="section-top-bar">
-        <div>
-          <h2>📋 Tablero Operativo en Vivo</h2>
-          <p class="text-muted">Control de flujo: Recibido → En Proceso → Terminado (descuenta insumos) → Entregado/Cobrado</p>
-        </div>
-        <div class="kanban-filters">
-          <button class="btn btn-sm btn-secondary" onclick="app.loadOrders()">🔄 Actualizar Tablero</button>
-        </div>
-      </div>
-
-      <div class="kanban-board">
-        <!-- Columna 1: Recibido -->
-        <div class="kanban-col col-recibido">
-          <div class="col-header">
-            <span class="col-dot"></span>
-            <h4>1. RECIBIDO</h4>
-            <span class="col-count" id="countRecibido">0</span>
-          </div>
-          <div class="col-cards" id="cardsRecibido"></div>
-        </div>
-
-        <!-- Columna 2: En Proceso -->
-        <div class="kanban-col col-proceso">
-          <div class="col-header">
-            <span class="col-dot"></span>
-            <h4>2. EN PROCESO</h4>
-            <span class="col-count" id="countProceso">0</span>
-          </div>
-          <div class="col-cards" id="cardsProceso"></div>
-        </div>
-
-        <!-- Columna 3: Terminado -->
-        <div class="kanban-col col-terminado">
-          <div class="col-header">
-            <span class="col-dot"></span>
-            <h4>3. TERMINADO (Listo p/ Entrega)</h4>
-            <span class="col-count" id="countTerminado">0</span>
-          </div>
-          <div class="col-cards" id="cardsTerminado"></div>
-        </div>
-
-        <!-- Columna 4: Entregado & Cobrado -->
-        <div class="kanban-col col-entregado">
-          <div class="col-header">
-            <span class="col-dot"></span>
-            <h4>4. ENTREGADO Y COBRADO</h4>
-            <span class="col-count" id="countEntregado">0</span>
-          </div>
-          <div class="col-cards" id="cardsEntregado"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========================================== -->
-    <!-- 3. AGENDA DE CITAS (CU04, CU06) -->
-    <!-- ========================================== -->
-    <section id="tab-citas" class="tab-view">
-      <div class="section-top-bar">
-        <div>
-          <h2>📅 Agendamiento de Citas Previas</h2>
-          <p class="text-muted">Citas programadas por fecha y hora con validación de horarios.</p>
-        </div>
-        <div class="d-flex gap-2">
-          <input type="date" id="citasFechaFiltro" class="date-input" onchange="app.loadCitas()">
-          <button class="btn btn-primary" onclick="app.openModal('modalNuevaCita')">+ Agendar Cita</button>
-        </div>
-      </div>
-
-      <div class="citas-table-card mt-3">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Hora</th>
-              <th>Vehículo / Placa</th>
-              <th>Cliente</th>
-              <th>Servicio</th>
-              <th>Valor</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="citasTableBody">
-            <!-- Filas dinámicas -->
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ========================================== -->
-    <!-- 4. INVENTARIO PERPETUO (CU13, CU14, CU15, CU28 / RF14, RF36) -->
-    <!-- ========================================== -->
-    <section id="tab-inventario" class="tab-view">
-      <div class="section-top-bar">
-        <div>
-          <h2>📦 Control de Insumos e Inventario Perpetuo</h2>
-          <p class="text-muted">Descuento automático por servicio terminado y alertas de stock mínimo en tiempo real.</p>
-        </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-outline" onclick="app.openModal('modalEntregaInsumo')">🤝 Entregar a Lavador (RF36)</button>
-          <button class="btn btn-secondary" onclick="app.openModal('modalEntradaInsumo')">📥 Entrada por Compra (RF13)</button>
-          <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoInsumo')">+ Nuevo Insumo</button>
-        </div>
-      </div>
-
-      <!-- Alerta Destacada de Stock Crítico -->
-      <div id="bannerStockCritico" class="alert-banner-critico hidden">
-        <span class="banner-icon">⚠️</span>
-        <div>
-          <strong>¡Alerta de Reabastecimiento Inmediato!</strong>
-          <p id="bannerStockCriticoTexto">Hay productos con stock por debajo o igual al mínimo requerido.</p>
-        </div>
-      </div>
-
-      <!-- Grid de Insumos -->
-      <div class="insumos-grid mt-4" id="insumosCardsGrid"></div>
-
-      <!-- Tabla de Movimientos y Entregas -->
-      <div class="grid-2-cols mt-5">
-        <div class="card-table-wrapper">
-          <div class="panel-header">
-            <h4>🔄 Historial de Movimientos (Entradas / Salidas)</h4>
-          </div>
-          <table class="data-table data-table-sm">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Insumo</th>
-                <th>Tipo</th>
-                <th>Cant.</th>
-                <th>Detalle</th>
-              </tr>
-            </thead>
-            <tbody id="movimientosTableBody"></tbody>
-          </table>
-        </div>
-
-        <div class="card-table-wrapper">
-          <div class="panel-header">
-            <h4>🤝 Dotación Entregada a Lavadores (RF36)</h4>
-          </div>
-          <table class="data-table data-table-sm">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Lavador</th>
-                <th>Insumo</th>
-                <th>Cant.</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="entregasTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========================================== -->
-    <!-- 5. PERSONAL & NÓMINA (CU21-CU27 / RF22, RF30-RF35) -->
-    <!-- ========================================== -->
-    <section id="tab-nomina" class="tab-view">
-      <div class="section-top-bar">
-        <div>
-          <h2>👥 Gestión de Personal, Asistencia y Nómina</h2>
-          <p class="text-muted">Cálculo de comisiones automáticas (60/40), salarios fijos y liquidaciones con soporte.</p>
-        </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-outline" onclick="app.openModal('modalAsistencia')">⏱️ Registrar Asistencia (RF35)</button>
-          <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoUsuario')">+ Registrar Personal</button>
-        </div>
-      </div>
-
-      <!-- Sub-pestañas de nómina -->
-      <div class="sub-tabs mt-3">
-        <button class="sub-tab-btn active" onclick="app.setSubTabNomina('lavadores')">
-          🚿 Lavadores & Comisiones (RF22, RF30)
-        </button>
-        <button class="sub-tab-btn admin-only" onclick="app.setSubTabNomina('empleados')">
-          💼 Empleados & Salario Fijo (RF32)
-        </button>
-        <button class="sub-tab-btn" onclick="app.setSubTabNomina('asistencia')">
-          📅 Registro de Asistencia Diaria (RF35)
-        </button>
-      </div>
-
-      <!-- Contenido 1: Lavadores & Comisiones -->
-      <div id="subtab-lavadores" class="subtab-content active mt-3">
-        <div class="cards-lavadores-grid" id="lavadoresCardsGrid"></div>
-
-        <div class="card-table-wrapper mt-4">
-          <div class="panel-header">
-            <h4>📑 Historial de Liquidaciones de Comisiones</h4>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Lavador</th>
-                <th>Período</th>
-                <th>Total Comisión</th>
-                <th>Descuentos</th>
-                <th>A Pagar</th>
-                <th>Estado</th>
-                <th>Soporte de Pago (RF31)</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
-            <tbody id="liquidacionesTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Contenido 2: Empleados con Salario Fijo -->
-      <div id="subtab-empleados" class="subtab-content mt-3">
-        <div class="card-table-wrapper">
-          <div class="panel-header">
-            <h4>💼 Empleados Administrativos / Recepción</h4>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Empleado</th>
-                <th>Documento</th>
-                <th>Rol</th>
-                <th>Salario Base</th>
-                <th>Periodicidad</th>
-                <th>Último Pago</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="empleadosSalarioTableBody"></tbody>
-          </table>
-        </div>
-
-        <div class="card-table-wrapper mt-4">
-          <div class="panel-header">
-            <h4>💵 Historial de Pagos de Salarios a Empleados</h4>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Empleado</th>
-                <th>Fecha Pago</th>
-                <th>Monto Pagado</th>
-                <th>Descuentos Inasistencia</th>
-                <th>Soporte Adjunto</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="pagosSalarioTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Contenido 3: Asistencia del Día -->
-      <div id="subtab-asistencia" class="subtab-content mt-3">
-        <div class="card-table-wrapper">
-          <div class="panel-header">
-            <h4>📅 Asistencia del Personal (Hoy)</h4>
-            <span class="text-sm text-muted">Control de horas de entrada, salida y cálculo proporcional para nómina</span>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Personal</th>
-                <th>Rol</th>
-                <th>Entrada</th>
-                <th>Salida</th>
-                <th>Horas Laboradas</th>
-                <th>Estado</th>
-                <th>Acciones Rápidas</th>
-              </tr>
-            </thead>
-            <tbody id="asistenciaTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========================================== -->
-    <!-- 6. CAJA DIARIA (CU20 / RF12) -->
-    <!-- ========================================== -->
-    <section id="tab-caja" class="tab-view">
-      <div class="section-top-bar">
-        <div>
-          <h2>💵 Control de Caja y Arqueo Diario</h2>
-          <p class="text-muted">Consolidación de ventas por método de pago y cierre formal de turno o día.</p>
-        </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-success" id="btnCerrarCaja" onclick="app.openModal('modalCerrarCaja')">🔒 Realizar Cierre de Caja</button>
-        </div>
-      </div>
-
-      <!-- Cards de Métodos de Pago de Hoy -->
-      <div class="kpi-grid mt-3">
-        <div class="kpi-card">
-          <span class="kpi-title">💵 Efectivo</span>
-          <span class="kpi-value text-success" id="cajaTotalEfectivo">$0</span>
-          <span class="kpi-subtitle">Ventas directas en caja</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-title">💳 Tarjeta (Datáfono)</span>
-          <span class="kpi-value text-info" id="cajaTotalTarjeta">$0</span>
-          <span class="kpi-subtitle">Débito / Crédito</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-title">📱 Transferencias</span>
-          <span class="kpi-value text-purple" id="cajaTotalTransferencia">$0</span>
-          <span class="kpi-subtitle">Bancolombia, Nequi, Daviplata</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-title">🌐 PSE en Línea</span>
-          <span class="kpi-value text-warning" id="cajaTotalPse">$0</span>
-          <span class="kpi-subtitle">Pagos electrónicos</span>
-        </div>
-        <div class="kpi-card highlight-card">
-          <span class="kpi-title">💰 TOTAL RECAUDADO HOY</span>
-          <span class="kpi-value" id="cajaTotalGeneral">$0</span>
-          <span class="kpi-subtitle" id="cajaTotalOrdenesCount">0 órdenes pagadas</span>
-        </div>
-      </div>
-
-      <!-- Historial de Cierres de Caja -->
-      <div class="card-table-wrapper mt-4">
-        <div class="panel-header">
-          <h4>📑 Historial de Cierres de Caja Anteriores</h4>
-        </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Fecha Cierre</th>
-              <th>Responsable</th>
-              <th>Efectivo</th>
-              <th>Tarjeta</th>
-              <th>Transferencia</th>
-              <th>PSE</th>
-              <th>Total General</th>
-              <th>Observaciones</th>
-            </tr>
-          </thead>
-          <tbody id="cierresCajaTableBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ========================================== -->
-    <!-- 7. DASHBOARD & GANANCIAS (CU18, CU19, CU29 / RF19, RF20, RF25, RF26) -->
-    <!-- ========================================== -->
-    <section id="tab-dashboard" class="tab-view admin-only">
-      <div class="section-top-bar">
-        <div>
-          <h2>📊 Dashboard Financiero y Operativo</h2>
-          <p class="text-muted">Cálculo de ganancias netas: Ingresos – (Costos Insumos + Gastos + Comisiones)</p>
-        </div>
-        <div class="period-selector">
-          <button class="period-btn active" data-period="dia" onclick="app.setDashboardPeriod('dia')">Hoy</button>
-          <button class="period-btn" data-period="semana" onclick="app.setDashboardPeriod('semana')">Semana</button>
-          <button class="period-btn" data-period="mes" onclick="app.setDashboardPeriod('mes')">Mes</button>
-          <button class="period-btn" data-period="ano" onclick="app.setDashboardPeriod('ano')">Año</button>
-          <button class="period-btn" data-period="personalizado" onclick="app.setDashboardPeriod('personalizado')">Personalizado</button>
-        </div>
-      </div>
-
-      <!-- Rango de fechas personalizado + descarga de reporte en PDF -->
-      <div class="section-top-bar mt-2">
-        <div id="reportePersonalizadoBox" class="periodo-personalizado-box hidden">
-          <label class="text-sm text-muted">Desde:</label>
-          <input type="date" id="reporteFechaInicio" class="date-input" onchange="app.loadDashboard()">
-          <label class="text-sm text-muted">Hasta:</label>
-          <input type="date" id="reporteFechaFin" class="date-input" onchange="app.loadDashboard()">
-        </div>
-        <button class="btn btn-outline" onclick="app.descargarReportePdf()">📄 Descargar Reporte en PDF</button>
-      </div>
-
-      <!-- Fórmula de Ganancia Neta Destacada (RF20 / CU19) -->
-      <div class="profit-formula-card mt-3">
-        <div class="formula-item">
-          <span class="formula-label">Ingresos Totales</span>
-          <span class="formula-val text-success" id="dashIngresos">$0</span>
-        </div>
-        <span class="formula-op">−</span>
-        <div class="formula-item">
-          <span class="formula-label">Costos de Insumos</span>
-          <span class="formula-val text-danger" id="dashCostoInsumos">$0</span>
-        </div>
-        <span class="formula-op">−</span>
-        <div class="formula-item">
-          <span class="formula-label">Comisiones Lavadores</span>
-          <span class="formula-val text-danger" id="dashComisiones">$0</span>
-        </div>
-        <span class="formula-op">−</span>
-        <div class="formula-item">
-          <span class="formula-label">Gastos Operativos</span>
-          <span class="formula-val text-danger" id="dashGastos">$0</span>
-        </div>
-        <span class="formula-op">=</span>
-        <div class="formula-item highlight-box">
-          <span class="formula-label">GANANCIA NETA</span>
-          <span class="formula-val text-bright" id="dashGananciaNeta">$0</span>
-          <span class="formula-sub" id="dashMargenNeto">Margen: 0%</span>
-        </div>
-      </div>
-
-      <!-- Gráficos y Distribución (RF26) -->
-      <div class="grid-3-cols mt-4">
-        <!-- 1. Distribución Carros vs Motos -->
-        <div class="chart-card">
-          <h4>🚗 Vehículos Atendidos</h4>
-          <div class="vehicle-ratio-bars mt-3">
-            <div class="ratio-item">
-              <div class="d-flex justify-between text-sm mb-1">
-                <span>🚗 Carros</span>
-                <span id="dashCarrosCount">0</span>
+            <div class="card-table-wrapper mt-4">
+              <div class="panel-header">
+                <h4>Historial de Liquidaciones de Comisiones</h4>
               </div>
-              <div class="progress-track"><div class="progress-fill bg-blue" id="dashCarrosBar" style="width: 50%"></div></div>
-            </div>
-            <div class="ratio-item mt-3">
-              <div class="d-flex justify-between text-sm mb-1">
-                <span>🏍️ Motos</span>
-                <span id="dashMotosCount">0</span>
-              </div>
-              <div class="progress-track"><div class="progress-fill bg-cyan" id="dashMotosBar" style="width: 50%"></div></div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Lavador</th>
+                    <th>Período</th>
+                    <th>Total Comisión</th>
+                    <th>Descuentos</th>
+                    <th>A Pagar</th>
+                    <th>Estado</th>
+                    <th>Soporte de Pago (RF31)</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="liquidacionesTableBody"></tbody>
+              </table>
             </div>
           </div>
-        </div>
 
-        <!-- 2. Servicios Más Solicitados -->
-        <div class="chart-card">
-          <h4>🧼 Ventas por Servicio</h4>
-          <div class="stats-list mt-2" id="dashServiciosList"></div>
-        </div>
+          <!-- Contenido 2: Empleados con Salario Fijo -->
+          <div id="subtab-empleados" class="subtab-content mt-3">
+            <div class="card-table-wrapper">
+              <div class="panel-header">
+                <h4>Empleados Administrativos / Recepción</h4>
+              </div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Empleado</th>
+                    <th>Documento</th>
+                    <th>Rol</th>
+                    <th>Salario Base</th>
+                    <th>Periodicidad</th>
+                    <th>Estado</th>
+                    <th>Último Pago</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="empleadosSalarioTableBody"></tbody>
+              </table>
+            </div>
 
-        <!-- 3. Rendimiento por Lavador -->
-        <div class="chart-card">
-          <h4>⭐ Productividad por Lavador</h4>
-          <div class="stats-list mt-2" id="dashLavadoresList"></div>
-        </div>
-      </div>
-
-      <!-- Gastos Operativos y Auditoría -->
-      <div class="grid-2-cols mt-4">
-        <div class="card-table-wrapper">
-          <div class="panel-header">
-            <h4>🧾 Gastos Operativos del Lavadero</h4>
-            <button class="btn btn-sm btn-outline" onclick="app.openModal('modalNuevoGasto')">+ Registrar Gasto</button>
+            <div class="card-table-wrapper mt-4">
+              <div class="panel-header">
+                <h4>Historial de Pagos de Salarios a Empleados</h4>
+              </div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Empleado</th>
+                    <th>Fecha Pago</th>
+                    <th>Monto Pagado</th>
+                    <th>Descuentos Inasistencia</th>
+                    <th>Soporte Adjunto</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="pagosSalarioTableBody"></tbody>
+              </table>
+            </div>
           </div>
-          <table class="data-table data-table-sm">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Concepto</th>
-                <th>Monto</th>
-              </tr>
-            </thead>
-            <tbody id="gastosTableBody"></tbody>
-          </table>
-        </div>
 
-        <div class="card-table-wrapper">
-          <div class="panel-header">
-            <h4>🛡️ Registro de Auditoría y Seguridad (CU10 / RF18)</h4>
+          <!-- Contenido 3: Asistencia del Día -->
+          <div id="subtab-asistencia" class="subtab-content mt-3">
+            <div class="card-table-wrapper">
+              <div class="panel-header">
+                <h4>Asistencia del Personal (Hoy)</h4>
+                <span class="text-sm text-muted">Control de horas de entrada, salida y cálculo proporcional para nómina</span>
+              </div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Personal</th>
+                    <th>Rol</th>
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th>Horas Laboradas</th>
+                    <th>Estado</th>
+                    <th>Acciones Rápidas</th>
+                  </tr>
+                </thead>
+                <tbody id="asistenciaTableBody"></tbody>
+              </table>
+            </div>
           </div>
-          <table class="data-table data-table-sm">
-            <thead>
-              <tr>
-                <th>Fecha/Hora</th>
-                <th>Acción</th>
-                <th>Detalle</th>
-              </tr>
-            </thead>
-            <tbody id="auditoriaTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+        </section>
 
-  </main>
+        <!-- ========================================== -->
+        <!-- 7. CAJA DIARIA (CU20 / RF12) -->
+        <!-- ========================================== -->
+        <section id="tab-caja" class="tab-view">
+          <div class="section-top-bar">
+            <div>
+              <h2>Control de Caja y Arqueo Diario</h2>
+              <p class="text-muted">Consolidación de ventas por método de pago y cierre formal de turno o día.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-success" id="btnCerrarCaja" onclick="app.openModal('modalCerrarCaja')">Realizar Cierre de Caja</button>
+            </div>
+          </div>
+
+          <!-- Cards de Métodos de Pago de Hoy -->
+          <div class="kpi-grid mt-3">
+            <div class="kpi-card">
+              <span class="kpi-title">Efectivo</span>
+              <span class="kpi-value text-success" id="cajaTotalEfectivo">$0</span>
+              <span class="kpi-subtitle">Ventas directas en caja</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-title">Tarjeta (Datáfono)</span>
+              <span class="kpi-value text-info" id="cajaTotalTarjeta">$0</span>
+              <span class="kpi-subtitle">Débito / Crédito</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-title">Transferencias</span>
+              <span class="kpi-value text-purple" id="cajaTotalTransferencia">$0</span>
+              <span class="kpi-subtitle">Bancolombia, Nequi, Daviplata</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-title">PSE en Línea</span>
+              <span class="kpi-value text-warning" id="cajaTotalPse">$0</span>
+              <span class="kpi-subtitle">Pagos electrónicos</span>
+            </div>
+            <div class="kpi-card highlight-card">
+              <span class="kpi-title">TOTAL RECAUDADO HOY</span>
+              <span class="kpi-value" id="cajaTotalGeneral">$0</span>
+              <span class="kpi-subtitle" id="cajaTotalOrdenesCount">0 órdenes pagadas</span>
+            </div>
+          </div>
+
+          <!-- Historial de Cierres de Caja -->
+          <div class="card-table-wrapper mt-4">
+            <div class="panel-header">
+              <h4>Historial de Cierres de Caja Anteriores</h4>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha Cierre</th>
+                  <th>Responsable</th>
+                  <th>Efectivo</th>
+                  <th>Tarjeta</th>
+                  <th>Transferencia</th>
+                  <th>PSE</th>
+                  <th>Total General</th>
+                  <th>Observaciones</th>
+                </tr>
+              </thead>
+              <tbody id="cierresCajaTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 8. REPORTES (CU18, CU19, CU29 / RF19, RF20, RF25, RF26) -->
+        <!-- ========================================== -->
+        <section id="tab-dashboard" class="tab-view admin-only">
+          <div class="section-top-bar">
+            <div>
+              <h2>Reportes Financieros y Operativos</h2>
+              <p class="text-muted">Cálculo de ganancias netas: Ingresos – (Costos Insumos + Gastos + Comisiones)</p>
+            </div>
+            <div class="period-selector">
+              <button class="period-btn active" data-period="dia" onclick="app.setDashboardPeriod('dia')">Hoy</button>
+              <button class="period-btn" data-period="semana" onclick="app.setDashboardPeriod('semana')">Semana</button>
+              <button class="period-btn" data-period="mes" onclick="app.setDashboardPeriod('mes')">Mes</button>
+              <button class="period-btn" data-period="ano" onclick="app.setDashboardPeriod('ano')">Año</button>
+              <button class="period-btn" data-period="personalizado" onclick="app.setDashboardPeriod('personalizado')">Personalizado</button>
+            </div>
+          </div>
+
+          <!-- Rango de fechas personalizado + descarga de reporte en PDF -->
+          <div class="section-top-bar mt-2">
+            <div id="reportePersonalizadoBox" class="periodo-personalizado-box hidden">
+              <label class="text-sm text-muted">Desde:</label>
+              <input type="date" id="reporteFechaInicio" class="date-input" onchange="app.loadDashboard()">
+              <label class="text-sm text-muted">Hasta:</label>
+              <input type="date" id="reporteFechaFin" class="date-input" onchange="app.loadDashboard()">
+            </div>
+            <button class="btn btn-outline" onclick="app.descargarReportePdf()">Descargar Reporte en PDF</button>
+          </div>
+
+          <!-- Fórmula de Ganancia Neta Destacada (RF20 / CU19) -->
+          <div class="profit-formula-card mt-3">
+            <div class="formula-item">
+              <span class="formula-label">Ingresos Totales</span>
+              <span class="formula-val text-success" id="dashIngresos">$0</span>
+            </div>
+            <span class="formula-op">−</span>
+            <div class="formula-item">
+              <span class="formula-label">Costos de Insumos</span>
+              <span class="formula-val text-danger" id="dashCostoInsumos">$0</span>
+            </div>
+            <span class="formula-op">−</span>
+            <div class="formula-item">
+              <span class="formula-label">Comisiones Lavadores</span>
+              <span class="formula-val text-danger" id="dashComisiones">$0</span>
+            </div>
+            <span class="formula-op">−</span>
+            <div class="formula-item">
+              <span class="formula-label">Gastos Operativos</span>
+              <span class="formula-val text-danger" id="dashGastos">$0</span>
+            </div>
+            <span class="formula-op">=</span>
+            <div class="formula-item highlight-box">
+              <span class="formula-label">GANANCIA NETA</span>
+              <span class="formula-val text-bright" id="dashGananciaNeta">$0</span>
+              <span class="formula-sub" id="dashMargenNeto">Margen: 0%</span>
+            </div>
+          </div>
+
+          <!-- Gráficos y Distribución (RF26) -->
+          <div class="grid-3-cols mt-4">
+            <!-- 1. Distribución Carros vs Motos -->
+            <div class="chart-card">
+              <h4>Vehículos Atendidos</h4>
+              <div class="vehicle-ratio-bars mt-3">
+                <div class="ratio-item">
+                  <div class="d-flex justify-between text-sm mb-1">
+                    <span>Carros</span>
+                    <span id="dashCarrosCount">0</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill bg-blue" id="dashCarrosBar" style="width: 50%"></div></div>
+                </div>
+                <div class="ratio-item mt-3">
+                  <div class="d-flex justify-between text-sm mb-1">
+                    <span>Motos</span>
+                    <span id="dashMotosCount">0</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill bg-cyan" id="dashMotosBar" style="width: 50%"></div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Servicios Más Solicitados -->
+            <div class="chart-card">
+              <h4>Ventas por Servicio</h4>
+              <div class="stats-list mt-2" id="dashServiciosList"></div>
+            </div>
+
+            <!-- 3. Rendimiento por Lavador -->
+            <div class="chart-card">
+              <h4>Productividad por Lavador</h4>
+              <div class="stats-list mt-2" id="dashLavadoresList"></div>
+            </div>
+          </div>
+
+          <!-- Gastos Operativos y Auditoría -->
+          <div class="grid-2-cols mt-4">
+            <div class="card-table-wrapper">
+              <div class="panel-header">
+                <h4>Gastos Operativos del Lavadero</h4>
+                <button class="btn btn-sm btn-outline" onclick="app.openModal('modalNuevoGasto')">+ Registrar Gasto</button>
+              </div>
+              <table class="data-table data-table-sm">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Monto</th>
+                  </tr>
+                </thead>
+                <tbody id="gastosTableBody"></tbody>
+              </table>
+            </div>
+
+            <div class="card-table-wrapper">
+              <div class="panel-header">
+                <h4>Registro de Auditoría y Seguridad (CU10 / RF18)</h4>
+              </div>
+              <table class="data-table data-table-sm">
+                <thead>
+                  <tr>
+                    <th>Fecha/Hora</th>
+                    <th>Acción</th>
+                    <th>Detalle</th>
+                  </tr>
+                </thead>
+                <tbody id="auditoriaTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
 
   <!-- ========================================== -->
   <!-- MODALES DEL SISTEMA -->
@@ -692,7 +729,7 @@
   <div id="modalPagarOrden" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>💳 Procesar Pago de Orden <span id="payModalOrdenId">#0</span></h3>
+        <h3>Procesar Pago de Orden <span id="payModalOrdenId">#0</span></h3>
         <button class="close-btn" onclick="app.closeModal('modalPagarOrden')">&times;</button>
       </div>
       <div class="modal-body">
@@ -705,19 +742,19 @@
           <div class="payment-methods-grid">
             <label class="pay-method-card">
               <input type="radio" name="payMetodo" value="efectivo" checked>
-              <span>💵 Efectivo</span>
+              <span>Efectivo</span>
             </label>
             <label class="pay-method-card">
               <input type="radio" name="payMetodo" value="tarjeta">
-              <span>💳 Tarjeta</span>
+              <span>Tarjeta</span>
             </label>
             <label class="pay-method-card">
               <input type="radio" name="payMetodo" value="transferencia">
-              <span>📱 Transferencia</span>
+              <span>Transferencia</span>
             </label>
             <label class="pay-method-card">
               <input type="radio" name="payMetodo" value="pse">
-              <span>🌐 PSE</span>
+              <span>PSE</span>
             </label>
           </div>
         </div>
@@ -733,7 +770,7 @@
   <div id="modalNuevoCliente" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>🚗 Registrar Nuevo Cliente y Vehículo</h3>
+        <h3>Registrar Nuevo Cliente y Vehículo</h3>
         <button class="close-btn" onclick="app.closeModal('modalNuevoCliente')">&times;</button>
       </div>
       <div class="modal-body">
@@ -788,7 +825,7 @@
   <div id="modalNuevaCita" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>📅 Agendar Cita de Lavado</h3>
+        <h3>Agendar Cita de Lavado</h3>
         <button class="close-btn" onclick="app.closeModal('modalNuevaCita')">&times;</button>
       </div>
       <div class="modal-body">
@@ -834,7 +871,7 @@
   <div id="modalNuevoTurno" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>⏳ Generar Turno en Espera</h3>
+        <h3>Generar Turno en Espera</h3>
         <button class="close-btn" onclick="app.closeModal('modalNuevoTurno')">&times;</button>
       </div>
       <div class="modal-body">
@@ -865,7 +902,7 @@
   <div id="modalEntradaInsumo" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>📥 Registrar Entrada de Insumos (Compra)</h3>
+        <h3>Registrar Entrada de Insumos (Compra)</h3>
         <button class="close-btn" onclick="app.closeModal('modalEntradaInsumo')">&times;</button>
       </div>
       <div class="modal-body">
@@ -897,7 +934,7 @@
   <div id="modalEntregaInsumo" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>🤝 Entregar Insumo a Lavador (RF36)</h3>
+        <h3>Entregar Insumo a Lavador (RF36)</h3>
         <button class="close-btn" onclick="app.closeModal('modalEntregaInsumo')">&times;</button>
       </div>
       <div class="modal-body">
@@ -925,7 +962,7 @@
   <div id="modalLiquidarLavador" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>📑 Generar Liquidación de Comisiones</h3>
+        <h3>Generar Liquidación de Comisiones</h3>
         <button class="close-btn" onclick="app.closeModal('modalLiquidarLavador')">&times;</button>
       </div>
       <div class="modal-body">
@@ -964,7 +1001,7 @@
   <div id="modalPagarLiquidacion" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>📎 Registrar Pago de Liquidación (RF31)</h3>
+        <h3>Registrar Pago de Liquidación (RF31)</h3>
         <button class="close-btn" onclick="app.closeModal('modalPagarLiquidacion')">&times;</button>
       </div>
       <div class="modal-body">
@@ -989,7 +1026,7 @@
   <div id="modalCerrarCaja" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>🔒 Cierre Formal de Caja Diaria</h3>
+        <h3>Cierre Formal de Caja Diaria</h3>
         <button class="close-btn" onclick="app.closeModal('modalCerrarCaja')">&times;</button>
       </div>
       <div class="modal-body">
@@ -1014,7 +1051,7 @@
   <div id="modalNuevoUsuario" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>👥 Registrar Nuevo Miembro del Personal</h3>
+        <h3>Registrar Nuevo Miembro del Personal</h3>
         <button class="close-btn" onclick="app.closeModal('modalNuevoUsuario')">&times;</button>
       </div>
       <div class="modal-body">
@@ -1036,9 +1073,9 @@
           <div class="form-group flex-1">
             <label>Rol: *</label>
             <select id="usrRol" onchange="app.onUsrRolChange()">
-              <option value="lavador">🚿 Lavador (Comisión, sin acceso al sistema)</option>
-              <option value="empleado">💼 Empleado / Recepcionista (Salario Fijo, con acceso al sistema)</option>
-              <option id="usrRolOpcionAdmin" value="administrador">👑 Administrador (Salario Fijo, con acceso al sistema)</option>
+              <option value="lavador">Lavador (Comisión, sin acceso al sistema)</option>
+              <option value="empleado">Empleado / Recepcionista (Salario Fijo, con acceso al sistema)</option>
+              <option id="usrRolOpcionAdmin" value="administrador">Administrador (Salario Fijo, con acceso al sistema)</option>
             </select>
           </div>
         </div>
@@ -1064,20 +1101,11 @@
             </div>
           </div>
         </div>
-        <div id="usrCredencialesFields" class="hidden">
-          <hr class="modal-divider">
-          <h4 class="mb-2">Credenciales de Acceso al Sistema</h4>
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label>Usuario: *</label>
-              <input type="text" id="usrUsername" placeholder="Ej: camilo">
-            </div>
-            <div class="form-group flex-1">
-              <label>Contraseña (opcional):</label>
-              <input type="password" id="usrPassword" placeholder="Si se deja vacío: carwash + cédula">
-            </div>
-          </div>
-        </div>
+        <p class="text-sm text-muted mt-2">
+          El usuario y la contraseña de acceso se asignan automáticamente
+          (usuario: primer nombre.primer apellido; contraseña: cédula + "carwash")
+          y se muestran una vez al guardar, para que se los entregues a la persona.
+        </p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalNuevoUsuario')">Cancelar</button>
@@ -1090,7 +1118,7 @@
   <div id="modalAsistencia" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>⏱️ Registrar Entrada / Salida / Inasistencia</h3>
+        <h3>Registrar Entrada / Salida / Inasistencia</h3>
         <button class="close-btn" onclick="app.closeModal('modalAsistencia')">&times;</button>
       </div>
       <div class="modal-body">
@@ -1101,9 +1129,9 @@
         <div class="form-group">
           <label>Tipo de Registro:</label>
           <select id="asistTipoSelect">
-            <option value="entrada">🟢 Marcar Hora de Entrada</option>
-            <option value="salida">🔴 Marcar Hora de Salida (Calcula Horas)</option>
-            <option value="inasistencia">⚠️ Reportar Inasistencia (Descuento Nómina)</option>
+            <option value="entrada">Marcar Hora de Entrada</option>
+            <option value="salida">Marcar Hora de Salida (Calcula Horas)</option>
+            <option value="inasistencia">Reportar Inasistencia (Descuento Nómina)</option>
           </select>
         </div>
       </div>
@@ -1118,7 +1146,7 @@
   <div id="modalNuevoGasto" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>🧾 Registrar Gasto Operativo</h3>
+        <h3>Registrar Gasto Operativo</h3>
         <button class="close-btn" onclick="app.closeModal('modalNuevoGasto')">&times;</button>
       </div>
       <div class="modal-body">
@@ -1142,7 +1170,7 @@
   <div id="modalNuevoInsumo" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>📦 Agregar Nuevo Insumo al Catálogo</h3>
+        <h3>Agregar Nuevo Insumo al Catálogo</h3>
         <button class="close-btn" onclick="app.closeModal('modalNuevoInsumo')">&times;</button>
       </div>
       <div class="modal-body">
@@ -1183,17 +1211,18 @@
     </div>
   </div>
 
-  <!-- Modal 14: Mi Perfil (ver mi propio salario) -->
+  <!-- Modal 14: Mi Perfil -->
   <div id="modalMiPerfil" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>👤 Mi Perfil</h3>
+        <h3>Mi Perfil</h3>
         <button class="close-btn" onclick="app.closeModal('modalMiPerfil')">&times;</button>
       </div>
       <div class="modal-body">
         <div class="perfil-salario-card" style="flex-direction: column; gap: 14px;">
           <div class="perfil-salario-item"><span class="label">Nombre</span><span class="valor" id="miPerfilNombre" style="font-size: 16px;">--</span></div>
           <div class="perfil-salario-item"><span class="label">Rol</span><span class="valor" id="miPerfilRol" style="font-size: 16px;">--</span></div>
+          <div class="perfil-salario-item"><span class="label">Usuario</span><span class="valor" id="miPerfilUsername" style="font-size: 16px;">--</span></div>
           <div class="perfil-salario-item"><span class="label">Documento</span><span class="valor" id="miPerfilDocumento" style="font-size: 16px;">--</span></div>
           <div class="perfil-salario-item"><span class="label">Fecha de Ingreso</span><span class="valor" id="miPerfilIngreso" style="font-size: 16px;">--</span></div>
           <div class="perfil-salario-item"><span class="label">Mi Salario Fijo</span><span class="valor" id="miPerfilSalario">--</span></div>
@@ -1201,7 +1230,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" onclick="app.closeModal('modalMiPerfil'); app.openModal('modalCambiarContrasena')">🔑 Cambiar Contraseña</button>
+        <button class="btn btn-outline admin-only" onclick="app.abrirEditarPerfil()">Editar Mis Datos</button>
+        <button class="btn btn-outline" onclick="app.closeModal('modalMiPerfil'); app.openModal('modalCambiarContrasena')">Cambiar Contraseña</button>
         <button class="btn btn-secondary" onclick="app.closeModal('modalMiPerfil')">Cerrar</button>
       </div>
     </div>
@@ -1211,7 +1241,7 @@
   <div id="modalCambiarContrasena" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>🔑 Cambiar Mi Contraseña</h3>
+        <h3>Cambiar Mi Contraseña</h3>
         <button class="close-btn" onclick="app.closeModal('modalCambiarContrasena')">&times;</button>
       </div>
       <div class="modal-body">
@@ -1231,6 +1261,82 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalCambiarContrasena')">Cancelar</button>
         <button class="btn btn-primary" onclick="app.cambiarMiContrasena()">Guardar Nueva Contraseña</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 16: Editar Mi Perfil (solo administrador) -->
+  <div id="modalEditarPerfil" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Editar Mis Datos</h3>
+        <button class="close-btn" onclick="app.closeModal('modalEditarPerfil')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre Completo:</label>
+          <input type="text" id="editPerfilNombre">
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Teléfono:</label>
+            <input type="text" id="editPerfilTelefono">
+          </div>
+          <div class="form-group flex-1">
+            <label>Correo:</label>
+            <input type="email" id="editPerfilCorreo">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Usuario (nombre de acceso):</label>
+          <input type="text" id="editPerfilUsername">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalEditarPerfil')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.guardarEdicionPerfil()">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 17: Nuevo / Editar Servicio (CU12 / RF16) -->
+  <div id="modalServicio" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modalServicioTitulo">Nuevo Servicio</h3>
+        <button class="close-btn" onclick="app.closeModal('modalServicio')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre: *</label>
+          <input type="text" id="servNombre" placeholder="Ej: Lavado Básico Carro">
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Tipo de Vehículo: *</label>
+            <select id="servTipoVehiculo">
+              <option value="carro">Carro</option>
+              <option value="moto">Moto</option>
+              <option value="ambos">Ambos</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label>Duración Estimada (min): *</label>
+            <input type="number" id="servDuracion" min="1" value="30">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Precio ($): *</label>
+          <input type="number" id="servPrecio" min="0" value="0">
+        </div>
+        <div class="form-group">
+          <label>Descripción:</label>
+          <textarea id="servDescripcion" rows="2" placeholder="Detalle del servicio"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalServicio')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.guardarServicio()">Guardar Servicio</button>
       </div>
     </div>
   </div>

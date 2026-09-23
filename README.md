@@ -140,21 +140,35 @@ operar el POS ni el tablero), es un cambio acotado: basta con envolver
 esas rutas en el backend con `permitirRoles('administrador')` igual que ya
 se hizo con catálogo, proveedores y reportes.
 
-### Contraseñas
+### Usuarios y contraseñas (siempre asignados automáticamente)
 
-- **Contraseña por defecto**: toda cuenta nueva (administrador o empleado)
-  que se crea sin especificar contraseña recibe automáticamente
-  `carwash` + su número de documento (ej. documento `123456` → contraseña
-  `carwash123456`).
+- **Usuario**: se genera solo, como `primernombre.primerapellido` (sin
+  tildes, en minúsculas); si ya existe, se le agrega un número
+  (`samuel.petro`, `samuel.petro2`, ...). El administrador que registra
+  personal nuevo no escribe usuario ni contraseña.
+- **Contraseña por defecto**: número de documento + `carwash` (ej.
+  documento `123456` → contraseña `123456carwash`). Se muestra una sola
+  vez al crear la cuenta o al reiniciarla, para que se la entregues a la
+  persona.
 - **Cambiar mi contraseña**: cualquier usuario, sin importar el rol, puede
   cambiar su propia contraseña desde "Mi Perfil" → "Cambiar Contraseña"
   (pide la contraseña actual).
-- **Reiniciar contraseña**: en la pestaña Personal & Nómina → Empleados, el
+- **Editar mis datos**: exclusivo de administrador — desde "Mi Perfil" →
+  "Editar Mis Datos" puede cambiar su nombre, teléfono, correo y usuario.
+  El empleado solo puede cambiar su contraseña, no estos otros datos.
+- **Reiniciar contraseña**: en Personal & Nómina → Empleados, el
   administrador tiene un botón "Reiniciar Contraseña" por cada cuenta, que
-  la regresa al mismo formato por defecto (`carwash` + documento). La única
-  excepción es la cuenta del administrador principal: nadie más que él
-  mismo puede reiniciarla (para que otro administrador no pueda
-  apropiarse de esa cuenta).
+  la regresa al valor por defecto. Nadie puede inactivar su propia cuenta,
+  y la cuenta del administrador principal no puede ser inactivada ni
+  tener su contraseña reiniciada por otro administrador.
+
+### Servicios, usuarios y lavadores nunca se eliminan
+
+Todo el sistema sigue el mismo patrón: **inactivar, no borrar**. El
+catálogo de servicios (pestaña "Servicios", solo administrador) permite
+editar nombre, tipo de vehículo, precio, duración y descripción, y
+activar/inactivar cada servicio — no hay botón de eliminar en ningún
+lado (ni para servicios, ni usuarios, ni lavadores).
 
 ---
 

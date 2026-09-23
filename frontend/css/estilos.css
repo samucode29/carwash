@@ -71,6 +71,55 @@ body {
 /* ==========================================================================
    BARRA SUPERIOR (HEADER)
    ========================================================================== */
+/* ==========================================================================
+   ESTRUCTURA GENERAL: sidebar vertical + área principal
+   ========================================================================== */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar-nav {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--glass-bg);
+  border-right: var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.25s ease, padding 0.25s ease, border 0.25s ease;
+}
+
+.app-shell.sidebar-collapsed .sidebar-nav {
+  width: 0;
+  border-right: none;
+}
+
+.sidebar-brand {
+  padding: 1.5rem 1.25rem 1rem;
+}
+
+.sidebar-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0.9rem 1.5rem;
+  overflow-y: auto;
+}
+
+.sidebar-links .tab-btn {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .top-nav {
   position: sticky;
   top: 0;
@@ -83,13 +132,42 @@ body {
   justify-content: space-between;
   align-items: center;
   box-shadow: var(--shadow-sm);
+  gap: 1rem;
 }
 
-.nav-brand {
+.top-nav-left {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
 }
+
+.hamburger-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 38px;
+  height: 38px;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0 8px;
+  transition: all 0.2s ease;
+}
+
+.hamburger-btn:hover {
+  border-color: var(--color-accent);
+  background: rgba(0, 180, 216, 0.08);
+}
+
+.hamburger-btn .bar {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: var(--text-main);
+  border-radius: 1px;
+}
+
 
 .theme-toggle-btn {
   display: inline-flex;
@@ -235,17 +313,8 @@ body {
 }
 
 /* ==========================================================================
-   NAVEGACIÓN POR PESTAÑAS (TABS)
+   NAVEGACIÓN POR PESTAÑAS (botones reutilizados en el sidebar vertical)
    ========================================================================== */
-.main-tabs {
-  background: rgba(35, 35, 39, 0.6);
-  border-bottom: var(--glass-border);
-  padding: 0.5rem 1.75rem;
-  display: flex;
-  gap: 0.5rem;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
 
 .tab-btn {
   background: transparent;
@@ -1499,11 +1568,6 @@ body.light-mode .top-nav {
 
 body.light-mode .brand-title {
   color: #0f172a;
-}
-
-body.light-mode .main-tabs {
-  background: #ffffff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 body.light-mode .tab-btn {
