@@ -66,18 +66,33 @@ async function listarTurnosDeHoy(req, res) {
 }
 
 async function crearTurno(req, res) {
-  const { cliente_id, vehiculo_id, placa_temporal, tipo_vehiculo, servicio_id } = req.body;
+  const { cliente_id, vehiculo_id, cita_id, numero_turno, placa_temporal, tipo_vehiculo, servicio_id } = req.body;
   if (!servicio_id) {
     return res.status(400).json({ error: 'El servicio es obligatorio para generar un turno.' });
+  }
+
+  const hoy = obtenerFechaHoy();
+  let numeroTurno = null;
+  if (numero_turno !== undefined && numero_turno !== null && numero_turno !== '') {
+    numeroTurno = parseInt(numero_turno, 10);
+    if (!Number.isInteger(numeroTurno) || numeroTurno <= 0) {
+      return res.status(400).json({ error: 'El número de turno debe ser un entero positivo.' });
+    }
+    const yaExiste = await AgendaRepositorio.existeTurnoConNumero(hoy, numeroTurno);
+    if (yaExiste) {
+      return res.status(400).json({ error: `Ya hay alguien esperando con el turno número ${numeroTurno} hoy.` });
+    }
   }
 
   const nuevo = await AgendaRepositorio.crearTurno({
     clienteId: cliente_id ? parseInt(cliente_id, 10) : null,
     vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
+    citaId: cita_id ? parseInt(cita_id, 10) : null,
+    numeroTurno,
     placaTemporal: placa_temporal ? placa_temporal.toUpperCase().trim() : '',
     tipoVehiculo: tipo_vehiculo || 'carro',
     servicioId: parseInt(servicio_id, 10),
-    fecha: obtenerFechaHoy(),
+    fecha: hoy,
     horaLlegada: obtenerHoraActual(),
     registradoPor: req.usuarioAutenticado.id
   });

@@ -25,7 +25,6 @@ const app = {
   activeSubTabNomina: 'lavadores',
   dashboardPeriod: 'dia',
   selectedServiceId: null,
-  selectedWashers: [],
   payingOrderId: null,
   liquidatingWasher: null,
   payingLiqId: null,
@@ -405,7 +404,6 @@ const app = {
   async loadWashers() {
     try {
       this.washers = await ApiCliente.get('/api/personal/lavadores?activos=true');
-      this.renderWashersSelection();
 
       const entregaSelect = document.getElementById('entregaLavadorSelect');
       if (entregaSelect) {
@@ -414,78 +412,41 @@ const app = {
     } catch (err) { console.error(err); }
   },
 
-  renderWashersSelection() {
-    const list = document.getElementById('posWashersList');
-    if (!list) return;
-    list.innerHTML = (this.washers || []).map(w => {
-      const selected = this.selectedWashers.includes(w.id);
-      const disponible = !!w.disponible_hoy;
-      const clases = ['washer-pill'];
-      if (selected) clases.push('selected');
-      if (!disponible) clases.push('disabled');
-      return `
-        <div class="${clases.join(' ')}" onclick="app.toggleWasherSelection(${w.id}, ${disponible})" title="${disponible ? '' : 'No ha registrado entrada hoy'}">
-          <span class="washer-status-dot"></span>
-          <span>${w.nombre.split(' ')[0]} (${w.porcentaje_comision}%)${disponible ? '' : ' — sin entrada'}</span>
-        </div>
-      `;
-    }).join('');
-  },
-
-  toggleWasherSelection(id, disponible) {
-    if (!disponible) { this.toast('Este lavador no ha registrado entrada hoy y no puede ser asignado.', 'warning'); return; }
-    if (this.selectedWashers.includes(id)) {
-      this.selectedWashers = this.selectedWashers.filter(wid => wid !== id);
-    } else {
-      if (this.selectedWashers.length >= 3) { this.toast('Máximo 3 lavadores por servicio.', 'warning'); return; }
-      this.selectedWashers.push(id);
-    }
-    this.renderWashersSelection();
-  },
-
-  toggleAutoAssign() {
-    const isAuto = document.getElementById('posAutoAssignCheck').checked;
-    const manualWrap = document.getElementById('posManualWashersWrapper');
-    const autoInd = document.getElementById('posAutoAssignIndicator');
-    if (isAuto) {
-      manualWrap.classList.add('hidden');
-      autoInd.classList.remove('hidden');
-      this.selectedWashers = [];
-    } else {
-      manualWrap.classList.remove('hidden');
-      autoInd.classList.add('hidden');
-      this.renderWashersSelection();
-    }
-  },
-
-  async submitPosOrder() {
+  /**
+   * El panel de POS ya no crea la orden directo: genera un turno en la fila
+   * de espera, igual que "+ Turno Rápido" pero con selección de cliente
+   * registrado / vehículo. El lavador se elige después, al presionar
+   * "Iniciar" desde la fila (ver abrirModalAsignarLavador).
+   */
+  async agregarTurnoPos() {
     if (!this.selectedServiceId) { this.toast('Por favor seleccione un servicio de lavado para continuar.', 'warning'); return; }
 
     const mode = document.querySelector('input[name="posClientType"]:checked').value;
-    let cliente_id = null, vehiculo_id = null, es_venta_anonima = false, placa_anonima = '', tipo_vehiculo_anonimo = 'carro';
+    let cliente_id = null, vehiculo_id = null, placa_temporal = '', tipo_vehiculo = 'carro';
 
     if (mode === 'registrado') {
       cliente_id = document.getElementById('posClienteSelect').value;
       vehiculo_id = document.getElementById('posVehiculoSelect').value;
       if (!cliente_id) { this.toast('Seleccione un cliente registrado o elija Venta Rápida / Anónima.', 'warning'); return; }
+      const vSelect = document.getElementById('posVehiculoSelect');
+      tipo_vehiculo = vSelect.selectedOptions[0] ? (vSelect.selectedOptions[0].dataset.tipo || 'carro') : 'carro';
     } else {
-      es_venta_anonima = true;
-      placa_anonima = document.getElementById('posAnonPlaca').value;
-      tipo_vehiculo_anonimo = document.getElementById('posAnonTipo').value;
+      placa_temporal = document.getElementById('posAnonPlaca').value;
+      tipo_vehiculo = document.getElementById('posAnonTipo').value;
     }
 
-    const payload = { cliente_id, vehiculo_id, servicio_id: this.selectedServiceId, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, lavadores_ids: this.selectedWashers };
+    const numero_turno = document.getElementById('posNumeroTurno').value || null;
+    const payload = { cliente_id, vehiculo_id, servicio_id: this.selectedServiceId, placa_temporal, tipo_vehiculo, numero_turno };
 
     try {
-      const data = await ApiCliente.post('/api/ordenes', payload);
-      this.toast(`Orden de Lavado #${data.id} iniciada con éxito.`, 'success');
+      const data = await ApiCliente.post('/api/turnos', payload);
+      this.toast(`Turno #${data.numero_turno || ''} agregado a la fila.`, 'success');
       this.selectedServiceId = null;
-      this.selectedWashers = [];
+      document.getElementById('posNumeroTurno').value = '';
       this.renderPosServices();
-      this.loadOrders();
-      setTimeout(() => this.setTab('tablero'), 600);
+      this.loadTurnos();
     } catch (err) {
-      this.toast(err.message || 'Error al iniciar la orden.', 'error');
+      this.toast(err.message || 'Error al agregar a la fila.', 'error');
     }
   },
 
@@ -504,7 +465,7 @@ const app = {
       list.innerHTML = enEspera.map((t, idx) => `
         <div class="queue-item">
           <div class="queue-item-info">
-            <strong>#${idx + 1} Turno - ${t.placa || 'Sin Placa'} (${t.tipo_vehiculo})</strong>
+            <strong>#${t.numero_turno || (idx + 1)} Turno - ${t.placa || 'Sin Placa'} (${t.tipo_vehiculo})</strong>
             <span>${t.servicio_nombre} • Hora: ${t.hora_llegada} • ${this.formatMoney(t.servicio_precio)}</span>
           </div>
           <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}')">Iniciar</button>
@@ -524,13 +485,15 @@ const app = {
     const placa = document.getElementById('turnoPlaca').value;
     const tipo = document.getElementById('turnoTipo').value;
     const servicio_id = document.getElementById('turnoServicioSelect').value;
+    const numero_turno = document.getElementById('turnoNumeroTurno').value || null;
     try {
-      await ApiCliente.post('/api/turnos', { placa_temporal: placa, tipo_vehiculo: tipo, servicio_id });
+      await ApiCliente.post('/api/turnos', { placa_temporal: placa, tipo_vehiculo: tipo, servicio_id, numero_turno });
       this.toast('Turno registrado con éxito.', 'success');
       this.closeModal('modalNuevoTurno');
+      document.getElementById('turnoNumeroTurno').value = '';
       this.loadTurnos();
     } catch (err) {
-      this.toast('Error al registrar turno.', 'error');
+      this.toast(err.message || 'Error al registrar turno.', 'error');
     }
   },
 
@@ -661,6 +624,7 @@ const app = {
           <td>
             ${c.estado === 'agendada' ? `
               <button class="btn btn-sm btn-primary" onclick="app.iniciarCita(${c.id}, ${c.servicio_id}, ${c.cliente_id}, ${c.vehiculo_id})">Atender</button>
+              <button class="btn btn-sm btn-outline" onclick="app.agregarCitaAFila(${c.id}, ${c.servicio_id}, ${c.cliente_id}, ${c.vehiculo_id}, '${(c.placa || '').replace(/'/g, "\\'")}', '${c.tipo_vehiculo}')">Agregar a la Fila</button>
               <button class="btn btn-sm btn-danger" onclick="app.cancelarCita(${c.id})">Cancelar</button>
             ` : '<span class="text-muted text-sm">--</span>'}
           </td>
@@ -700,6 +664,28 @@ const app = {
       { cita_id: citaId, servicio_id: servicioId, cliente_id: clienteId, vehiculo_id: vehiculoId },
       () => { this.loadCitas(); this.loadOrders(); this.setTab('tablero'); }
     );
+  },
+
+  /**
+   * Para cuando hay mucha fila o no hay lavador disponible a la hora de la
+   * cita: en vez de atenderla de inmediato, la pasa a la fila de turnos
+   * (con número de turno manual opcional). La cita queda vinculada al
+   * turno (cita_id) para que, cuando ese turno se atienda, la cita quede
+   * marcada como atendida automáticamente.
+   */
+  async agregarCitaAFila(citaId, servicioId, clienteId, vehiculoId, placa, tipo) {
+    const numero_turno = prompt('Número de turno (opcional, dejar vacío para asignarlo por orden de llegada):', '') || null;
+    try {
+      await ApiCliente.post('/api/turnos', {
+        cliente_id: clienteId, vehiculo_id: vehiculoId, cita_id: citaId,
+        placa_temporal: placa, tipo_vehiculo: tipo, servicio_id: servicioId, numero_turno
+      });
+      this.toast('Cita agregada a la fila de turnos.', 'success');
+      this.loadCitas();
+      this.loadTurnos();
+    } catch (err) {
+      this.toast(err.message || 'Error al agregar la cita a la fila.', 'error');
+    }
   },
 
   async cancelarCita(citaId) {

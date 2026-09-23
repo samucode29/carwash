@@ -86,8 +86,8 @@
             <!-- Panel Izquierdo: Formulario de Registro de Orden / Venta -->
             <div class="pos-card form-panel">
               <div class="panel-header">
-                <h3>Registrar Venta / Orden de Lavado</h3>
-                <span class="tag-live">Punto de Venta Directo</span>
+                <h3>Generar Turno</h3>
+                <span class="tag-live">Se atiende desde la Fila</span>
               </div>
 
               <!-- Búsqueda rápida por Placa -->
@@ -161,32 +161,20 @@
                 </div>
               </div>
 
-              <!-- Asignación de Lavadores -->
-              <div class="washers-assign-box mt-3">
-                <div class="d-flex justify-between align-center mb-2">
-                  <label class="label-bold">Asignación de Lavador(es):</label>
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="posAutoAssignCheck" checked onchange="app.toggleAutoAssign()">
-                    <span>Asignación Automática Inteligente</span>
-                  </label>
-                </div>
-                <div id="posManualWashersWrapper" class="hidden">
-                  <p class="text-muted text-sm mb-2">Seleccione 1 o más lavadores activos disponibles:</p>
-                  <div class="washers-pill-list" id="posWashersList"></div>
-                </div>
-                <div id="posAutoAssignIndicator" class="auto-assign-tag">
-                  El sistema asignará automáticamente al lavador disponible con menos carga actual (Comisión: 60%).
-                </div>
+              <!-- Número de turno manual (opcional) -->
+              <div class="form-group mt-3">
+                <label>Número de Turno (opcional, si no se escribe se asigna por orden de llegada):</label>
+                <input type="number" id="posNumeroTurno" min="1" placeholder="Ej: 5">
               </div>
 
               <!-- Resumen y Botón de Creación -->
               <div class="pos-summary-bar mt-4">
                 <div class="summary-total">
-                  <span>Total a Cobrar:</span>
+                  <span>Precio del Servicio:</span>
                   <span class="total-amount" id="posTotalDisplay">$0</span>
                 </div>
-                <button type="button" class="btn btn-primary btn-lg" onclick="app.submitPosOrder()">
-                  Iniciar Servicio de Lavado
+                <button type="button" class="btn btn-primary btn-lg" onclick="app.agregarTurnoPos()">
+                  Agregar a la Fila de Turnos
                 </button>
               </div>
             </div>
@@ -197,7 +185,7 @@
                 <h3>Fila de Turnos del Día (Walk-In)</h3>
                 <button class="btn btn-sm btn-outline" onclick="app.openModal('modalNuevoTurno')">+ Turno Rápido</button>
               </div>
-              <p class="text-muted text-sm">Clientes en espera de atención por orden de llegada.</p>
+              <p class="text-muted text-sm">Clientes en espera de atención por orden de llegada. El lavador se elige al presionar "Iniciar".</p>
 
               <div class="queue-list mt-3" id="turnosQueueList">
                 <!-- Renderizado dinámico de turnos -->
@@ -888,6 +876,10 @@
         <div class="form-group">
           <label>Servicio:</label>
           <select id="turnoServicioSelect"></select>
+        </div>
+        <div class="form-group">
+          <label>Número de Turno (opcional, si no se escribe se asigna por orden de llegada):</label>
+          <input type="number" id="turnoNumeroTurno" min="1" placeholder="Ej: 5">
         </div>
       </div>
       <div class="modal-footer">

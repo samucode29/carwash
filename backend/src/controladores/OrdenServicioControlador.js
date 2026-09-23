@@ -9,6 +9,7 @@ const OrdenServicioRepositorio = require('../repositorios/OrdenServicioRepositor
 const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
 const LavadorRepositorio = require('../repositorios/LavadorRepositorio');
 const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
+const AgendaRepositorio = require('../repositorios/AgendaRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
 
@@ -82,8 +83,17 @@ async function crearOrden(req, res) {
 
   const lavadoresAsignados = await calcularAsignacionLavadores(lavadores_ids, Number(servicio.precio));
 
+  // Si la orden viene de un turno que a su vez venía de una cita (se agregó a
+  // la fila en vez de atenderla de inmediato), heredamos su cita_id para que
+  // la cita original también quede marcada como atendida.
+  let citaId = cita_id ? parseInt(cita_id, 10) : null;
+  if (!citaId && turno_id) {
+    const turno = await AgendaRepositorio.obtenerTurnoPorId(parseInt(turno_id, 10));
+    if (turno && turno.cita_id) citaId = turno.cita_id;
+  }
+
   const ordenId = await OrdenServicioRepositorio.crearOrdenConAsignacion({
-    citaId: cita_id ? parseInt(cita_id, 10) : null,
+    citaId,
     turnoId: turno_id ? parseInt(turno_id, 10) : null,
     clienteId: cliente_id ? parseInt(cliente_id, 10) : null,
     vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,

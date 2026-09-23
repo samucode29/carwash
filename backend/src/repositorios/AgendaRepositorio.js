@@ -82,7 +82,7 @@ async function listarTurnosDeHoy(hoy) {
      LEFT JOIN clientes cl ON cl.id = t.cliente_id
      LEFT JOIN servicios s ON s.id = t.servicio_id
      WHERE t.fecha = ?
-     ORDER BY t.hora_llegada`,
+     ORDER BY (t.numero_turno IS NULL), t.numero_turno, t.hora_llegada`,
     [hoy]
   );
   return filas.map(fila => ({
@@ -97,12 +97,21 @@ async function obtenerTurnoPorId(id) {
   return filas[0] || null;
 }
 
+async function existeTurnoConNumero(fecha, numeroTurno) {
+  const [filas] = await pool.query(
+    `SELECT id FROM turnos WHERE fecha = ? AND numero_turno = ? AND estado = 'en_espera'`,
+    [fecha, numeroTurno]
+  );
+  return filas.length > 0;
+}
+
 async function crearTurno(datos) {
   const [resultado] = await pool.query(
-    `INSERT INTO turnos (cliente_id, vehiculo_id, placa_temporal, tipo_vehiculo, servicio_id, fecha, hora_llegada, estado, registrado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'en_espera', ?)`,
+    `INSERT INTO turnos (cliente_id, vehiculo_id, cita_id, numero_turno, placa_temporal, tipo_vehiculo, servicio_id, fecha, hora_llegada, estado, registrado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_espera', ?)`,
     [
-      datos.clienteId || null, datos.vehiculoId || null, datos.placaTemporal || '', datos.tipoVehiculo || 'carro',
+      datos.clienteId || null, datos.vehiculoId || null, datos.citaId || null, datos.numeroTurno || null,
+      datos.placaTemporal || '', datos.tipoVehiculo || 'carro',
       datos.servicioId, datos.fecha, datos.horaLlegada, datos.registradoPor
     ]
   );
@@ -131,6 +140,7 @@ module.exports = {
   actualizarCita,
   listarTurnosDeHoy,
   obtenerTurnoPorId,
+  existeTurnoConNumero,
   crearTurno,
   actualizarTurno
 };

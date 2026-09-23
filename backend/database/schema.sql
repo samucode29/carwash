@@ -156,6 +156,8 @@ CREATE TABLE turnos (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     cliente_id      INT NULL,
     vehiculo_id     INT NULL,
+    cita_id         INT NULL,        -- si esta fila viene de una cita agendada que se pasó a la fila
+    numero_turno    INT NULL,        -- número de turno asignado a mano; si es NULL se usa el orden de llegada
     placa_temporal  VARCHAR(15),
     tipo_vehiculo   ENUM('carro','moto') NOT NULL DEFAULT 'carro',
     servicio_id     INT NOT NULL,
@@ -166,6 +168,7 @@ CREATE TABLE turnos (
     creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_turno_cliente   FOREIGN KEY (cliente_id)     REFERENCES clientes(id)  ON DELETE SET NULL,
     CONSTRAINT fk_turno_vehiculo  FOREIGN KEY (vehiculo_id)    REFERENCES vehiculos(id) ON DELETE SET NULL,
+    CONSTRAINT fk_turno_cita      FOREIGN KEY (cita_id)        REFERENCES citas(id),
     CONSTRAINT fk_turno_servicio  FOREIGN KEY (servicio_id)    REFERENCES servicios(id),
     CONSTRAINT fk_turno_registro  FOREIGN KEY (registrado_por) REFERENCES usuarios(id)
 ) ENGINE=InnoDB;
