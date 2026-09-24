@@ -933,26 +933,57 @@ const app = {
     } catch (err) { console.error(err); }
   },
 
+  abrirModalEntradaInsumo() {
+    document.getElementById('entradaCantidad').value = '';
+    document.getElementById('entradaCostoUnitario').value = '';
+    document.getElementById('entradaObservacion').value = '';
+    const radioUnidad = document.querySelector('input[name="entradaModoPrecio"][value="unidad"]');
+    if (radioUnidad) radioUnidad.checked = true;
+    this.actualizarLabelPrecioEntrada();
+    this.openModal('modalEntradaInsumo');
+  },
+
+  actualizarLabelPrecioEntrada() {
+    const modo = document.querySelector('input[name="entradaModoPrecio"]:checked').value;
+    const label = document.getElementById('entradaCostoLabel');
+    const input = document.getElementById('entradaCostoUnitario');
+    if (modo === 'total') {
+      label.textContent = 'Precio Total de la Compra ($):';
+      input.placeholder = 'Ej: 90000 por toda la compra';
+    } else {
+      label.textContent = 'Costo Unitario de esta Compra ($):';
+      input.placeholder = 'Precio al que lo compré';
+    }
+  },
+
   prefillCostoEntrada() {
     const insumoId = parseInt(document.getElementById('entradaInsumoSelect').value, 10);
     const insumo = (this.insumos || []).find(i => i.id === insumoId);
+    const radioUnidad = document.querySelector('input[name="entradaModoPrecio"][value="unidad"]');
+    if (radioUnidad) radioUnidad.checked = true;
+    this.actualizarLabelPrecioEntrada();
     document.getElementById('entradaCostoUnitario').value = insumo ? insumo.costo_unitario : '';
   },
 
   async guardarEntradaInsumo() {
     const insumo_id = document.getElementById('entradaInsumoSelect').value;
     const cantidad = document.getElementById('entradaCantidad').value;
-    const costo_unitario = document.getElementById('entradaCostoUnitario').value;
+    const precioIngresado = document.getElementById('entradaCostoUnitario').value;
+    const modoPrecio = document.querySelector('input[name="entradaModoPrecio"]:checked').value;
     const proveedor_id = document.getElementById('entradaProveedorSelect').value;
     const observacion = document.getElementById('entradaObservacion').value;
 
     if (!cantidad || cantidad <= 0) { this.toast('Ingrese una cantidad válida mayor a cero.', 'warning'); return; }
 
+    let costo_unitario = precioIngresado;
+    if (precioIngresado !== '' && modoPrecio === 'total') {
+      costo_unitario = Number(precioIngresado) / Number(cantidad);
+    }
+
     try {
       await ApiCliente.post('/api/inventario/entradas', { insumo_id, cantidad, costo_unitario, proveedor_id, observacion });
       this.toast('Entrada registrada. Stock y costo actualizados inmediatamente.', 'success');
       this.closeModal('modalEntradaInsumo');
-      document.getElementById('entradaCostoUnitario').value = '';
       this.loadInsumos();
     } catch (err) {
       this.toast(err.message || 'Error al registrar entrada de insumo.', 'error');
@@ -1019,6 +1050,45 @@ const app = {
       this.loadInsumos();
     } catch (err) {
       this.toast(err.message || 'No se pudo actualizar el insumo.', 'error');
+    }
+  },
+
+  // Los proveedores son globales (no pertenecen a un insumo en particular):
+  // cualquier insumo puede comprarse a cualquier proveedor de esta lista.
+  abrirModalNuevoProveedor(returnTo) {
+    this.proveedorReturnTo = returnTo || null;
+    ['newProvNombre', 'newProvContacto', 'newProvTelefono', 'newProvCorreo', 'newProvDireccion'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    this.openModal('modalNuevoProveedor');
+  },
+
+  cerrarModalNuevoProveedor() {
+    this.closeModal('modalNuevoProveedor');
+    this.proveedorReturnTo = null;
+  },
+
+  async guardarNuevoProveedor() {
+    const nombre = document.getElementById('newProvNombre').value.trim();
+    const contacto = document.getElementById('newProvContacto').value.trim();
+    const telefono = document.getElementById('newProvTelefono').value.trim();
+    const correo = document.getElementById('newProvCorreo').value.trim();
+    const direccion = document.getElementById('newProvDireccion').value.trim();
+    if (!nombre) { this.toast('El nombre del proveedor es obligatorio.', 'warning'); return; }
+
+    try {
+      const nuevo = await ApiCliente.post('/api/inventario/proveedores', { nombre, contacto, telefono, correo, direccion });
+      this.toast('Proveedor creado.', 'success');
+      this.closeModal('modalNuevoProveedor');
+      await this.loadInsumos();
+      if (this.proveedorReturnTo === 'entrada') {
+        document.getElementById('entradaProveedorSelect').value = nuevo.id;
+      } else if (this.proveedorReturnTo === 'editar') {
+        document.getElementById('editInsProveedorSelect').value = nuevo.id;
+      }
+      this.proveedorReturnTo = null;
+    } catch (err) {
+      this.toast(err.message || 'No se pudo crear el proveedor.', 'error');
     }
   },
 
