@@ -10,6 +10,11 @@
   <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body class="pagina-login">
+  <script>
+    try {
+      if (localStorage.getItem('carwash_theme') !== 'dark') document.body.classList.add('light-mode');
+    } catch (e) {}
+  </script>
   <div class="login-wrapper">
     <div class="login-card">
       <div class="login-brand">

@@ -46,17 +46,22 @@ async function actualizarInsumo(req, res) {
 }
 
 async function registrarEntrada(req, res) {
-  const { insumo_id, cantidad, proveedor_id, observacion } = req.body;
+  const { insumo_id, cantidad, proveedor_id, observacion, costo_unitario } = req.body;
   const insumo = await InsumoRepositorio.obtenerInsumoPorId(insumo_id);
   if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado.' });
 
   const cant = parseFloat(cantidad);
   if (!cant || cant <= 0) return res.status(400).json({ error: 'La cantidad debe ser mayor a cero.' });
 
+  const costoUnitario = costo_unitario !== undefined && costo_unitario !== '' ? parseFloat(costo_unitario) : null;
+  if (costoUnitario !== null && (isNaN(costoUnitario) || costoUnitario < 0)) {
+    return res.status(400).json({ error: 'El costo unitario de la compra no es válido.' });
+  }
+
   await InsumoRepositorio.registrarEntrada({
     insumoId: insumo.id, cantidad: cant,
     proveedorId: proveedor_id ? parseInt(proveedor_id, 10) : insumo.proveedor_id,
-    usuarioId: req.usuarioAutenticado.id, observacion
+    usuarioId: req.usuarioAutenticado.id, observacion, costoUnitario
   });
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'entrada_inventario', `Entrada de ${cant} ${insumo.unidad_medida} de ${insumo.nombre}`);

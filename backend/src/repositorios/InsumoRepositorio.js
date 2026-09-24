@@ -60,8 +60,12 @@ async function registrarSalida(conexion, { insumoId, cantidad, ordenId, usuarioI
   );
 }
 
-async function registrarEntrada({ insumoId, cantidad, proveedorId, usuarioId, observacion }) {
-  await pool.query(`UPDATE insumos SET stock_actual = stock_actual + ? WHERE id = ?`, [cantidad, insumoId]);
+async function registrarEntrada({ insumoId, cantidad, proveedorId, usuarioId, observacion, costoUnitario }) {
+  if (costoUnitario !== null && costoUnitario !== undefined) {
+    await pool.query(`UPDATE insumos SET stock_actual = stock_actual + ?, costo_unitario = ? WHERE id = ?`, [cantidad, costoUnitario, insumoId]);
+  } else {
+    await pool.query(`UPDATE insumos SET stock_actual = stock_actual + ? WHERE id = ?`, [cantidad, insumoId]);
+  }
   await pool.query(
     `INSERT INTO movimientos_inventario (insumo_id, tipo, cantidad, proveedor_id, usuario_id, observacion)
      VALUES (?, 'entrada', ?, ?, ?, ?)`,

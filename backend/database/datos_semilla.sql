@@ -23,23 +23,15 @@ VALUES
 
 INSERT INTO lavadores (nombre, documento, telefono, estado, fecha_ingreso, porcentaje_comision, creado_por)
 VALUES
- ('Jorge Martínez', '1033445566', '3157778899', 'activo', CURDATE(), 60.00, 1),
- ('Andrés Castro', '1044556677', '3189991122', 'activo', CURDATE(), 60.00, 1),
- ('Brayan Silva', '1055667788', '3201114433', 'activo', CURDATE(), 60.00, 1);
+ ('Jorge Martínez', '1033445566', '3157778899', 'activo', CURDATE(), 60.00, 1);
 
 INSERT INTO proveedores (nombre, contacto, telefono, correo, direccion)
 VALUES
- ('Químicos del Caribe S.A.S.', 'Mario Santos', '3005556677', 'ventas@quimicoscaribe.com', 'Calle 45 # 22-10, Zona Industrial'),
- ('Distribuidora AutoLimpio', 'Patricia Díaz', '3109876543', 'autolimpio@gmail.com', 'Carrera 15 # 34-50');
+ ('Químicos del Caribe S.A.S.', 'Mario Santos', '3005556677', 'ventas@quimicoscaribe.com', 'Calle 45 # 22-10, Zona Industrial');
 
 INSERT INTO insumos (nombre, unidad_medida, stock_actual, stock_minimo, costo_unitario, proveedor_id)
 VALUES
- ('Shampoo pH Neutro Concentrado', 'ml', 4500, 1500, 18, 1),
- ('Cera Carnauba Premium', 'g', 900, 500, 45, 1),
- ('Desengrasante Motor/Chasis', 'ml', 3200, 1000, 22, 1),
- ('Silicona Emulsionada para Tableros', 'ml', 1400, 800, 28, 2),
- ('Microfibras 40x40 cm', 'unid', 6, 15, 3800, 2),
- ('Ambientador Líquido Aroma Nuevo', 'ml', 450, 600, 20, 2);
+ ('Shampoo pH Neutro Concentrado', 'ml', 4500, 1500, 18, 1);
 
 INSERT INTO servicios (nombre, tipo_vehiculo, descripcion, precio, duracion_estimada_min, activo)
 VALUES
@@ -49,20 +41,5 @@ VALUES
  ('Lavado Especial Moto + Cera', 'moto', 'Lavado detallado, desengrasado de cadena y motor, cera protectora en tanques y carenajes.', 18000, 35, TRUE),
  ('Polichado & Encerado Diamante', 'ambos', 'Descontaminado de pintura, polichado a máquina y sellado cerámico de cera.', 50000, 60, TRUE);
 
-INSERT INTO clientes (nombre, telefono, correo, creado_por)
-VALUES
- ('Samuel Petro Avalos', '3114567890', 'samuel.petro@email.com', 1),
- ('Diana Marcela Morales', '3157774433', 'diana.morales@gmail.com', 2),
- ('Roberto Cárdenas Gil', '3209887766', 'roberto.c@hotmail.com', 2);
-
-INSERT INTO vehiculos (cliente_id, placa, tipo, marca, color)
-VALUES
- (1, 'KLS-842', 'carro', 'Toyota Hilux', 'Blanco Perlado'),
- (2, 'DFG-21E', 'moto', 'Yamaha NMax 155', 'Azul Mate'),
- (3, 'MZP-309', 'carro', 'Mazda 3 Grand Touring', 'Rojo Diamante');
-
-INSERT INTO gastos_operativos (concepto, monto, fecha, usuario_id)
-VALUES ('Pago de servicio público de agua potable', 85000, CURDATE(), 1);
-
-INSERT INTO auditoria (usuario_id, accion, detalle)
-VALUES (1, 'inicio_sistema', 'Carga inicial de datos de ejemplo del sistema CarWash Pro');
+-- Clientes, vehículos, turnos, citas y órdenes NO se precargan: se crean
+-- desde la operación diaria real (POS, agenda, etc.).

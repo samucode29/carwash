@@ -32,7 +32,7 @@
           Tablero de Lavado <span class="badge-counter" id="activeOrdersCount">0</span>
         </button>
         <button class="tab-btn" data-tab="citas" onclick="app.setTab('citas')">Agenda de Citas</button>
-        <button class="tab-btn" data-tab="inventario" onclick="app.setTab('inventario')">Inventario Perpetuo</button>
+        <button class="tab-btn" data-tab="inventario" onclick="app.setTab('inventario')">Inventario</button>
         <button class="tab-btn admin-only" data-tab="servicios" onclick="app.setTab('servicios')">Servicios</button>
         <button class="tab-btn" data-tab="nomina" onclick="app.setTab('nomina')">Personal &amp; Nómina</button>
         <button class="tab-btn" data-tab="caja" onclick="app.setTab('caja')">Caja Diaria</button>
@@ -201,7 +201,7 @@
           <div class="section-top-bar">
             <div>
               <h2>Tablero Operativo en Vivo</h2>
-              <p class="text-muted">Control de flujo: Recibido → En Proceso → Terminado (descuenta insumos) → Entregado/Cobrado</p>
+              <p class="text-muted">Control de flujo: Recibido → En Proceso → Terminado → Entregado/Cobrado</p>
             </div>
             <div class="kanban-filters">
               <button class="btn btn-sm btn-secondary" onclick="app.loadOrders()">Actualizar Tablero</button>
@@ -292,7 +292,7 @@
         <section id="tab-inventario" class="tab-view">
           <div class="section-top-bar">
             <div>
-              <h2>Control de Insumos e Inventario Perpetuo</h2>
+              <h2>Control de Insumos e Inventario</h2>
               <p class="text-muted">Entregas de insumos a lavadores, entradas por compra y alertas de stock mínimo en tiempo real.</p>
             </div>
             <div class="d-flex gap-2">
@@ -926,11 +926,17 @@
       <div class="modal-body">
         <div class="form-group">
           <label>Insumo a reabastecer:</label>
-          <select id="entradaInsumoSelect"></select>
+          <select id="entradaInsumoSelect" onchange="app.prefillCostoEntrada()"></select>
         </div>
-        <div class="form-group">
-          <label>Cantidad a Ingresar:</label>
-          <input type="number" id="entradaCantidad" min="1" step="any" placeholder="Ej: 5000">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Cantidad a Ingresar:</label>
+            <input type="number" id="entradaCantidad" min="1" step="any" placeholder="Ej: 5000">
+          </div>
+          <div class="form-group flex-1">
+            <label>Costo Unitario de esta Compra ($):</label>
+            <input type="number" id="entradaCostoUnitario" min="0" step="any" placeholder="Precio al que lo compré">
+          </div>
         </div>
         <div class="form-group">
           <label>Proveedor:</label>
@@ -1295,6 +1301,46 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalNuevoInsumo')">Cancelar</button>
         <button class="btn btn-primary" onclick="app.guardarNuevoInsumo()">Crear Insumo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Editar Insumo (solo administrador) -->
+  <div id="modalEditarInsumo" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Editar Insumo</h3>
+        <button class="close-btn" onclick="app.closeModal('modalEditarInsumo')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre del Insumo:</label>
+          <input type="text" id="editInsNombre">
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Unidad de Medida:</label>
+            <select id="editInsUnidad">
+              <option value="ml">Mililitros (ml)</option>
+              <option value="L">Litros (L)</option>
+              <option value="g">Gramos (g)</option>
+              <option value="unid">Unidades</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label>Stock Mínimo (Alerta):</label>
+            <input type="number" id="editInsStockMinimo" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Proveedor:</label>
+          <select id="editInsProveedorSelect"></select>
+        </div>
+        <p class="text-sm text-muted">El costo unitario y el stock se actualizan al "Registrar Entrada" (cuando compras más), no aquí.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalEditarInsumo')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.guardarEdicionInsumo()">Guardar Cambios</button>
       </div>
     </div>
   </div>

@@ -541,7 +541,7 @@ const app = {
     if (o.estado === 'recibido') {
       actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'en_proceso')">Iniciar Lavado</button>`;
     } else if (o.estado === 'en_proceso') {
-      actionButtons = `<button class="btn btn-sm btn-success" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'terminado')">Terminar Lavado (Descuenta Insumos)</button>`;
+      actionButtons = `<button class="btn btn-sm btn-success" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'terminado')">Terminar Lavado</button>`;
     } else if (o.estado === 'terminado') {
       actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.openPayModal(${o.id}, ${o.total})">Cobrar y Entregar Vehículo</button>`;
     } else if (o.estado === 'entregado') {
@@ -565,8 +565,7 @@ const app = {
     try {
       await ApiCliente.put(`/api/ordenes/${orderId}/estado`, { estado: nuevoEstado });
       if (nuevoEstado === 'terminado') {
-        this.toast(`Orden #${orderId} terminada. Insumos descontados automáticamente del inventario.`, 'success');
-        this.loadInsumos();
+        this.toast(`Orden #${orderId} terminada.`, 'success');
       } else {
         this.toast(`Orden #${orderId} actualizada a estado: ${nuevoEstado}`, 'info');
       }
@@ -887,6 +886,8 @@ const app = {
               <div class="text-sm text-muted">Stock Mínimo: ${i.stock_minimo} ${i.unidad_medida}</div>
               <div class="stock-meter"><div class="stock-meter-fill ${isLow ? 'low' : 'normal'}" style="width: ${ratio}%"></div></div>
               <div class="text-sm text-dim">Proveedor: ${i.proveedor_nombre || 'Sin proveedor'}</div>
+              <div class="text-sm text-dim">Último costo: ${this.formatMoney(i.costo_unitario)} / ${i.unidad_medida}</div>
+              <button class="btn btn-sm btn-outline admin-only mt-2" style="width: 100%" onclick="app.abrirModalEditarInsumo(${i.id}, '${i.nombre.replace(/'/g, "\\'")}', '${i.unidad_medida}', ${i.stock_minimo}, ${i.proveedor_id || 'null'})">Editar</button>
             </div>
           `;
         }).join('');
@@ -897,8 +898,10 @@ const app = {
         if (el) el.innerHTML = insumos.map(i => `<option value="${i.id}">${i.nombre} (Stock actual: ${i.stock_actual} ${i.unidad_medida})</option>`).join('');
       });
 
-      const provSelect = document.getElementById('entradaProveedorSelect');
-      if (provSelect) provSelect.innerHTML = proveedores.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+      ['entradaProveedorSelect', 'editInsProveedorSelect'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = proveedores.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+      });
 
       const tbMov = document.getElementById('movimientosTableBody');
       if (tbMov) {
@@ -925,24 +928,34 @@ const app = {
           </tr>
         `).join('');
       }
+
+      this.updateRolePermissions();
     } catch (err) { console.error(err); }
+  },
+
+  prefillCostoEntrada() {
+    const insumoId = parseInt(document.getElementById('entradaInsumoSelect').value, 10);
+    const insumo = (this.insumos || []).find(i => i.id === insumoId);
+    document.getElementById('entradaCostoUnitario').value = insumo ? insumo.costo_unitario : '';
   },
 
   async guardarEntradaInsumo() {
     const insumo_id = document.getElementById('entradaInsumoSelect').value;
     const cantidad = document.getElementById('entradaCantidad').value;
+    const costo_unitario = document.getElementById('entradaCostoUnitario').value;
     const proveedor_id = document.getElementById('entradaProveedorSelect').value;
     const observacion = document.getElementById('entradaObservacion').value;
 
     if (!cantidad || cantidad <= 0) { this.toast('Ingrese una cantidad válida mayor a cero.', 'warning'); return; }
 
     try {
-      await ApiCliente.post('/api/inventario/entradas', { insumo_id, cantidad, proveedor_id, observacion });
-      this.toast('Entrada registrada. Stock actualizado inmediatamente.', 'success');
+      await ApiCliente.post('/api/inventario/entradas', { insumo_id, cantidad, costo_unitario, proveedor_id, observacion });
+      this.toast('Entrada registrada. Stock y costo actualizados inmediatamente.', 'success');
       this.closeModal('modalEntradaInsumo');
+      document.getElementById('entradaCostoUnitario').value = '';
       this.loadInsumos();
     } catch (err) {
-      this.toast('Error al registrar entrada de insumo.', 'error');
+      this.toast(err.message || 'Error al registrar entrada de insumo.', 'error');
     }
   },
 
@@ -979,6 +992,33 @@ const app = {
       this.loadInsumos();
     } catch (err) {
       this.toast('Error al crear insumo.', 'error');
+    }
+  },
+
+  abrirModalEditarInsumo(id, nombre, unidadMedida, stockMinimo, proveedorId) {
+    this.editingInsumoId = id;
+    document.getElementById('editInsNombre').value = nombre;
+    document.getElementById('editInsUnidad').value = unidadMedida;
+    document.getElementById('editInsStockMinimo').value = stockMinimo;
+    const provSelect = document.getElementById('editInsProveedorSelect');
+    if (provSelect) provSelect.value = proveedorId || '';
+    this.openModal('modalEditarInsumo');
+  },
+
+  async guardarEdicionInsumo() {
+    const nombre = document.getElementById('editInsNombre').value.trim();
+    const unidad_medida = document.getElementById('editInsUnidad').value;
+    const stock_minimo = document.getElementById('editInsStockMinimo').value;
+    const proveedor_id = document.getElementById('editInsProveedorSelect').value;
+    if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
+
+    try {
+      await ApiCliente.put(`/api/inventario/insumos/${this.editingInsumoId}`, { nombre, unidad_medida, stock_minimo, proveedor_id });
+      this.toast('Insumo actualizado.', 'success');
+      this.closeModal('modalEditarInsumo');
+      this.loadInsumos();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo actualizar el insumo.', 'error');
     }
   },
 
