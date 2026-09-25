@@ -13,6 +13,14 @@
  */
 require('dotenv').config();
 
+// El sistema trabaja en hora local de Colombia (ver src/utilidades/fechas.js:
+// obtenerFechaHoy/obtenerHoraActual usan new Date() sin conversión manual de
+// zona horaria). En Railway/Render el servidor corre en otro país (otro TZ
+// del sistema operativo), así que hay que fijar esto explícitamente ANTES de
+// cualquier otro require, o "hoy" y "ahora mismo" saldrían mal en asistencia,
+// facturas, cierres de caja, etc.
+process.env.TZ = 'America/Bogota';
+
 const app = require('./src/app');
 const { verificarConexion } = require('./src/config/baseDeDatos');
 
