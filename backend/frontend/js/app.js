@@ -63,6 +63,11 @@ const app = {
     }, 30000);
 
     setInterval(() => this.revisarRecordatoriosCitas(), 60000);
+
+    if (this.currentUser.rol === 'administrador') {
+      this.revisarAlertasSalidaProxima();
+      setInterval(() => this.revisarAlertasSalidaProxima(), 60000);
+    }
   },
 
   pintarBarraSesion() {
@@ -877,6 +882,60 @@ const app = {
       }
 
       if (huboNuevos) this.guardarRecordatoriosCitasDisparados(disparados);
+    } catch (err) { console.error(err); }
+  },
+
+  /** Igual que los recordatorios de citas, pero para el aviso de salida de empleados (ver abajo). */
+  obtenerAlertasSalidaDisparadas() {
+    try {
+      const data = JSON.parse(localStorage.getItem('carwash_alertas_salida') || '{}');
+      return new Set(data[fechaLocalHoy()] || []);
+    } catch (err) {
+      return new Set();
+    }
+  },
+
+  guardarAlertasSalidaDisparadas(set) {
+    try {
+      localStorage.setItem('carwash_alertas_salida', JSON.stringify({ [fechaLocalHoy()]: Array.from(set) }));
+    } catch (err) { /* ignorar */ }
+  },
+
+  /**
+   * Avisa cuando a un empleado (con jornada fija, no lavador) le faltan
+   * 15 minutos para completar su jornada de hoy, para que el administrador
+   * no se olvide de marcarle la salida. La hora esperada de salida se
+   * estima como hora_entrada + jornada_horas_dia del empleado.
+   */
+  async revisarAlertasSalidaProxima() {
+    const UMBRAL_MINUTOS = 15;
+    try {
+      const hoy = fechaLocalHoy();
+      const asistencias = await ApiCliente.get(`/api/nomina/asistencia?fecha=${hoy}`);
+      const enTurno = asistencias.filter(a =>
+        a.persona_tipo === 'usuario' && a.hora_entrada && !a.hora_salida && !a.inasistencia && a.jornada_horas_dia
+      );
+      if (enTurno.length === 0) return;
+
+      const disparados = this.obtenerAlertasSalidaDisparadas();
+      const ahora = new Date();
+      let huboNuevos = false;
+
+      for (const a of enTurno) {
+        const horaSalidaEsperada = new Date(`${hoy}T${a.hora_entrada}`);
+        horaSalidaEsperada.setMinutes(horaSalidaEsperada.getMinutes() + Math.round(a.jornada_horas_dia * 60));
+        const minutosFaltantes = (horaSalidaEsperada - ahora) / 60000;
+        if (minutosFaltantes < 0) continue; // ya se le pasó la hora, no seguimos avisando
+
+        const clave = `${a.usuario_id}`;
+        if (minutosFaltantes <= UMBRAL_MINUTOS && !disparados.has(clave)) {
+          alert(`Aviso: a ${a.usuario_nombre} le faltan ${Math.max(0, Math.round(minutosFaltantes))} min para completar su jornada de hoy. Recuerda marcarle la salida.`);
+          disparados.add(clave);
+          huboNuevos = true;
+        }
+      }
+
+      if (huboNuevos) this.guardarAlertasSalidaDisparadas(disparados);
     } catch (err) { console.error(err); }
   },
 

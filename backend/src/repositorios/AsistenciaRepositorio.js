@@ -11,7 +11,7 @@ async function listarPorFecha(fecha) {
   const idsUsuarios = filas.filter(f => f.persona_tipo === 'usuario').map(f => f.persona_id);
   const idsLavadores = filas.filter(f => f.persona_tipo === 'lavador').map(f => f.persona_id);
 
-  const [usuarios] = idsUsuarios.length ? await pool.query(`SELECT id, nombre, rol FROM usuarios WHERE id IN (?)`, [idsUsuarios]) : [[]];
+  const [usuarios] = idsUsuarios.length ? await pool.query(`SELECT id, nombre, rol, jornada_horas_dia FROM usuarios WHERE id IN (?)`, [idsUsuarios]) : [[]];
   const [lavadores] = idsLavadores.length ? await pool.query(`SELECT id, nombre FROM lavadores WHERE id IN (?)`, [idsLavadores]) : [[]];
 
   return filas.map(fila => {
@@ -23,7 +23,10 @@ async function listarPorFecha(fecha) {
       ...fila,
       usuario_id: fila.persona_id, // alias de compatibilidad para el frontend
       usuario_nombre: persona ? persona.nombre : 'Personal',
-      usuario_rol: fila.persona_tipo === 'usuario' ? persona?.rol : 'lavador'
+      usuario_rol: fila.persona_tipo === 'usuario' ? persona?.rol : 'lavador',
+      // Solo aplica a empleados/administradores (jornada fija); un lavador
+      // no tiene horario fijo, así que aquí siempre queda null para ellos.
+      jornada_horas_dia: fila.persona_tipo === 'usuario' && persona ? Number(persona.jornada_horas_dia) : null
     };
   });
 }
