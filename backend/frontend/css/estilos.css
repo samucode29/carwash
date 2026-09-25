@@ -2066,6 +2066,20 @@ body.pagina-login {
 
   .content-wrapper {
     padding: 1rem 0.9rem 2rem;
+    /* .content-wrapper es hijo de .app-main (flex-direction: column) y
+       tenía "margin: 0 auto" para centrarse en escritorio. En un flex
+       column ese auto-margin hace que en vez de estirarse al ancho del
+       contenedor, se encoja al tamaño de su contenido (fit-content) y se
+       centre — y como algo adentro no se encogía, la página completa
+       terminaba más ancha que la pantalla, cortando todo por la derecha.
+       Fijar el ancho explícito a 100% arregla eso solo en móvil. */
+    width: 100%;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .app-main {
+    min-width: 0;
   }
 
   .top-nav {
