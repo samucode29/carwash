@@ -67,6 +67,9 @@ async function registrarEntrada(req, res) {
   }
 
   const proveedorId = proveedor_id ? parseInt(proveedor_id, 10) : insumo.proveedor_id;
+  if (!proveedorId) {
+    return res.status(400).json({ error: 'Debe asociar un proveedor a la compra (seleccione uno o defina el proveedor por defecto del insumo).' });
+  }
   const movimientoId = await InsumoRepositorio.registrarEntrada({
     insumoId: insumo.id, cantidad: cant,
     proveedorId, usuarioId: req.usuarioAutenticado.id, observacion, costoUnitario

@@ -944,10 +944,11 @@ const app = {
       });
 
       const proveedoresActivos = proveedores.filter(p => p.estado === 'activo');
-      ['entradaProveedorSelect', 'editInsProveedorSelect'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = proveedoresActivos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
-      });
+      const opcionesProveedor = proveedoresActivos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+      const elEntradaProv = document.getElementById('entradaProveedorSelect');
+      if (elEntradaProv) elEntradaProv.innerHTML = `<option value="">-- Selecciona un proveedor --</option>${opcionesProveedor}`;
+      const elEditProv = document.getElementById('editInsProveedorSelect');
+      if (elEditProv) elEditProv.innerHTML = opcionesProveedor;
 
       const tbProv = document.getElementById('proveedoresTableBody');
       if (tbProv) {
@@ -1000,6 +1001,8 @@ const app = {
     document.getElementById('entradaCantidad').value = '';
     document.getElementById('entradaCostoUnitario').value = '';
     document.getElementById('entradaObservacion').value = '';
+    const elProv = document.getElementById('entradaProveedorSelect');
+    if (elProv) elProv.value = '';
     const radioUnidad = document.querySelector('input[name="entradaModoPrecio"][value="unidad"]');
     if (radioUnidad) radioUnidad.checked = true;
     this.actualizarLabelPrecioEntrada();
@@ -1037,6 +1040,7 @@ const app = {
     const observacion = document.getElementById('entradaObservacion').value;
 
     if (!cantidad || cantidad <= 0) { this.toast('Ingrese una cantidad válida mayor a cero.', 'warning'); return; }
+    if (!proveedor_id) { this.toast('Debe seleccionar un proveedor para registrar la compra.', 'warning'); return; }
 
     let costo_unitario = precioIngresado;
     if (precioIngresado !== '' && modoPrecio === 'total') {
