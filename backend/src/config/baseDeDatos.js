@@ -25,6 +25,14 @@ const pool = mysql.createPool({
   ...(usarSsl ? { ssl: { rejectUnauthorized: false } } : {})
 });
 
+// Sin este listener, un error de conexión a nivel de pool (no solo el de
+// una query puntual) es un evento 'error' sin manejar y Node mata todo el
+// proceso — tumbando el servidor entero por un problema de una sola
+// conexión.
+pool.on('error', (err) => {
+  console.error('❌ Error en el pool de MySQL:', err.message);
+});
+
 /**
  * Verifica que la base de datos responda. Se usa al iniciar el servidor
  * para fallar rápido y con un mensaje claro si el .env está mal configurado.
