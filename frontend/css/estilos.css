@@ -1655,6 +1655,14 @@ body.light-mode .tab-btn.active {
   border: 1px solid rgba(2, 132, 199, 0.3);
 }
 
+/* .period-selector (Hoy/Semana/Mes/... y el selector de tipo de reporte)
+   tiene un fondo azul oscuro fijo que no cambia con el tema: en modo
+   claro el texto gris de los botones inactivos quedaba casi invisible. */
+body.light-mode .period-selector {
+  background: #eef4fb;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
 body.light-mode .theme-toggle-btn {
   background: #0f172a;
   color: #ffffff;
