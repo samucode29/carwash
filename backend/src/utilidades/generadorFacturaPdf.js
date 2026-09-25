@@ -21,9 +21,11 @@ function generarPdfFactura(res, factura) {
   doc.pipe(res);
 
   const esVenta = factura.tipo === 'venta';
+  const esNomina = factura.tipo === 'nomina';
+  const TITULOS = { venta: 'Factura de Venta', compra: 'Factura de Compra', nomina: 'Comprobante de Pago de Nómina' };
 
   doc.fontSize(20).fillColor('#0077b6').text('CarWash Pro');
-  doc.fontSize(14).fillColor('#111').text(esVenta ? 'Factura de Venta' : 'Factura de Compra');
+  doc.fontSize(14).fillColor('#111').text(TITULOS[factura.tipo] || 'Factura');
   doc.moveDown(0.3);
   doc.fontSize(11).fillColor('#555').text(`No. ${factura.numero_factura}`);
   doc.fontSize(10).fillColor('#555').text(`Fecha: ${factura.fecha}  |  Generada: ${new Date().toLocaleString('es-CO')}`);
@@ -31,16 +33,18 @@ function generarPdfFactura(res, factura) {
   doc.moveTo(50, doc.y).lineTo(560, doc.y).strokeColor('#ddd').stroke();
   doc.moveDown(1);
 
-  doc.fontSize(13).fillColor('#111').text(esVenta ? 'Cliente' : 'Proveedor', { underline: true });
-  doc.moveDown(0.4);
-  if (esVenta) {
-    doc.fontSize(11).fillColor('#333').text(factura.cliente_nombre || 'Venta anónima / cliente ocasional');
-    if (factura.cliente_telefono) doc.fontSize(10).fillColor('#555').text(factura.cliente_telefono);
-    if (factura.placa_anonima) doc.fontSize(10).fillColor('#555').text(`Vehículo: ${factura.placa_anonima} (${factura.tipo_vehiculo_anonimo || ''})`);
-  } else {
-    doc.fontSize(11).fillColor('#333').text(factura.proveedor_nombre || 'Sin proveedor asociado');
+  if (!esNomina) {
+    doc.fontSize(13).fillColor('#111').text(esVenta ? 'Cliente' : 'Proveedor', { underline: true });
+    doc.moveDown(0.4);
+    if (esVenta) {
+      doc.fontSize(11).fillColor('#333').text(factura.cliente_nombre || 'Venta anónima / cliente ocasional');
+      if (factura.cliente_telefono) doc.fontSize(10).fillColor('#555').text(factura.cliente_telefono);
+      if (factura.placa_anonima) doc.fontSize(10).fillColor('#555').text(`Vehículo: ${factura.placa_anonima} (${factura.tipo_vehiculo_anonimo || ''})`);
+    } else {
+      doc.fontSize(11).fillColor('#333').text(factura.proveedor_nombre || 'Sin proveedor asociado');
+    }
+    doc.moveDown(1);
   }
-  doc.moveDown(1);
 
   doc.fontSize(13).fillColor('#111').text('Detalle', { underline: true });
   doc.moveDown(0.5);

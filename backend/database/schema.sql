@@ -376,7 +376,7 @@ CREATE TABLE auditoria (
 CREATE TABLE facturas (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     numero_factura  VARCHAR(30) NOT NULL UNIQUE,
-    tipo            ENUM('compra','venta') NOT NULL,
+    tipo            ENUM('compra','venta','nomina') NOT NULL,
     orden_id        INT NULL,        -- factura de venta -> ordenes_servicio
     movimiento_id   INT NULL,        -- factura de compra -> movimientos_inventario
     cliente_id      INT NULL,

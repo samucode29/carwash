@@ -1723,11 +1723,11 @@ const app = {
         tb.innerHTML = facturas.map(f => `
           <tr>
             <td><strong>${f.numero_factura}</strong></td>
-            <td><span class="role-badge" style="background: ${f.tipo === 'venta' ? '#10b981' : '#f59e0b'}">${f.tipo.toUpperCase()}</span></td>
+            <td><span class="role-badge" style="background: ${f.tipo === 'venta' ? '#10b981' : '#ef4444'}">${f.tipo.toUpperCase()}</span></td>
             <td>${f.fecha}</td>
             <td>${f.concepto}</td>
             <td>${f.cliente_nombre || f.proveedor_nombre || '-'}</td>
-            <td>${this.formatMoney(f.total)}</td>
+            <td class="${f.tipo === 'venta' ? 'text-success' : 'text-danger'}"><strong>${f.tipo === 'venta' ? '+' : '-'}${this.formatMoney(f.total)}</strong></td>
             <td><button class="btn btn-sm btn-outline" onclick="app.verFacturaPdf(${f.id})">Ver PDF</button></td>
           </tr>
         `).join('');

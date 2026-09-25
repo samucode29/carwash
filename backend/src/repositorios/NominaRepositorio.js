@@ -68,7 +68,13 @@ async function pagarLiquidacion({ liquidacionId, soportePagoNombre, soportePagoT
      WHERE id = ?`,
     [fechaPago, soportePagoNombre, soportePagoNombre, soportePagoTipo, soportePagoDatos, liquidacionId]
   );
-  const [actualizada] = await pool.query(`SELECT * FROM liquidaciones_lavador WHERE id = ?`, [liquidacionId]);
+  const [actualizada] = await pool.query(
+    `SELECT liq.*, l.nombre AS lavador_nombre
+     FROM liquidaciones_lavador liq
+     LEFT JOIN lavadores l ON l.id = liq.lavador_id
+     WHERE liq.id = ?`,
+    [liquidacionId]
+  );
   return actualizada[0];
 }
 
@@ -131,7 +137,13 @@ async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, perio
      VALUES (?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?, ?, ?)`,
     [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, valorAPagar, hoy, soportePagoNombre, soportePagoNombre, soportePagoTipo, soportePagoDatos]
   );
-  const [filas] = await pool.query(`SELECT * FROM pagos_salario WHERE id = ?`, [resultado.insertId]);
+  const [filas] = await pool.query(
+    `SELECT ps.*, u.nombre AS empleado_nombre
+     FROM pagos_salario ps
+     LEFT JOIN usuarios u ON u.id = ps.empleado_id
+     WHERE ps.id = ?`,
+    [resultado.insertId]
+  );
   return filas[0];
 }
 

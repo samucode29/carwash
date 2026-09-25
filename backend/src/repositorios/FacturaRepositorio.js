@@ -6,7 +6,7 @@
 const { pool } = require('../config/baseDeDatos');
 const { formatearFechaCorta } = require('../utilidades/fechas');
 
-const PREFIJO_POR_TIPO = { compra: 'COM', venta: 'VEN' };
+const PREFIJO_POR_TIPO = { compra: 'COM', venta: 'VEN', nomina: 'NOM' };
 
 /** Primeras 2 letras del nombre, sin tildes/espacios, en mayúsculas. */
 function iniciales(nombre) {

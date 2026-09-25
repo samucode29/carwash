@@ -5,6 +5,7 @@
 const NominaRepositorio = require('../repositorios/NominaRepositorio');
 const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
+const FacturaRepositorio = require('../repositorios/FacturaRepositorio');
 const { obtenerFechaHoy, obtenerHoraActual } = require('../utilidades/fechas');
 
 // ---------------------------------------------------------------------------
@@ -47,8 +48,16 @@ async function pagarLiquidacion(req, res) {
   });
   if (!liquidacion) return res.status(404).json({ error: 'Liquidación no encontrada.' });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pagar_liquidacion', `Pagada liquidación #${liquidacion.id} con soporte: ${req.file.originalname}`);
-  res.json(liquidacion);
+  const factura = await FacturaRepositorio.crearFactura({
+    tipo: 'nomina',
+    concepto: `Comisión - ${liquidacion.lavador_nombre || 'Lavador'}`,
+    total: liquidacion.valor_a_pagar,
+    fecha: liquidacion.fecha_pago,
+    creadoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pagar_liquidacion', `Pagada liquidación #${liquidacion.id} con soporte: ${req.file.originalname} (Factura ${factura.numero_factura})`);
+  res.json({ ...liquidacion, factura });
 }
 
 async function listarLiquidaciones(req, res) {
@@ -101,8 +110,16 @@ async function pagarSalarioEmpleado(req, res) {
     fechaPago: fecha_pago || hoy
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar}) con soporte: ${req.file.originalname}`);
-  res.status(201).json(pago);
+  const factura = await FacturaRepositorio.crearFactura({
+    tipo: 'nomina',
+    concepto: `Salario - ${pago.empleado_nombre || 'Empleado'}`,
+    total: pago.valor_a_pagar,
+    fecha: pago.fecha_pago_real,
+    creadoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar}) con soporte: ${req.file.originalname} (Factura ${factura.numero_factura})`);
+  res.status(201).json({ ...pago, factura });
 }
 
 async function listarPagosSalario(req, res) {
