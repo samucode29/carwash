@@ -147,7 +147,13 @@ async function descargarReporteNominaPdf(req, res) {
         ['Días Presentes Registrados', String(r.asistenciasPresentes)],
         ['Inasistencias', String(r.inasistencias)],
         ['Horas Trabajadas Totales', `${r.horasTrabajadasTotal} hrs`]
-      ] }
+      ] },
+      { titulo: 'Salarios Pagados por Empleado', filas: [],
+        tabla: { encabezados: ['Empleado', 'Rol', 'Pagos', 'Total Pagado'],
+          filas: r.porEmpleado.map(e => [e.nombre, e.rol, String(e.cantidad), formatearMoneda(e.total)]) } },
+      { titulo: 'Comisiones Pagadas por Lavador', filas: [],
+        tabla: { encabezados: ['Lavador', 'Liquidaciones', 'Total Pagado'],
+          filas: r.porLavador.map(l => [l.nombre, String(l.cantidad), formatearMoneda(l.total)]) } }
     ]
   });
 }

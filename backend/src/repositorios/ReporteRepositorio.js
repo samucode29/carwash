@@ -210,6 +210,27 @@ async function calcularReporteNomina(inicio, fin) {
     [inicio, fin]
   );
 
+  // Detalle por trabajador: cuánto se le pagó a cada quién en el período,
+  // no solo el total agregado del negocio.
+  const [porEmpleado] = await pool.query(
+    `SELECT u.id, u.nombre, u.rol, SUM(ps.valor_a_pagar) AS total, COUNT(*) AS cantidad
+     FROM pagos_salario ps
+     INNER JOIN usuarios u ON u.id = ps.empleado_id
+     WHERE ps.fecha_pago_real BETWEEN ? AND ?
+     GROUP BY u.id, u.nombre, u.rol
+     ORDER BY total DESC`,
+    [inicio, fin]
+  );
+  const [porLavador] = await pool.query(
+    `SELECT l.id, l.nombre, SUM(ll.valor_a_pagar) AS total, COUNT(*) AS cantidad
+     FROM liquidaciones_lavador ll
+     INNER JOIN lavadores l ON l.id = ll.lavador_id
+     WHERE ll.estado = 'pagado' AND ll.fecha_pago BETWEEN ? AND ?
+     GROUP BY l.id, l.nombre
+     ORDER BY total DESC`,
+    [inicio, fin]
+  );
+
   return {
     rango: { inicio, fin },
     salariosPagados: Number(salarios[0].total) || 0,
@@ -220,7 +241,9 @@ async function calcularReporteNomina(inicio, fin) {
     liquidacionesPendientesCantidad: liquidacionesPendientes[0].cantidad || 0,
     asistenciasPresentes: Number(asistencia[0].presentes) || 0,
     inasistencias: Number(asistencia[0].inasistencias) || 0,
-    horasTrabajadasTotal: Number(asistencia[0].horasTotales) || 0
+    horasTrabajadasTotal: Number(asistencia[0].horasTotales) || 0,
+    porEmpleado: porEmpleado.map(e => ({ id: e.id, nombre: e.nombre, rol: e.rol, total: Number(e.total) || 0, cantidad: e.cantidad })),
+    porLavador: porLavador.map(l => ({ id: l.id, nombre: l.nombre, total: Number(l.total) || 0, cantidad: l.cantidad }))
   };
 }
 

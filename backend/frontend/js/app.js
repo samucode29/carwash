@@ -1805,6 +1805,26 @@ const app = {
         { label: 'Presentes', value: r.asistenciasPresentes, color: '#10b981' },
         { label: 'Inasistencias', value: r.inasistencias, color: '#ef4444' }
       ]);
+
+      const elEmp = document.getElementById('nominaPorEmpleadoChart');
+      if (elEmp) {
+        elEmp.innerHTML = (r.porEmpleado && r.porEmpleado.length)
+          ? ''
+          : '<p class="text-sm text-muted">Sin pagos de salario en este período.</p>';
+        if (r.porEmpleado && r.porEmpleado.length) {
+          this.renderBarChart('nominaPorEmpleadoChart', r.porEmpleado.map(e => ({ label: e.nombre, value: e.total })), { color: '#0077b6' });
+        }
+      }
+
+      const elLav = document.getElementById('nominaPorLavadorChart');
+      if (elLav) {
+        elLav.innerHTML = (r.porLavador && r.porLavador.length)
+          ? ''
+          : '<p class="text-sm text-muted">Sin comisiones pagadas en este período.</p>';
+        if (r.porLavador && r.porLavador.length) {
+          this.renderBarChart('nominaPorLavadorChart', r.porLavador.map(l => ({ label: l.nombre, value: l.total })), { color: '#f59e0b' });
+        }
+      }
     } catch (err) { console.error(err); }
   },
 
