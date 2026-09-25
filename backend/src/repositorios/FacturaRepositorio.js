@@ -6,19 +6,33 @@
 const { pool } = require('../config/baseDeDatos');
 const { formatearFechaCorta } = require('../utilidades/fechas');
 
-const PREFIJO_POR_TIPO = { compra: 'COM', venta: 'VEN', nomina: 'NOM' };
+const PREFIJO_POR_TIPO = { compra: 'COM', venta: 'VEN', nomina: 'PAG' };
 
-/** Primeras 2 letras del nombre, sin tildes/espacios, en mayúsculas. */
+function soloLetras(texto) {
+  return (texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z]/g, '');
+}
+
+/** Primeras 2 letras del nombre del producto/servicio, sin tildes/espacios. */
 function iniciales(nombre) {
-  const limpio = (nombre || '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^A-Za-z]/g, '')
-    .toUpperCase();
+  const limpio = soloLetras(nombre).toUpperCase();
   return (limpio.substring(0, 2) || 'XX').padEnd(2, 'X');
 }
 
+/** Inicial del nombre + inicial del apellido (no las primeras 2 letras del nombre). */
+function inicialesPersona(nombreCompleto) {
+  const partes = (nombreCompleto || '').trim().split(/\s+/);
+  const letra = (palabra) => (soloLetras(palabra).charAt(0).toUpperCase() || 'X');
+  return `${letra(partes[0])}${letra(partes[1])}`;
+}
+
 async function generarNumeroFactura(tipo, concepto, fecha) {
-  const prefijo = `${PREFIJO_POR_TIPO[tipo]}${iniciales(concepto)}`;
+  // Para pagos de nómina el concepto viene como "Salario - Laura Gómez" o
+  // "Comisión - Jorge Martínez": las iniciales deben salir del nombre de la
+  // persona, no de la palabra "Salario"/"Comisión".
+  const codigo = tipo === 'nomina'
+    ? inicialesPersona(concepto.includes(' - ') ? concepto.split(' - ').slice(1).join(' - ') : concepto)
+    : iniciales(concepto);
+  const prefijo = `${PREFIJO_POR_TIPO[tipo]}${codigo}`;
   const fechaCorta = formatearFechaCorta(fecha);
 
   const [filas] = await pool.query(
