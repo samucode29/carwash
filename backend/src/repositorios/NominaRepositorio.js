@@ -4,7 +4,7 @@
  */
 const { pool } = require('../config/baseDeDatos');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
-const { calcularValorHora, calcularHorasEsperadasPorPeriodo } = require('../utilidades/jornada');
+const { calcularValorHora, calcularHorasEsperadasPorPeriodo, calcularHorasEsperadasSemana } = require('../utilidades/jornada');
 
 // ---------------------------------------------------------------------------
 // Comisiones de lavadores
@@ -163,23 +163,54 @@ async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, perio
  * El pago no es el salario fijo completo sin importar nada: se calcula un
  * valor-hora (salario_fijo entre las horas esperadas de la jornada) y se
  * multiplica por las horas realmente trabajadas (asistencia) en el rango.
+ * Las horas que en una misma semana calendario (lunes a domingo) excedan la
+ * jornada semanal esperada del empleado se pagan al doble del valor-hora.
  */
 async function calcularPagoEmpleado(empleadoId, periodoInicio, periodoFin) {
   const [empFilas] = await pool.query(`SELECT * FROM usuarios WHERE id = ?`, [empleadoId]);
   const emp = empFilas[0];
   if (!emp) return null;
 
-  const [asistFilas] = await pool.query(
-    `SELECT SUM(horas_trabajadas) AS horas,
-            SUM(CASE WHEN inasistencia = FALSE THEN 1 ELSE 0 END) AS presentes,
+  const [resumenFilas] = await pool.query(
+    `SELECT SUM(CASE WHEN inasistencia = FALSE THEN 1 ELSE 0 END) AS presentes,
             SUM(CASE WHEN inasistencia = TRUE THEN 1 ELSE 0 END) AS inasistencias
      FROM asistencia WHERE persona_tipo = 'usuario' AND persona_id = ? AND fecha BETWEEN ? AND ?`,
     [empleadoId, periodoInicio, periodoFin]
   );
 
+  const [semanas] = await pool.query(
+    `SELECT YEARWEEK(fecha, 3) AS semana, MIN(fecha) AS desde, MAX(fecha) AS hasta, SUM(horas_trabajadas) AS horas
+     FROM asistencia
+     WHERE persona_tipo = 'usuario' AND persona_id = ? AND fecha BETWEEN ? AND ?
+     GROUP BY YEARWEEK(fecha, 3)
+     ORDER BY semana`,
+    [empleadoId, periodoInicio, periodoFin]
+  );
+
   const valorHora = calcularValorHora(emp.salario_fijo, emp.jornada_horas_dia, emp.dias_descanso_semana, emp.periodicidad_pago);
   const horasEsperadasPeriodo = calcularHorasEsperadasPorPeriodo(emp.jornada_horas_dia, emp.dias_descanso_semana, emp.periodicidad_pago);
-  const horasTrabajadas = Number(asistFilas[0].horas) || 0;
+  const horasEsperadasSemana = calcularHorasEsperadasSemana(emp.jornada_horas_dia, emp.dias_descanso_semana);
+
+  let horasNormales = 0;
+  let horasExtra = 0;
+  const desgloseSemanas = semanas.map((s) => {
+    const horasSemana = Number(s.horas) || 0;
+    const normales = Math.min(horasSemana, horasEsperadasSemana);
+    const extra = Math.max(0, horasSemana - horasEsperadasSemana);
+    horasNormales += normales;
+    horasExtra += extra;
+    return {
+      desde: s.desde,
+      hasta: s.hasta,
+      horas: Number(horasSemana.toFixed(2)),
+      horasNormales: Number(normales.toFixed(2)),
+      horasExtra: Number(extra.toFixed(2))
+    };
+  });
+
+  const horasTrabajadas = Number((horasNormales + horasExtra).toFixed(2));
+  const montoNormal = Number((valorHora * horasNormales).toFixed(2));
+  const montoExtra = Number((valorHora * 2 * horasExtra).toFixed(2));
 
   return {
     empleadoId,
@@ -188,11 +219,18 @@ async function calcularPagoEmpleado(empleadoId, periodoInicio, periodoFin) {
     diasDescansoSemana: emp.dias_descanso_semana,
     periodicidadPago: emp.periodicidad_pago,
     valorHora,
+    valorHoraExtra: Number((valorHora * 2).toFixed(2)),
     horasEsperadasPeriodo,
+    horasEsperadasSemana,
     horasTrabajadas,
-    diasPresentes: Number(asistFilas[0].presentes) || 0,
-    inasistencias: Number(asistFilas[0].inasistencias) || 0,
-    montoCalculado: Number((valorHora * horasTrabajadas).toFixed(2))
+    horasNormales: Number(horasNormales.toFixed(2)),
+    horasExtra: Number(horasExtra.toFixed(2)),
+    montoNormal,
+    montoExtra,
+    desgloseSemanas,
+    diasPresentes: Number(resumenFilas[0].presentes) || 0,
+    inasistencias: Number(resumenFilas[0].inasistencias) || 0,
+    montoCalculado: Number((montoNormal + montoExtra).toFixed(2))
   };
 }
 

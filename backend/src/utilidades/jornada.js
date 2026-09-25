@@ -5,9 +5,13 @@
  */
 const FACTOR_PERIODICIDAD = { semanal: 1, quincenal: 2, mensual: 30 / 7 };
 
-function calcularHorasEsperadasPorPeriodo(jornadaHorasDia, diasDescansoSemana, periodicidadPago) {
+function calcularHorasEsperadasSemana(jornadaHorasDia, diasDescansoSemana) {
   const diasTrabajadosSemana = Math.max(0, 7 - Number(diasDescansoSemana));
-  const horasEsperadasSemana = Number(jornadaHorasDia) * diasTrabajadosSemana;
+  return Number((Number(jornadaHorasDia) * diasTrabajadosSemana).toFixed(2));
+}
+
+function calcularHorasEsperadasPorPeriodo(jornadaHorasDia, diasDescansoSemana, periodicidadPago) {
+  const horasEsperadasSemana = calcularHorasEsperadasSemana(jornadaHorasDia, diasDescansoSemana);
   const factor = FACTOR_PERIODICIDAD[periodicidadPago] || FACTOR_PERIODICIDAD.quincenal;
   return Number((horasEsperadasSemana * factor).toFixed(2));
 }
@@ -18,4 +22,4 @@ function calcularValorHora(salarioFijo, jornadaHorasDia, diasDescansoSemana, per
   return Number((Number(salarioFijo) / horasEsperadas).toFixed(2));
 }
 
-module.exports = { calcularHorasEsperadasPorPeriodo, calcularValorHora };
+module.exports = { calcularHorasEsperadasSemana, calcularHorasEsperadasPorPeriodo, calcularValorHora };

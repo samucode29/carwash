@@ -1626,6 +1626,12 @@ const app = {
       const c = await ApiCliente.get(`/api/nomina/empleados/${this.payingEmpleadoId}/calculo-pago?periodo_inicio=${inicio}&periodo_fin=${fin}`);
       document.getElementById('pagSalValorHora').value = this.formatMoney(c.valorHora);
       document.getElementById('pagSalHorasTrabajadas').value = `${c.horasTrabajadas} hrs (jornada esperada: ${c.horasEsperadasPeriodo} hrs)`;
+      document.getElementById('pagSalMontoNormal').value = `${this.formatMoney(c.montoNormal)} (${c.horasNormales} hrs)`;
+      document.getElementById('pagSalMontoExtra').value = `${this.formatMoney(c.montoExtra)} (${c.horasExtra} hrs a ${this.formatMoney(c.valorHoraExtra)}/hr)`;
+      const infoExtra = document.getElementById('pagSalHorasExtraInfo');
+      infoExtra.textContent = c.horasExtra > 0
+        ? `⚠ La jornada semanal esperada es de ${c.horasEsperadasSemana} hrs. Este empleado superó ese límite en al menos una semana del período, por eso ${c.horasExtra} hrs se pagan al doble.`
+        : `Jornada semanal esperada: ${c.horasEsperadasSemana} hrs. No hubo horas extra en el período.`;
       document.getElementById('pagSalBase').value = c.montoCalculado;
       this.recalcSalarioTotal();
     } catch (err) {

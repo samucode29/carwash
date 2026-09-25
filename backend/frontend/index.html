@@ -1458,8 +1458,19 @@
             <input type="text" id="pagSalHorasTrabajadas" readonly class="input-readonly">
           </div>
         </div>
+        <p class="text-sm text-muted" id="pagSalHorasExtraInfo"></p>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Monto Horas Normales:</label>
+            <input type="text" id="pagSalMontoNormal" readonly class="input-readonly">
+          </div>
+          <div class="form-group flex-1">
+            <label>Monto Horas Extra (doble):</label>
+            <input type="text" id="pagSalMontoExtra" readonly class="input-readonly">
+          </div>
+        </div>
         <div class="form-group">
-          <label>Monto Calculado (Valor Hora × Horas Trabajadas):</label>
+          <label>Monto Calculado (Normal + Extra):</label>
           <input type="number" id="pagSalBase" readonly class="input-readonly">
         </div>
         <div class="form-group">
