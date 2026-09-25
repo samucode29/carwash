@@ -115,6 +115,10 @@ async function crearOrden(req, res) {
 /**
  * Cambia el estado de una orden (RF10).
  */
+// A partir de "en_proceso" siempre debe haber al menos un lavador asignado
+// a la orden; sin lavador no se permite avanzar en ningún caso.
+const ESTADOS_QUE_REQUIEREN_LAVADOR = ['en_proceso', 'terminado', 'entregado'];
+
 async function actualizarEstadoOrden(req, res) {
   const id = Number(req.params.id);
   const { estado } = req.body;
@@ -125,6 +129,14 @@ async function actualizarEstadoOrden(req, res) {
 
   const orden = await OrdenServicioRepositorio.obtenerOrdenPorId(id);
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
+
+  if (ESTADOS_QUE_REQUIEREN_LAVADOR.includes(estado)) {
+    const lavadoresPorOrden = await OrdenServicioRepositorio.obtenerLavadoresPorOrdenes([id]);
+    const tieneLavador = (lavadoresPorOrden[id] || []).length > 0;
+    if (!tieneLavador) {
+      return res.status(400).json({ error: `No se puede pasar la orden a "${estado}" sin un lavador asignado. Asigne un lavador primero.` });
+    }
+  }
 
   const estadoAnterior = orden.estado;
   await OrdenServicioRepositorio.actualizarEstado(id, estado);
@@ -146,6 +158,9 @@ async function asignarLavadores(req, res) {
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
 
   const lavadoresAsignados = await calcularAsignacionLavadores(lavadores_ids, Number(orden.total));
+  if (lavadoresAsignados.length === 0) {
+    return res.status(400).json({ error: 'No hay lavadores disponibles para asignar en este momento (deben haber registrado entrada hoy y estar libres). La orden permanece en "Recibido".' });
+  }
   await OrdenServicioRepositorio.reemplazarLavadoresAsignados(id, lavadoresAsignados);
 
   await AuditoriaRepositorio.registrar(

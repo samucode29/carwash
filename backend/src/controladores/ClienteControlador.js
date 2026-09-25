@@ -28,6 +28,21 @@ async function crearClienteConVehiculo(req, res) {
   res.status(201).json({ cliente, vehiculo });
 }
 
+async function actualizarCliente(req, res) {
+  const id = Number(req.params.id);
+  const { nombre, telefono, correo } = req.body;
+  if (!nombre || !telefono) {
+    return res.status(400).json({ error: 'Nombre y teléfono son obligatorios.' });
+  }
+
+  const cliente = await ClienteRepositorio.obtenerClientePorId(id);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+
+  const actualizado = await ClienteRepositorio.actualizarCliente(id, { nombre, telefono, correo: correo || '' });
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_cliente', `Cliente #${id} actualizado: ${nombre}`);
+  res.json(actualizado);
+}
+
 async function buscarVehiculoPorPlaca(req, res) {
   const { placa } = req.query;
   if (!placa) return res.status(400).json({ error: 'Debe ingresar una placa a buscar.' });
@@ -43,4 +58,4 @@ async function buscarVehiculoPorPlaca(req, res) {
   res.json({ encontrado: true, vehiculo, cliente, historial });
 }
 
-module.exports = { listarClientes, crearClienteConVehiculo, buscarVehiculoPorPlaca };
+module.exports = { listarClientes, crearClienteConVehiculo, actualizarCliente, buscarVehiculoPorPlaca };

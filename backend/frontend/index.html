@@ -37,6 +37,7 @@
         <button class="tab-btn" data-tab="nomina" onclick="app.setTab('nomina')">Personal &amp; Nómina</button>
         <button class="tab-btn" data-tab="caja" onclick="app.setTab('caja')">Caja Diaria</button>
         <button class="tab-btn" data-tab="facturas" onclick="app.setTab('facturas')">Facturas</button>
+        <button class="tab-btn" data-tab="clientes" onclick="app.setTab('clientes')">Clientes</button>
         <button class="tab-btn admin-only" data-tab="dashboard" onclick="app.setTab('dashboard')">Reportes</button>
       </nav>
     </aside>
@@ -638,6 +639,37 @@
         </section>
 
         <!-- ========================================== -->
+        <!-- 7C. CLIENTES (administrar datos de contacto y vehículos) -->
+        <!-- ========================================== -->
+        <section id="tab-clientes" class="tab-view">
+          <div class="section-top-bar">
+            <div>
+              <h2>Clientes</h2>
+              <p class="text-muted">Administra los datos de contacto de los clientes registrados. Para ver quién está activo/inactivo según sus compras, revisa el Reporte de Clientes.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-primary" onclick="app.abrirModalNuevoCliente()">+ Nuevo Cliente</button>
+            </div>
+          </div>
+
+          <div class="card-table-wrapper mt-3">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Teléfono</th>
+                  <th>Correo</th>
+                  <th>Vehículos</th>
+                  <th>Registrado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="clientesAdminTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
         <!-- 8. REPORTES -->
         <!-- ========================================== -->
         <section id="tab-dashboard" class="tab-view admin-only">
@@ -1094,6 +1126,36 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalNuevoCliente')">Cancelar</button>
         <button class="btn btn-primary" onclick="app.guardarNuevoCliente()">Guardar Cliente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Editar Cliente -->
+  <div id="modalEditarCliente" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Editar Cliente</h3>
+        <button class="close-btn" onclick="app.closeModal('modalEditarCliente')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Nombre Completo: *</label>
+            <input type="text" id="editClienteNombre">
+          </div>
+          <div class="form-group flex-1">
+            <label>Teléfono: *</label>
+            <input type="text" id="editClienteTelefono">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Correo Electrónico (Opcional):</label>
+          <input type="email" id="editClienteCorreo">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalEditarCliente')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.guardarEdicionCliente()">Guardar Cambios</button>
       </div>
     </div>
   </div>

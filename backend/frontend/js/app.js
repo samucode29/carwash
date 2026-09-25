@@ -37,7 +37,9 @@ const app = {
   editingServiceId: null,
   editingWasherId: null,
   editingEmpleadoId: null,
+  editingClienteId: null,
   pendingOrdenPayload: null,
+  pendingOrdenId: null,
   pendingOrdenOnSuccess: null,
   selectedWashersAsignacion: [],
 
@@ -114,6 +116,7 @@ const app = {
       case 'nomina': this.loadNomina(); break;
       case 'caja': this.loadCaja(); break;
       case 'facturas': this.loadFacturas(); break;
+      case 'clientes': this.loadClientesAdmin(); break;
       case 'dashboard': this.loadReporteActivo(); break;
     }
   },
@@ -629,7 +632,10 @@ const app = {
     let actionButtons = '';
 
     if (o.estado === 'recibido') {
-      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'en_proceso')">Iniciar Lavado</button>`;
+      // Una orden en "Recibido" siempre llega sin lavador (si tuviera uno,
+      // ya estaría en "En Proceso"): no hay botón para saltar de estado sin
+      // asignar uno primero. Asignar lavador ya la mueve a "En Proceso".
+      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.abrirModalAsignarLavadorParaOrden(${o.id})">Asignar Lavador</button>`;
     } else if (o.estado === 'en_proceso') {
       actionButtons = `<button class="btn btn-sm btn-success" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'terminado')">Terminar Lavado</button>`;
     } else if (o.estado === 'terminado') {
@@ -661,7 +667,7 @@ const app = {
       }
       this.loadOrders();
     } catch (err) {
-      this.toast('Error al actualizar estado de la orden.', 'error');
+      this.toast(err.message || 'Error al actualizar estado de la orden.', 'error');
     }
   },
 
@@ -942,12 +948,32 @@ const app = {
    */
   async abrirModalAsignarLavador(payloadBase, onSuccess) {
     this.pendingOrdenPayload = payloadBase;
+    this.pendingOrdenId = null;
     this.pendingOrdenOnSuccess = onSuccess;
     this.selectedWashersAsignacion = [];
     document.getElementById('asignLavAutoCheck').checked = true;
     document.getElementById('asignLavManualWrapper').classList.add('hidden');
     document.getElementById('asignLavAutoIndicator').classList.remove('hidden');
     await this.loadWashers(); // refresca disponible_hoy antes de mostrar el picker
+    this.renderAsignLavPills();
+    this.openModal('modalAsignarLavador');
+  },
+
+  /**
+   * Igual que abrirModalAsignarLavador, pero para asignar un lavador a una
+   * orden que ya existe y está en "Recibido" (sin lavador todavía), en vez
+   * de crear una orden nueva. Al confirmar, la orden pasa automáticamente
+   * a "En Proceso" (RF10): sin lavador no puede avanzar de estado.
+   */
+  async abrirModalAsignarLavadorParaOrden(ordenId) {
+    this.pendingOrdenPayload = null;
+    this.pendingOrdenId = ordenId;
+    this.pendingOrdenOnSuccess = () => this.loadOrders();
+    this.selectedWashersAsignacion = [];
+    document.getElementById('asignLavAutoCheck').checked = true;
+    document.getElementById('asignLavManualWrapper').classList.add('hidden');
+    document.getElementById('asignLavAutoIndicator').classList.remove('hidden');
+    await this.loadWashers();
     this.renderAsignLavPills();
     this.openModal('modalAsignarLavador');
   },
@@ -1000,17 +1026,24 @@ const app = {
 
   async confirmarAsignacionLavador() {
     const isAuto = document.getElementById('asignLavAutoCheck').checked;
-    const payload = { ...this.pendingOrdenPayload, lavadores_ids: isAuto ? [] : this.selectedWashersAsignacion };
+    const lavadores_ids = isAuto ? [] : this.selectedWashersAsignacion;
 
     try {
-      await ApiCliente.post('/api/ordenes', payload);
-      this.toast('Orden de servicio iniciada con éxito.', 'success');
+      if (this.pendingOrdenId) {
+        await ApiCliente.post(`/api/ordenes/${this.pendingOrdenId}/asignar-lavadores`, { lavadores_ids });
+        this.toast('Lavador asignado: la orden pasó a En Proceso.', 'success');
+      } else {
+        const payload = { ...this.pendingOrdenPayload, lavadores_ids };
+        await ApiCliente.post('/api/ordenes', payload);
+        this.toast('Orden de servicio iniciada con éxito.', 'success');
+      }
       this.closeModal('modalAsignarLavador');
       if (this.pendingOrdenOnSuccess) this.pendingOrdenOnSuccess();
       this.pendingOrdenPayload = null;
+      this.pendingOrdenId = null;
       this.pendingOrdenOnSuccess = null;
     } catch (err) {
-      this.toast(err.message || 'Error al iniciar la orden.', 'error');
+      this.toast(err.message || 'Error al asignar lavador.', 'error');
     }
   },
 
@@ -2352,8 +2385,64 @@ const app = {
       document.getElementById('posClienteSelect').value = data.cliente.id;
       this.onPosClienteChange();
       setTimeout(() => { if (data.vehiculo) document.getElementById('posVehiculoSelect').value = data.vehiculo.id; }, 100);
+      if (this.activeTab === 'clientes') this.loadClientesAdmin();
     } catch (err) {
       this.toast('Error al registrar cliente.', 'error');
+    }
+  },
+
+  // ===========================================================================
+  // ADMINISTRAR CLIENTES (pestaña "Clientes")
+  // ===========================================================================
+  async loadClientesAdmin() {
+    try {
+      await this.loadClients();
+      const tbody = document.getElementById('clientesAdminTableBody');
+      if (!tbody) return;
+
+      if (this.clients.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay clientes registrados todavía.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = this.clients.map(c => {
+        const placas = (c.vehiculos || []).map(v => v.placa).join(', ') || 'Sin vehículos';
+        const registrado = c.creado_en ? String(c.creado_en).substring(0, 10) : '--';
+        return `
+          <tr>
+            <td><strong>${c.nombre}</strong></td>
+            <td>${c.telefono}</td>
+            <td>${c.correo || '--'}</td>
+            <td>${placas}</td>
+            <td>${registrado}</td>
+            <td><button class="btn btn-sm btn-secondary" onclick="app.abrirModalEditarCliente(${c.id}, '${c.nombre.replace(/'/g, "\\'")}', '${c.telefono}', '${(c.correo || '').replace(/'/g, "\\'")}')">Editar</button></td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) { console.error(err); }
+  },
+
+  abrirModalEditarCliente(id, nombre, telefono, correo) {
+    this.editingClienteId = id;
+    document.getElementById('editClienteNombre').value = nombre;
+    document.getElementById('editClienteTelefono').value = telefono;
+    document.getElementById('editClienteCorreo').value = correo;
+    this.openModal('modalEditarCliente');
+  },
+
+  async guardarEdicionCliente() {
+    const nombre = document.getElementById('editClienteNombre').value;
+    const telefono = document.getElementById('editClienteTelefono').value;
+    const correo = document.getElementById('editClienteCorreo').value;
+    if (!nombre || !telefono) { this.toast('Nombre y teléfono son obligatorios.', 'warning'); return; }
+
+    try {
+      await ApiCliente.put(`/api/clientes/${this.editingClienteId}`, { nombre, telefono, correo });
+      this.toast('Cliente actualizado con éxito.', 'success');
+      this.closeModal('modalEditarCliente');
+      this.loadClientesAdmin();
+    } catch (err) {
+      this.toast(err.message || 'Error al actualizar cliente.', 'error');
     }
   },
 

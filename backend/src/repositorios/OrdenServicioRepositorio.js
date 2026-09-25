@@ -142,6 +142,10 @@ async function reemplazarLavadoresAsignados(ordenId, lavadoresAsignados) {
     }
     if (lavadoresAsignados.length > 0) {
       await conexion.query(`UPDATE ordenes_servicio SET estado = 'en_proceso' WHERE id = ? AND estado = 'recibido'`, [ordenId]);
+    } else {
+      // Sin ningún lavador la orden no puede seguir "en proceso": si se
+      // quitan todos, vuelve a la fila de recibidos hasta que se asigne uno.
+      await conexion.query(`UPDATE ordenes_servicio SET estado = 'recibido' WHERE id = ? AND estado = 'en_proceso'`, [ordenId]);
     }
     await conexion.commit();
   } catch (err) {

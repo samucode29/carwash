@@ -22,6 +22,25 @@ async function crearCliente(datos) {
   return filas[0];
 }
 
+async function obtenerClientePorId(id) {
+  const [filas] = await pool.query(`SELECT * FROM clientes WHERE id = ?`, [id]);
+  return filas[0] || null;
+}
+
+async function actualizarCliente(id, cambios) {
+  const campos = [];
+  const valores = [];
+  for (const [columna, valor] of Object.entries(cambios)) {
+    campos.push(`${columna} = ?`);
+    valores.push(valor);
+  }
+  if (campos.length === 0) return obtenerClientePorId(id);
+
+  valores.push(id);
+  await pool.query(`UPDATE clientes SET ${campos.join(', ')} WHERE id = ?`, valores);
+  return obtenerClientePorId(id);
+}
+
 async function obtenerVehiculoPorPlaca(placa) {
   const [filas] = await pool.query(`SELECT * FROM vehiculos WHERE placa = ?`, [placa]);
   return filas[0] || null;
@@ -53,6 +72,8 @@ async function obtenerHistorialPorVehiculo(vehiculoId) {
 module.exports = {
   listarConVehiculos,
   crearCliente,
+  obtenerClientePorId,
+  actualizarCliente,
   obtenerVehiculoPorPlaca,
   crearVehiculo,
   obtenerHistorialPorVehiculo
