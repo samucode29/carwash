@@ -12,6 +12,7 @@ router.use('/auth', require('./auth.rutas'));
 router.use('/personal', require('./personal.rutas'));
 router.use('/clientes', require('./clientes.rutas'));
 router.use('/servicios', require('./servicios.rutas'));
+router.use('/tipos-vehiculo', require('./tiposVehiculo.rutas'));
 router.use('/', require('./agenda.rutas'));          // expone /api/citas y /api/turnos
 router.use('/ordenes', require('./ordenes.rutas'));
 router.use('/caja', require('./caja.rutas'));

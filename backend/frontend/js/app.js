@@ -175,6 +175,7 @@ const app = {
   },
 
   async loadInitialData() {
+    await this.loadTiposVehiculo();
     await Promise.all([
       this.loadServices(),
       this.loadWashers(),
@@ -184,6 +185,66 @@ const app = {
       this.loadOrders()
     ]);
     this.updateRolePermissions();
+  },
+
+  // ===========================================================================
+  // CATÁLOGO DE TIPOS DE VEHÍCULO (usado en Servicios, Vehículos y el POS)
+  // ===========================================================================
+  async loadTiposVehiculo() {
+    try {
+      this.tiposVehiculo = await ApiCliente.get('/api/tipos-vehiculo');
+      const activos = this.tiposVehiculo.filter(t => t.estado === 'activo');
+      const opciones = activos.map(t => `<option value="${t.nombre}">${t.nombre[0].toUpperCase() + t.nombre.slice(1)}</option>`).join('');
+
+      const elServ = document.getElementById('servTipoVehiculo');
+      if (elServ) elServ.innerHTML = `<option value="">Todos los tipos</option>${opciones}`;
+
+      ['posAnonTipo', 'newClientTipo', 'turnoTipo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = opciones;
+      });
+
+      const elPills = document.getElementById('tiposVehiculoPillList');
+      if (elPills) {
+        elPills.innerHTML = this.tiposVehiculo.map(t => `
+          <div class="washer-pill ${t.estado === 'inactivo' ? 'disabled' : ''}">
+            <span>${t.nombre[0].toUpperCase() + t.nombre.slice(1)}</span>
+            <button class="btn btn-sm btn-outline admin-only" style="margin-left: 8px" onclick="app.toggleEstadoTipoVehiculo(${t.id}, '${t.estado}')">${t.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
+          </div>
+        `).join('');
+        this.updateRolePermissions();
+      }
+    } catch (err) { console.error(err); }
+  },
+
+  abrirModalNuevoTipoVehiculo() {
+    document.getElementById('nuevoTipoVehiculoNombre').value = '';
+    this.openModal('modalNuevoTipoVehiculo');
+  },
+
+  async guardarNuevoTipoVehiculo() {
+    const nombre = document.getElementById('nuevoTipoVehiculoNombre').value.trim();
+    if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
+
+    try {
+      await ApiCliente.post('/api/tipos-vehiculo', { nombre });
+      this.toast(`Tipo de vehículo "${nombre}" creado.`, 'success');
+      this.closeModal('modalNuevoTipoVehiculo');
+      await this.loadTiposVehiculo();
+    } catch (err) {
+      this.toast(err.message || 'Error al crear el tipo de vehículo.', 'error');
+    }
+  },
+
+  async toggleEstadoTipoVehiculo(id, estadoActual) {
+    const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+    try {
+      await ApiCliente.put(`/api/tipos-vehiculo/${id}`, { estado: nuevoEstado });
+      this.toast(`Tipo de vehículo ${nuevoEstado === 'activo' ? 'activado' : 'inactivado'}.`, 'success');
+      await this.loadTiposVehiculo();
+    } catch (err) {
+      this.toast(err.message || 'Error al actualizar el tipo de vehículo.', 'error');
+    }
   },
 
   // ===========================================================================
@@ -295,7 +356,7 @@ const app = {
         const el = document.getElementById(id);
         if (el) {
           el.innerHTML = this.services.map(s => `
-            <option value="${s.id}">${s.nombre} (${s.tipo_vehiculo}) - ${this.formatMoney(s.precio)}</option>
+            <option value="${s.id}">${s.nombre} (${s.tipo_vehiculo || 'Todos'}) - ${this.formatMoney(s.precio)}</option>
           `).join('');
         }
       });
@@ -311,12 +372,12 @@ const app = {
 
     let filtrados = (this.services || []).filter(s => s.activo);
     if (isAnon) {
-      filtrados = filtrados.filter(s => s.tipo_vehiculo === anonTipo || s.tipo_vehiculo === 'ambos');
+      filtrados = filtrados.filter(s => !s.tipo_vehiculo || s.tipo_vehiculo === anonTipo);
     }
 
     grid.innerHTML = filtrados.map(s => `
       <div class="service-card ${this.selectedServiceId === s.id ? 'selected' : ''}" onclick="app.selectService(${s.id})">
-        <span class="service-card-tag">${s.tipo_vehiculo}</span>
+        <span class="service-card-tag">${s.tipo_vehiculo || 'Todos'}</span>
         <div class="service-card-name">${s.nombre}</div>
         <div class="service-card-desc">${s.descripcion || 'Sin descripción'}</div>
         <div class="service-card-footer">
@@ -1257,7 +1318,7 @@ const app = {
       tbody.innerHTML = this.servicios.map(s => `
         <tr>
           <td><strong>${s.nombre}</strong>${s.descripcion ? `<br><span class="text-sm text-muted">${s.descripcion}</span>` : ''}</td>
-          <td>${s.tipo_vehiculo}</td>
+          <td>${s.tipo_vehiculo || 'Todos'}</td>
           <td>${this.formatMoney(s.precio)}</td>
           <td>${s.duracion_estimada_min} min</td>
           <td><span class="role-badge" style="background: ${s.activo ? '#10b981' : '#ef4444'}">${s.activo ? 'ACTIVO' : 'INACTIVO'}</span></td>
@@ -1274,7 +1335,7 @@ const app = {
     this.editingServiceId = null;
     document.getElementById('modalServicioTitulo').textContent = 'Nuevo Servicio';
     document.getElementById('servNombre').value = '';
-    document.getElementById('servTipoVehiculo').value = 'carro';
+    document.getElementById('servTipoVehiculo').value = '';
     document.getElementById('servDuracion').value = 30;
     document.getElementById('servPrecio').value = 0;
     document.getElementById('servDescripcion').value = '';
@@ -1287,7 +1348,7 @@ const app = {
     this.editingServiceId = id;
     document.getElementById('modalServicioTitulo').textContent = `Editar Servicio: ${s.nombre}`;
     document.getElementById('servNombre').value = s.nombre;
-    document.getElementById('servTipoVehiculo').value = s.tipo_vehiculo;
+    document.getElementById('servTipoVehiculo').value = s.tipo_vehiculo || '';
     document.getElementById('servDuracion').value = s.duracion_estimada_min;
     document.getElementById('servPrecio').value = s.precio;
     document.getElementById('servDescripcion').value = s.descripcion || '';
@@ -1903,10 +1964,10 @@ const app = {
 
       this.renderBarChart('ventasPorServicioChart', Object.entries(r.porServicio).map(([label, value]) => ({ label, value })), { color: '#0077b6' });
       this.renderDonutChart('ventasPorMetodoChart', Object.entries(r.porMetodoPago).map(([label, value], i) => ({ label: label.toUpperCase(), value, color: ['#0077b6', '#00b4d8', '#10b981', '#f59e0b'][i % 4] })));
-      this.renderDonutChart('ventasPorVehiculoChart', [
-        { label: 'Carros', value: r.porVehiculo.carro, color: '#0077b6' },
-        { label: 'Motos', value: r.porVehiculo.moto, color: '#00b4d8' }
-      ]);
+      const coloresVeh = ['#0077b6', '#00b4d8', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
+      this.renderDonutChart('ventasPorVehiculoChart', Object.entries(r.porVehiculo).map(([tipo, value], i) => ({
+        label: tipo[0].toUpperCase() + tipo.slice(1), value, color: coloresVeh[i % coloresVeh.length]
+      })));
 
       const elPorLav = document.getElementById('ventasPorLavadorChart');
       if (elPorLav) {
@@ -2071,13 +2132,21 @@ const app = {
       document.getElementById('dashGananciaNeta').textContent = this.formatMoney(data.gananciaNeta);
       document.getElementById('dashMargenNeto').textContent = `Margen Rentabilidad: ${data.margenPorcentaje}%`;
 
-      const cCount = data.distribucionVehiculos.carro || 0;
-      const mCount = data.distribucionVehiculos.moto || 0;
-      const totVeh = cCount + mCount || 1;
-      document.getElementById('dashCarrosCount').textContent = `${cCount} (${Math.round((cCount / totVeh) * 100)}%)`;
-      document.getElementById('dashMotosCount').textContent = `${mCount} (${Math.round((mCount / totVeh) * 100)}%)`;
-      document.getElementById('dashCarrosBar').style.width = `${(cCount / totVeh) * 100}%`;
-      document.getElementById('dashMotosBar').style.width = `${(mCount / totVeh) * 100}%`;
+      const coloresVehiculo = ['#0077b6', '#00b4d8', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
+      const entradasVeh = Object.entries(data.distribucionVehiculos || {});
+      const totVeh = entradasVeh.reduce((s, [, c]) => s + c, 0) || 1;
+      const elRatioBars = document.getElementById('dashVehiculosRatioBars');
+      if (elRatioBars) {
+        elRatioBars.innerHTML = entradasVeh.map(([tipo, count], i) => `
+          <div class="ratio-item ${i > 0 ? 'mt-3' : ''}">
+            <div class="d-flex justify-between text-sm mb-1">
+              <span>${tipo[0].toUpperCase() + tipo.slice(1)}</span>
+              <span>${count} (${Math.round((count / totVeh) * 100)}%)</span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" style="width: ${(count / totVeh) * 100}%; background: ${coloresVehiculo[i % coloresVehiculo.length]}"></div></div>
+          </div>
+        `).join('') || '<p class="text-sm text-muted">Sin vehículos atendidos en el período.</p>';
+      }
 
       document.getElementById('dashServiciosList').innerHTML = Object.entries(data.serviciosStats || {}).map(([nombre, stat]) => `
         <div class="stats-row"><span>${nombre}</span><strong>${stat.count} atendidos (${this.formatMoney(stat.total)})</strong></div>

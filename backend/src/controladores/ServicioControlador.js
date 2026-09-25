@@ -12,13 +12,13 @@ async function listarServicios(req, res) {
 
 async function crearServicio(req, res) {
   const { nombre, tipo_vehiculo, descripcion, precio, duracion_estimada_min } = req.body;
-  if (!nombre || !precio || !tipo_vehiculo) {
-    return res.status(400).json({ error: 'Nombre, tipo de vehículo y precio son obligatorios.' });
+  if (!nombre || !precio) {
+    return res.status(400).json({ error: 'Nombre y precio son obligatorios.' });
   }
 
   const nuevo = await ServicioRepositorio.crear({
     nombre,
-    tipoVehiculo: tipo_vehiculo,
+    tipoVehiculo: tipo_vehiculo || null, // sin tipo = aplica a todos los tipos de vehículo
     descripcion,
     precio: parseFloat(precio),
     duracionEstimadaMin: parseInt(duracion_estimada_min, 10)
@@ -34,7 +34,7 @@ async function actualizarServicio(req, res) {
 
   const cambios = {};
   if (nombre) cambios.nombre = nombre;
-  if (tipo_vehiculo) cambios.tipo_vehiculo = tipo_vehiculo;
+  if (tipo_vehiculo !== undefined) cambios.tipo_vehiculo = tipo_vehiculo || null; // '' = todos los tipos
   if (descripcion !== undefined) cambios.descripcion = descripcion;
   if (precio !== undefined) cambios.precio = parseFloat(precio);
   if (duracion_estimada_min !== undefined) cambios.duracion_estimada_min = parseInt(duracion_estimada_min, 10);

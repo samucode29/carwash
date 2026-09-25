@@ -72,11 +72,11 @@ async function calcularReporte(inicio, fin) {
   const gananciaNeta = totalIngresos - (costoInsumos + totalGastos + totalComisionesLavadores);
   const margenPorcentaje = totalIngresos > 0 ? Number(((gananciaNeta / totalIngresos) * 100).toFixed(1)) : 0;
 
-  const distribucionVehiculos = { carro: 0, moto: 0 };
+  const distribucionVehiculos = {};
   const serviciosStats = {};
   ordenesPagadas.forEach(o => {
-    if (o.tipo_vehiculo === 'moto') distribucionVehiculos.moto += 1;
-    else distribucionVehiculos.carro += 1;
+    const tipo = o.tipo_vehiculo || 'carro';
+    distribucionVehiculos[tipo] = (distribucionVehiculos[tipo] || 0) + 1;
 
     const nombreServicio = o.servicio_nombre || 'Otros';
     if (!serviciosStats[nombreServicio]) serviciosStats[nombreServicio] = { count: 0, total: 0 };
@@ -111,15 +111,16 @@ async function calcularReporteVentas(inicio, fin) {
 
   const porServicio = {};
   const porMetodoPago = {};
-  const porVehiculo = { carro: 0, moto: 0 };
+  const porVehiculo = {};
   let total = 0;
   pagos.forEach(p => {
     const monto = Number(p.monto);
     total += monto;
     const servicio = p.servicio_nombre || 'Otros';
+    const tipoVeh = p.tipo_vehiculo || 'carro';
     porServicio[servicio] = (porServicio[servicio] || 0) + monto;
     porMetodoPago[p.metodo_pago] = (porMetodoPago[p.metodo_pago] || 0) + monto;
-    porVehiculo[p.tipo_vehiculo === 'moto' ? 'moto' : 'carro'] += monto;
+    porVehiculo[tipoVeh] = (porVehiculo[tipoVeh] || 0) + monto;
   });
 
   const [topClientes] = await pool.query(

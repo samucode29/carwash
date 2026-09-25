@@ -39,7 +39,7 @@ VALUES
  ('Lavado Completo Carro', 'carro', 'Exterior + interior profundo, aspirado, silicona en tablero y aplicación de cera.', 32000, 45, TRUE),
  ('Lavado Básico Moto', 'moto', 'Lavado exterior de chasis, plásticos y rines con protección.', 10000, 20, TRUE),
  ('Lavado Especial Moto + Cera', 'moto', 'Lavado detallado, desengrasado de cadena y motor, cera protectora en tanques y carenajes.', 18000, 35, TRUE),
- ('Polichado & Encerado Diamante', 'ambos', 'Descontaminado de pintura, polichado a máquina y sellado cerámico de cera.', 50000, 60, TRUE);
+ ('Polichado & Encerado Diamante', NULL, 'Descontaminado de pintura, polichado a máquina y sellado cerámico de cera. Aplica a cualquier tipo de vehículo.', 50000, 60, TRUE);
 
 -- Clientes, vehículos, turnos, citas y órdenes NO se precargan: se crean
 -- desde la operación diaria real (POS, agenda, etc.).

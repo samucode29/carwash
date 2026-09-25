@@ -389,6 +389,15 @@
             </div>
           </div>
 
+          <div class="chart-card mt-3">
+            <div class="d-flex justify-between" style="align-items: center">
+              <h4 style="margin: 0">Tipos de Vehículo</h4>
+              <button class="btn btn-sm btn-outline" onclick="app.abrirModalNuevoTipoVehiculo()">+ Nuevo Tipo</button>
+            </div>
+            <p class="text-sm text-muted mt-1">Se usan en Servicios, Vehículos y el POS. No se eliminan, solo se inactivan.</p>
+            <div class="washers-pill-list mt-2" id="tiposVehiculoPillList"></div>
+          </div>
+
           <div class="card-table-wrapper mt-3">
             <table class="data-table">
               <thead>
@@ -709,22 +718,7 @@
             <!-- 1. Distribución Carros vs Motos -->
             <div class="chart-card">
               <h4>Vehículos Atendidos</h4>
-              <div class="vehicle-ratio-bars mt-3">
-                <div class="ratio-item">
-                  <div class="d-flex justify-between text-sm mb-1">
-                    <span>Carros</span>
-                    <span id="dashCarrosCount">0</span>
-                  </div>
-                  <div class="progress-track"><div class="progress-fill bg-blue" id="dashCarrosBar" style="width: 50%"></div></div>
-                </div>
-                <div class="ratio-item mt-3">
-                  <div class="d-flex justify-between text-sm mb-1">
-                    <span>Motos</span>
-                    <span id="dashMotosCount">0</span>
-                  </div>
-                  <div class="progress-track"><div class="progress-fill bg-cyan" id="dashMotosBar" style="width: 50%"></div></div>
-                </div>
-              </div>
+              <div class="vehicle-ratio-bars mt-3" id="dashVehiculosRatioBars"></div>
             </div>
 
             <!-- 2. Servicios Más Solicitados -->
@@ -1882,11 +1876,9 @@
         </div>
         <div class="form-row">
           <div class="form-group flex-1">
-            <label>Tipo de Vehículo: *</label>
+            <label>Tipo de Vehículo:</label>
             <select id="servTipoVehiculo">
-              <option value="carro">Carro</option>
-              <option value="moto">Moto</option>
-              <option value="ambos">Ambos</option>
+              <option value="">Todos los tipos</option>
             </select>
           </div>
           <div class="form-group flex-1">
@@ -1906,6 +1898,26 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalServicio')">Cancelar</button>
         <button class="btn btn-primary" onclick="app.guardarServicio()">Guardar Servicio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Nuevo Tipo de Vehículo -->
+  <div id="modalNuevoTipoVehiculo" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Nuevo Tipo de Vehículo</h3>
+        <button class="close-btn" onclick="app.closeModal('modalNuevoTipoVehiculo')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre: *</label>
+          <input type="text" id="nuevoTipoVehiculoNombre" placeholder="Ej: camioneta, bus, bicicleta">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalNuevoTipoVehiculo')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.guardarNuevoTipoVehiculo()">Crear Tipo</button>
       </div>
     </div>
   </div>

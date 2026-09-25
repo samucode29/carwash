@@ -75,6 +75,17 @@ CREATE TABLE lavadores (
 -- ============================================================================
 -- 3. CLIENTES Y VEHÍCULOS
 -- ============================================================================
+-- Catálogo editable de tipos de vehículo (antes era un ENUM fijo a
+-- carro/moto): el administrador puede agregar más desde un pequeño menú.
+CREATE TABLE tipos_vehiculo (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    nombre      VARCHAR(30) NOT NULL UNIQUE,
+    estado      ENUM('activo','inactivo') NOT NULL DEFAULT 'activo',
+    creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+INSERT INTO tipos_vehiculo (nombre) VALUES ('carro'), ('moto');
+
 CREATE TABLE clientes (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     nombre      VARCHAR(150) NOT NULL,
@@ -89,7 +100,7 @@ CREATE TABLE vehiculos (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     cliente_id  INT NULL,
     placa       VARCHAR(15),
-    tipo        ENUM('carro','moto') NOT NULL,
+    tipo        VARCHAR(30) NOT NULL, -- nombre de tipos_vehiculo (no es FK dura para no romper si se inactiva un tipo con vehículos ya registrados)
     marca       VARCHAR(50),
     color       VARCHAR(30),
     creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -103,7 +114,7 @@ CREATE TABLE vehiculos (
 CREATE TABLE servicios (
     id                      INT AUTO_INCREMENT PRIMARY KEY,
     nombre                  VARCHAR(100) NOT NULL,
-    tipo_vehiculo           ENUM('carro','moto','ambos') NOT NULL,
+    tipo_vehiculo           VARCHAR(30) NULL, -- NULL = aplica a todos los tipos (reemplaza al antiguo valor fijo 'ambos')
     descripcion             VARCHAR(255),
     precio                  DECIMAL(12,2) NOT NULL,
     duracion_estimada_min   INT NOT NULL,
@@ -170,7 +181,7 @@ CREATE TABLE turnos (
     cita_id         INT NULL,        -- si esta fila viene de una cita agendada que se pasó a la fila
     numero_turno    INT NULL,        -- número de turno asignado a mano; si es NULL se usa el orden de llegada
     placa_temporal  VARCHAR(15),
-    tipo_vehiculo   ENUM('carro','moto') NOT NULL DEFAULT 'carro',
+    tipo_vehiculo   VARCHAR(30) NOT NULL DEFAULT 'carro',
     servicio_id     INT NOT NULL,
     fecha           DATE NOT NULL,
     hora_llegada    TIME NOT NULL,
@@ -196,7 +207,7 @@ CREATE TABLE ordenes_servicio (
     servicio_id             INT NOT NULL,
     es_venta_anonima        BOOLEAN NOT NULL DEFAULT FALSE,
     placa_anonima           VARCHAR(15),
-    tipo_vehiculo_anonimo   ENUM('carro','moto'),
+    tipo_vehiculo_anonimo   VARCHAR(30),
     estado                  ENUM('recibido','en_proceso','terminado','entregado','cancelado') NOT NULL DEFAULT 'recibido',
     total                   DECIMAL(12,2) NOT NULL,
     registrado_por          INT NOT NULL,
