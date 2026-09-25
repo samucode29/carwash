@@ -487,6 +487,7 @@ input[type="email"],
 input[type="number"],
 input[type="date"],
 input[type="time"],
+input[type="password"],
 select,
 textarea {
   width: 100%;
@@ -1702,6 +1703,7 @@ body.light-mode input[type="email"],
 body.light-mode input[type="number"],
 body.light-mode input[type="date"],
 body.light-mode input[type="time"],
+body.light-mode input[type="password"],
 body.light-mode select,
 body.light-mode textarea {
   background: #f8fafc;
@@ -1714,6 +1716,21 @@ body.light-mode select:focus,
 body.light-mode textarea:focus {
   border-color: #0284c7;
   background: #ffffff;
+}
+
+/* .btn-secondary y .toast usan variables que en modo claro quedan casi
+   blancas (--color-ocean-surface / --color-ocean-card) pero su texto
+   está fijo en blanco: sin este override quedan ilegibles. */
+body.light-mode .btn-secondary {
+  color: #0f172a;
+}
+body.light-mode .btn-secondary:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+body.light-mode .toast {
+  color: #0f172a;
+  box-shadow: 0 12px 32px rgba(2, 132, 199, 0.18), 0 1px 0 rgba(15, 23, 42, 0.08);
 }
 
 body.light-mode .plate-search-box {
