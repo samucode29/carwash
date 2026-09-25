@@ -257,6 +257,21 @@ CREATE TABLE orden_lavadores (
     UNIQUE KEY uq_orden_lavador (orden_id, lavador_id)
 ) ENGINE=InnoDB;
 
+-- Servicios adicionales agregados a una orden ya en curso (RF08): así un
+-- mismo vehículo puede recibir varios servicios en una sola visita sin
+-- generarle un turno/orden nuevo y duplicado.
+CREATE TABLE orden_servicios_extra (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    orden_id      INT NOT NULL,
+    servicio_id   INT NOT NULL,
+    precio        DECIMAL(12,2) NOT NULL,
+    agregado_por  INT NOT NULL,
+    creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ose_orden      FOREIGN KEY (orden_id)     REFERENCES ordenes_servicio(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ose_servicio   FOREIGN KEY (servicio_id)  REFERENCES servicios(id),
+    CONSTRAINT fk_ose_agregado   FOREIGN KEY (agregado_por) REFERENCES usuarios(id)
+) ENGINE=InnoDB;
+
 -- ============================================================================
 -- 8. PAGOS Y CAJA
 -- ============================================================================

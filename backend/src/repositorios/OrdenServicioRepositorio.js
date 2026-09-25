@@ -18,7 +18,7 @@ const SELECT_BASE = `
   LEFT JOIN pagos p ON p.orden_id = o.id
 `;
 
-function mapearOrden(fila, lavadoresPorOrden) {
+function mapearOrden(fila, lavadoresPorOrden, serviciosExtraPorOrden) {
   return {
     ...fila,
     cliente_nombre: fila.cliente_nombre_reg || (fila.es_venta_anonima ? 'Venta Anónima' : 'Sin registrar'),
@@ -27,7 +27,8 @@ function mapearOrden(fila, lavadoresPorOrden) {
     tipo_vehiculo: fila.tipo_vehiculo_reg || fila.tipo_vehiculo_anonimo || 'carro',
     vehiculo_marca: fila.vehiculo_marca ? `${fila.vehiculo_marca} (${fila.vehiculo_color || ''})` : '',
     pago: fila.metodo_pago ? { metodo_pago: fila.metodo_pago, monto: fila.pago_monto, fecha_pago: fila.fecha_pago } : null,
-    lavadores: lavadoresPorOrden[fila.id] || []
+    lavadores: lavadoresPorOrden[fila.id] || [],
+    servicios_extra: serviciosExtraPorOrden[fila.id] || []
   };
 }
 
@@ -48,6 +49,24 @@ async function obtenerLavadoresPorOrdenes(ordenIds) {
   return agrupado;
 }
 
+async function obtenerServiciosExtraPorOrdenes(ordenIds) {
+  if (ordenIds.length === 0) return {};
+  const [filas] = await pool.query(
+    `SELECT ose.orden_id, ose.id, ose.servicio_id, ose.precio, s.nombre AS servicio_nombre
+     FROM orden_servicios_extra ose
+     INNER JOIN servicios s ON s.id = ose.servicio_id
+     WHERE ose.orden_id IN (?)
+     ORDER BY ose.creado_en`,
+    [ordenIds]
+  );
+  const agrupado = {};
+  filas.forEach(f => {
+    if (!agrupado[f.orden_id]) agrupado[f.orden_id] = [];
+    agrupado[f.orden_id].push(f);
+  });
+  return agrupado;
+}
+
 async function listarOrdenes({ estado, fecha, soloLavadorId } = {}) {
   const condiciones = [];
   const parametros = [];
@@ -57,8 +76,12 @@ async function listarOrdenes({ estado, fecha, soloLavadorId } = {}) {
   const whereClause = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
   const [filas] = await pool.query(`${SELECT_BASE} ${whereClause} ORDER BY o.fecha_hora_registro DESC`, parametros);
 
-  const lavadoresPorOrden = await obtenerLavadoresPorOrdenes(filas.map(f => f.id));
-  let ordenes = filas.map(f => mapearOrden(f, lavadoresPorOrden));
+  const ordenIds = filas.map(f => f.id);
+  const [lavadoresPorOrden, serviciosExtraPorOrden] = await Promise.all([
+    obtenerLavadoresPorOrdenes(ordenIds),
+    obtenerServiciosExtraPorOrdenes(ordenIds)
+  ]);
+  let ordenes = filas.map(f => mapearOrden(f, lavadoresPorOrden, serviciosExtraPorOrden));
 
   if (soloLavadorId) {
     ordenes = ordenes.filter(o => o.lavadores.some(l => l.lavador_id === soloLavadorId));
@@ -156,11 +179,47 @@ async function reemplazarLavadoresAsignados(ordenId, lavadoresAsignados) {
   }
 }
 
+/**
+ * Agrega un servicio adicional a una orden que ya está en curso (en vez de
+ * generarle un turno/orden nuevo y duplicado al mismo vehículo): suma el
+ * precio al total de la orden y reparte la comisión adicional entre los
+ * lavadores ya asignados, con la misma regla de porcentaje individual/60%
+ * en grupo que se usa al crear la orden (ver calcularAsignacionLavadores).
+ */
+async function agregarServicioExtra(ordenId, { servicioId, precio, agregadoPor }) {
+  const conexion = await pool.getConnection();
+  try {
+    await conexion.beginTransaction();
+
+    await conexion.query(
+      `INSERT INTO orden_servicios_extra (orden_id, servicio_id, precio, agregado_por) VALUES (?, ?, ?, ?)`,
+      [ordenId, servicioId, precio, agregadoPor]
+    );
+    await conexion.query(`UPDATE ordenes_servicio SET total = total + ? WHERE id = ?`, [precio, ordenId]);
+
+    const [lavadoresAsignados] = await conexion.query(`SELECT * FROM orden_lavadores WHERE orden_id = ?`, [ordenId]);
+    const esGrupo = lavadoresAsignados.length > 1;
+    for (const asignacion of lavadoresAsignados) {
+      const porcentaje = esGrupo ? 60 : Number(asignacion.porcentaje_comision);
+      const comisionExtra = (precio * (porcentaje / 100)) / lavadoresAsignados.length;
+      await conexion.query(`UPDATE orden_lavadores SET valor_comision = valor_comision + ? WHERE id = ?`, [comisionExtra, asignacion.id]);
+    }
+
+    await conexion.commit();
+  } catch (err) {
+    await conexion.rollback();
+    throw err;
+  } finally {
+    conexion.release();
+  }
+}
+
 module.exports = {
   listarOrdenes,
   obtenerOrdenPorId,
   obtenerLavadoresPorOrdenes,
   crearOrdenConAsignacion,
   actualizarEstado,
-  reemplazarLavadoresAsignados
+  reemplazarLavadoresAsignados,
+  agregarServicioExtra
 };

@@ -79,6 +79,7 @@ const app = {
   editingClienteId: null,
   pendingOrdenPayload: null,
   pendingOrdenId: null,
+  agregandoServicioExtraOrdenId: null,
   pendingOrdenOnSuccess: null,
   selectedWashersAsignacion: [],
 
@@ -760,6 +761,7 @@ const app = {
 
   renderOrderCardHtml(o) {
     const lavadoresNombres = (o.lavadores || []).map(l => l.nombre.split(' ')[0]).join(', ') || 'Sin asignar';
+    const puedeAgregarServicio = o.estado === 'recibido' || o.estado === 'en_proceso';
     let actionButtons = '';
 
     if (o.estado === 'recibido') {
@@ -776,16 +778,54 @@ const app = {
       actionButtons = `<span class="text-sm text-success" style="font-weight: 700">Entregado • Pago: ${metodo}</span>`;
     }
 
+    // Si al mismo vehículo se le agregaron más servicios en esta misma
+    // visita (en vez de generarle un turno nuevo y duplicado), se listan
+    // aquí debajo del servicio principal.
+    const serviciosExtraHtml = (o.servicios_extra || []).length > 0
+      ? `<div class="text-sm text-muted">+ ${o.servicios_extra.map(s => `${s.servicio_nombre} (${this.formatMoney(s.precio)})`).join(', ')}</div>`
+      : '';
+
     return `
       <div class="order-card-header">
         <span class="order-id-badge">Orden #${o.id}</span>
         <span class="order-plate-tag">${o.placa || 'SIN PLACA'}</span>
       </div>
       <div class="order-service-title">${o.servicio_nombre}</div>
+      ${serviciosExtraHtml}
       <div class="order-meta-info"><span>Cliente: ${o.cliente_nombre}</span> • <span>${this.formatMoney(o.total)}</span></div>
       <div class="order-washers-info">Lavador(es): <strong>${lavadoresNombres}</strong></div>
       <div class="order-actions">${actionButtons}</div>
+      ${puedeAgregarServicio ? `<button class="btn btn-sm btn-outline mt-2" style="width: 100%" onclick="app.abrirModalServicioExtra(${o.id})">+ Servicio (mismo vehículo)</button>` : ''}
     `;
+  },
+
+  /**
+   * Para cuando al mismo vehículo hay que hacerle otro servicio además del
+   * que ya tiene en curso: en vez de generarle un turno/orden nuevo (que
+   * quedaría duplicado y ya no se permite, ver AgendaControlador), se
+   * agrega como servicio adicional a la MISMA orden.
+   */
+  abrirModalServicioExtra(ordenId) {
+    this.agregandoServicioExtraOrdenId = ordenId;
+    const select = document.getElementById('servicioExtraSelect');
+    if (select) {
+      select.innerHTML = (this.services || []).map(s => `<option value="${s.id}">${s.nombre} - ${this.formatMoney(s.precio)}</option>`).join('');
+    }
+    this.openModal('modalServicioExtra');
+  },
+
+  async confirmarServicioExtra() {
+    const servicio_id = document.getElementById('servicioExtraSelect').value;
+    if (!servicio_id) { this.toast('Seleccione un servicio.', 'warning'); return; }
+
+    try {
+      await ApiCliente.post(`/api/ordenes/${this.agregandoServicioExtraOrdenId}/servicios-extra`, { servicio_id });
+      this.toast('Servicio adicional agregado a la orden.', 'success');
+      this.closeModal('modalServicioExtra');
+      this.loadOrders();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo agregar el servicio.', 'error');
+    }
   },
 
   async updateOrderStatus(orderId, nuevoEstado) {
@@ -1651,7 +1691,9 @@ const app = {
 
         const tbLiq = document.getElementById('liquidacionesTableBody');
         if (tbLiq) {
-          tbLiq.innerHTML = liquidaciones.map(l => `
+          tbLiq.innerHTML = liquidaciones.length === 0
+            ? `<tr><td colspan="9" class="text-center text-muted">Todavía no se le ha liquidado ninguna comisión a un lavador. Use "Liquidar Comisión" en su tarjeta arriba.</td></tr>`
+            : liquidaciones.map(l => `
             <tr>
               <td>#${l.id}</td>
               <td><strong>${l.lavador_nombre}</strong></td>
@@ -1697,7 +1739,9 @@ const app = {
 
         const tbPagos = document.getElementById('pagosSalarioTableBody');
         if (tbPagos) {
-          tbPagos.innerHTML = pagos.map(p => `
+          tbPagos.innerHTML = pagos.length === 0
+            ? `<tr><td colspan="7" class="text-center text-muted">Todavía no se le ha pagado el salario a ningún empleado. Use "Pagar Salario" en la tabla de arriba.</td></tr>`
+            : pagos.map(p => `
             <tr>
               <td>#${p.id}</td>
               <td><strong>${p.empleado_nombre}</strong></td>

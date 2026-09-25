@@ -147,6 +147,42 @@ async function actualizarEstadoOrden(req, res) {
   res.json(ordenes.find(o => o.id === id));
 }
 
+/**
+ * Agrega un servicio adicional a una orden ya activa (RF08): así un mismo
+ * vehículo puede recibir varios servicios en una sola visita sin generarle
+ * un turno/orden nuevo y duplicado (ver AgendaRepositorio.existeVehiculoConServicioActivo).
+ */
+async function agregarServicioExtra(req, res) {
+  const id = Number(req.params.id);
+  const { servicio_id } = req.body;
+  if (!servicio_id) {
+    return res.status(400).json({ error: 'Debe indicar el servicio a agregar.' });
+  }
+
+  const orden = await OrdenServicioRepositorio.obtenerOrdenPorId(id);
+  if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
+  if (!['recibido', 'en_proceso'].includes(orden.estado)) {
+    return res.status(400).json({ error: 'Solo se pueden agregar servicios a una orden recibida o en proceso.' });
+  }
+
+  const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
+  if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
+
+  await OrdenServicioRepositorio.agregarServicioExtra(id, {
+    servicioId: servicio.id,
+    precio: Number(servicio.precio),
+    agregadoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(
+    req.usuarioAutenticado.id, 'agregar_servicio_extra',
+    `Orden #${id}: agregado servicio adicional "${servicio.nombre}" ($${servicio.precio})`
+  );
+
+  const ordenes = await OrdenServicioRepositorio.listarOrdenes({});
+  res.json(ordenes.find(o => o.id === id));
+}
+
 async function asignarLavadores(req, res) {
   const id = Number(req.params.id);
   const { lavadores_ids } = req.body;
@@ -172,4 +208,4 @@ async function asignarLavadores(req, res) {
   res.json(ordenes.find(o => o.id === id));
 }
 
-module.exports = { listarOrdenes, crearOrden, actualizarEstadoOrden, asignarLavadores };
+module.exports = { listarOrdenes, crearOrden, actualizarEstadoOrden, asignarLavadores, agregarServicioExtra };

@@ -101,6 +101,17 @@ async function crearTurno(req, res) {
     return res.status(400).json({ error: 'El servicio es obligatorio para generar un turno.' });
   }
 
+  const placaLimpia = placa_temporal ? placa_temporal.toUpperCase().trim() : null;
+  const yaTieneServicioActivo = await AgendaRepositorio.existeVehiculoConServicioActivo({
+    vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
+    placa: placaLimpia
+  });
+  if (yaTieneServicioActivo) {
+    return res.status(400).json({
+      error: 'Este vehículo ya tiene un turno o servicio en curso. Si necesita otro servicio, agréguelo a la orden activa con el botón "+ Servicio" en vez de generar un turno nuevo.'
+    });
+  }
+
   const hoy = obtenerFechaHoy();
 
   // El número de turno ya no se asigna a mano: siempre es automático, por
@@ -110,7 +121,7 @@ async function crearTurno(req, res) {
     clienteId: cliente_id ? parseInt(cliente_id, 10) : null,
     vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
     citaId: cita_id ? parseInt(cita_id, 10) : null,
-    placaTemporal: placa_temporal ? placa_temporal.toUpperCase().trim() : '',
+    placaTemporal: placaLimpia || '',
     tipoVehiculo: tipo_vehiculo || 'carro',
     servicioId: parseInt(servicio_id, 10),
     fecha: hoy,

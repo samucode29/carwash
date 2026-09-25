@@ -109,6 +109,37 @@ async function obtenerTurnoPorId(id) {
   return filas[0] || null;
 }
 
+/**
+ * Un mismo vehículo (registrado o anónimo, identificado por placa) no
+ * puede tener dos turnos/servicios activos al mismo tiempo: eso es lo que
+ * pasaba antes al generarle dos turnos distintos en vez de agregarle un
+ * servicio adicional al que ya estaba en curso.
+ */
+async function existeVehiculoConServicioActivo({ vehiculoId, placa }) {
+  const condiciones = [];
+  const parametros = [];
+  if (vehiculoId) { condiciones.push('vehiculo_id = ?'); parametros.push(vehiculoId); }
+  if (placa) { condiciones.push('placa_temporal = ?'); parametros.push(placa); }
+  if (condiciones.length === 0) return false;
+
+  const [turnosActivos] = await pool.query(
+    `SELECT id FROM turnos WHERE estado = 'en_espera' AND (${condiciones.join(' OR ')})`,
+    parametros
+  );
+  if (turnosActivos.length > 0) return true;
+
+  const condicionesOrden = [];
+  const parametrosOrden = [];
+  if (vehiculoId) { condicionesOrden.push('vehiculo_id = ?'); parametrosOrden.push(vehiculoId); }
+  if (placa) { condicionesOrden.push('placa_anonima = ?'); parametrosOrden.push(placa); }
+
+  const [ordenesActivas] = await pool.query(
+    `SELECT id FROM ordenes_servicio WHERE estado IN ('recibido', 'en_proceso') AND (${condicionesOrden.join(' OR ')})`,
+    parametrosOrden
+  );
+  return ordenesActivas.length > 0;
+}
+
 async function crearTurno(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO turnos (cliente_id, vehiculo_id, cita_id, placa_temporal, tipo_vehiculo, servicio_id, fecha, hora_llegada, estado, registrado_por)
@@ -144,6 +175,7 @@ module.exports = {
   actualizarCita,
   listarTurnosDeHoy,
   obtenerTurnoPorId,
+  existeVehiculoConServicioActivo,
   crearTurno,
   actualizarTurno
 };
