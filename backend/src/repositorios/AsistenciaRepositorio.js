@@ -6,7 +6,7 @@
 const { pool } = require('../config/baseDeDatos');
 
 async function listarPorFecha(fecha) {
-  const [filas] = await pool.query(`SELECT * FROM asistencia WHERE fecha = ?`, [fecha]);
+  const [filas] = await pool.query(`SELECT * FROM asistencia WHERE fecha = ? ORDER BY id DESC`, [fecha]);
 
   const idsUsuarios = filas.filter(f => f.persona_tipo === 'usuario').map(f => f.persona_id);
   const idsLavadores = filas.filter(f => f.persona_tipo === 'lavador').map(f => f.persona_id);
@@ -52,8 +52,14 @@ async function marcarSalida(id, horaSalida, horasTrabajadas) {
   return filas[0];
 }
 
+// Al volver a marcar entrada (ej. re-registrar el día) hay que limpiar una
+// salida/horas anteriores del mismo día; si no, la persona queda marcada
+// como "Finalizado" aunque acabe de registrar su entrada de nuevo.
 async function marcarEntrada(id, horaEntrada) {
-  await pool.query(`UPDATE asistencia SET hora_entrada = ?, inasistencia = FALSE WHERE id = ?`, [horaEntrada, id]);
+  await pool.query(
+    `UPDATE asistencia SET hora_entrada = ?, hora_salida = NULL, horas_trabajadas = 0, inasistencia = FALSE WHERE id = ?`,
+    [horaEntrada, id]
+  );
   const [filas] = await pool.query(`SELECT * FROM asistencia WHERE id = ?`, [id]);
   return filas[0];
 }
