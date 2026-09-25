@@ -33,24 +33,34 @@ async function generarLiquidacion(req, res) {
 }
 
 async function pagarLiquidacion(req, res) {
-  const { liquidacion_id, soporte_pago_url, fecha_pago } = req.body;
-  if (!soporte_pago_url) {
-    return res.status(400).json({ error: 'El sistema requiere adjuntar un soporte de pago para cambiar a estado Pagado.' });
+  const { liquidacion_id, fecha_pago } = req.body;
+  if (!req.file) {
+    return res.status(400).json({ error: 'El sistema requiere adjuntar un soporte de pago (foto o PDF) para cambiar a estado Pagado.' });
   }
 
   const liquidacion = await NominaRepositorio.pagarLiquidacion({
     liquidacionId: parseInt(liquidacion_id, 10),
-    soportePagoUrl: soporte_pago_url,
+    soportePagoNombre: req.file.originalname,
+    soportePagoTipo: req.file.mimetype,
+    soportePagoDatos: req.file.buffer,
     fechaPago: fecha_pago || obtenerFechaHoy()
   });
   if (!liquidacion) return res.status(404).json({ error: 'Liquidación no encontrada.' });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pagar_liquidacion', `Pagada liquidación #${liquidacion.id} con soporte: ${soporte_pago_url}`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pagar_liquidacion', `Pagada liquidación #${liquidacion.id} con soporte: ${req.file.originalname}`);
   res.json(liquidacion);
 }
 
 async function listarLiquidaciones(req, res) {
   res.json(await NominaRepositorio.listarLiquidaciones());
+}
+
+async function descargarSoporteLiquidacion(req, res) {
+  const soporte = await NominaRepositorio.obtenerSoporteLiquidacion(Number(req.params.id));
+  if (!soporte || !soporte.soporte_pago_datos) return res.status(404).json({ error: 'Soporte no encontrado.' });
+  res.setHeader('Content-Type', soporte.soporte_pago_tipo || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${soporte.soporte_pago_nombre || 'soporte'}"`);
+  res.send(soporte.soporte_pago_datos);
 }
 
 // ---------------------------------------------------------------------------
@@ -61,9 +71,9 @@ async function listarEmpleados(req, res) {
 }
 
 async function pagarSalarioEmpleado(req, res) {
-  const { empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, soporte_pago_url } = req.body;
-  if (!soporte_pago_url) {
-    return res.status(400).json({ error: 'Debe adjuntar el soporte de pago para registrar la nómina como pagada.' });
+  const { empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, fecha_pago } = req.body;
+  if (!req.file) {
+    return res.status(400).json({ error: 'Debe adjuntar el soporte de pago (foto o PDF) para registrar la nómina como pagada.' });
   }
 
   const hoy = obtenerFechaHoy();
@@ -74,15 +84,26 @@ async function pagarSalarioEmpleado(req, res) {
     periodoFin: periodo_fin || hoy,
     salarioBase: parseFloat(salario_base) || 0,
     descuentos: parseFloat(descuentos) || 0,
-    soportePagoUrl: soporte_pago_url
+    soportePagoNombre: req.file.originalname,
+    soportePagoTipo: req.file.mimetype,
+    soportePagoDatos: req.file.buffer,
+    fechaPago: fecha_pago || hoy
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar})`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar}) con soporte: ${req.file.originalname}`);
   res.status(201).json(pago);
 }
 
 async function listarPagosSalario(req, res) {
   res.json(await NominaRepositorio.listarPagosSalario());
+}
+
+async function descargarSoportePagoSalario(req, res) {
+  const soporte = await NominaRepositorio.obtenerSoportePagoSalario(Number(req.params.id));
+  if (!soporte || !soporte.soporte_pago_datos) return res.status(404).json({ error: 'Soporte no encontrado.' });
+  res.setHeader('Content-Type', soporte.soporte_pago_tipo || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${soporte.soporte_pago_nombre || 'soporte'}"`);
+  res.send(soporte.soporte_pago_datos);
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +148,7 @@ async function registrarAsistencia(req, res) {
 }
 
 module.exports = {
-  listarResumenLavadores, generarLiquidacion, pagarLiquidacion, listarLiquidaciones,
-  listarEmpleados, pagarSalarioEmpleado, listarPagosSalario,
+  listarResumenLavadores, generarLiquidacion, pagarLiquidacion, listarLiquidaciones, descargarSoporteLiquidacion,
+  listarEmpleados, pagarSalarioEmpleado, listarPagosSalario, descargarSoportePagoSalario,
   listarAsistenciaDelDia, registrarAsistencia
 };

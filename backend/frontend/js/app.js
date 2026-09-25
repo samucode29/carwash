@@ -1324,7 +1324,7 @@ const app = {
               <td>${this.formatMoney(l.descuentos)}</td>
               <td><strong class="text-success">${this.formatMoney(l.valor_a_pagar)}</strong></td>
               <td><span class="role-badge" style="background: ${l.estado === 'pagado' ? '#10b981' : '#f59e0b'}">${l.estado.toUpperCase()}</span></td>
-              <td class="text-sm">${l.soporte_pago_url ? `Soporte: ${l.soporte_pago_url}` : '<span class="text-muted">Pendiente de soporte</span>'}</td>
+              <td class="text-sm">${l.tiene_soporte ? `<a href="#" onclick="app.verSoportePago('liquidaciones', ${l.id}); return false;">Ver soporte</a>` : '<span class="text-muted">Pendiente de soporte</span>'}</td>
               <td>${l.estado === 'pendiente' ? `<button class="btn btn-sm btn-success admin-only" onclick="app.abrirModalPagarLiq(${l.id})">Pagar (Adjuntar Soporte)</button>` : '<span class="text-success text-sm">Pagado</span>'}</td>
             </tr>
           `).join('');
@@ -1348,7 +1348,7 @@ const app = {
               <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
               <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
               <td>
-                <button class="btn btn-sm btn-primary" onclick="app.pagarSalarioEmpleado(${e.empleado_id}, '${e.nombre}', ${e.salario_fijo})">Pagar Salario</button>
+                <button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', ${e.salario_fijo})">Pagar Salario</button>
                 <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${(e.telefono || '').replace(/'/g, "\\'")}', '${(e.correo || '').replace(/'/g, "\\'")}', ${e.salario_fijo}, '${e.periodicidad_pago}')">Editar</button>
                 <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">Reiniciar Contraseña</button>
                 ${(e.empleado_id === this.currentUser.id || e.es_admin_principal)
@@ -1368,7 +1368,7 @@ const app = {
               <td>${p.fecha_pago_real}</td>
               <td><strong>${this.formatMoney(p.valor_a_pagar)}</strong></td>
               <td>${this.formatMoney(p.descuentos)}</td>
-              <td>${p.soporte_pago_url}</td>
+              <td>${p.tiene_soporte ? `<a href="#" onclick="app.verSoportePago('pagos-salario', ${p.id}); return false;">Ver soporte</a>` : '<span class="text-muted">Sin soporte</span>'}</td>
               <td><span class="role-badge" style="background: #10b981">PAGADO</span></td>
             </tr>
           `).join('');
@@ -1454,36 +1454,85 @@ const app = {
 
   abrirModalPagarLiq(liqId) {
     this.payingLiqId = liqId;
-    document.getElementById('pagLiqSoporte').value = '';
+    document.getElementById('pagLiqSoporteArchivo').value = '';
+    document.getElementById('pagLiqFecha').value = fechaLocalHoy();
     this.openModal('modalPagarLiquidacion');
   },
 
   async confirmarPagoLiquidacion() {
-    const soporte = document.getElementById('pagLiqSoporte').value.trim();
+    const archivo = document.getElementById('pagLiqSoporteArchivo').files[0];
     const fecha = document.getElementById('pagLiqFecha').value;
-    if (!soporte) { this.toast('El sistema exige adjuntar el soporte de pago.', 'warning'); return; }
+    if (!archivo) { this.toast('El sistema exige adjuntar el soporte de pago (foto o PDF).', 'warning'); return; }
+
+    const formData = new FormData();
+    formData.append('liquidacion_id', this.payingLiqId);
+    formData.append('fecha_pago', fecha);
+    formData.append('soporte', archivo);
 
     try {
-      await ApiCliente.post('/api/nomina/pagar-liquidacion', { liquidacion_id: this.payingLiqId, soporte_pago_url: soporte, fecha_pago: fecha });
+      await ApiCliente.postForm('/api/nomina/pagar-liquidacion', formData);
       this.toast('Liquidación pagada y registrada con soporte en auditoría.', 'success');
       this.closeModal('modalPagarLiquidacion');
       this.loadNomina();
     } catch (err) {
-      this.toast('Error al procesar pago de liquidación.', 'error');
+      this.toast(err.message || 'Error al procesar pago de liquidación.', 'error');
     }
   },
 
-  async pagarSalarioEmpleado(empleadoId, nombre, salarioBase) {
-    const soporte = prompt(`Ingrese el soporte o comprobante de pago para ${nombre}:`, `Comprobante_Nomina_${nombre.split(' ')[0]}.pdf`);
-    if (!soporte) return;
-    const descuentos = prompt('¿Desea aplicar algún descuento por inasistencia u otro motivo? (0 si no aplica):', '0') || '0';
+  abrirModalPagarSalario(empleadoId, nombre, salarioBase) {
+    this.payingEmpleadoId = empleadoId;
+    document.getElementById('pagSalEmpleadoNombre').textContent = nombre;
+    document.getElementById('pagSalBase').value = salarioBase;
+    document.getElementById('pagSalDescuentos').value = 0;
+    document.getElementById('pagSalSoporteArchivo').value = '';
+    document.getElementById('pagSalFecha').value = fechaLocalHoy();
+    this.recalcSalarioTotal();
+    this.openModal('modalPagarSalarioEmpleado');
+  },
+
+  recalcSalarioTotal() {
+    const base = parseFloat(document.getElementById('pagSalBase').value) || 0;
+    const desc = parseFloat(document.getElementById('pagSalDescuentos').value) || 0;
+    document.getElementById('pagSalNetoAPagar').textContent = this.formatMoney(Math.max(0, base - desc));
+  },
+
+  async confirmarPagoSalario() {
+    const archivo = document.getElementById('pagSalSoporteArchivo').files[0];
+    const salarioBase = document.getElementById('pagSalBase').value;
+    const descuentos = document.getElementById('pagSalDescuentos').value;
+    const fecha = document.getElementById('pagSalFecha').value;
+    if (!archivo) { this.toast('El sistema exige adjuntar el soporte de pago (foto o PDF).', 'warning'); return; }
+
+    const formData = new FormData();
+    formData.append('empleado_id', this.payingEmpleadoId);
+    formData.append('salario_base', salarioBase);
+    formData.append('descuentos', descuentos);
+    formData.append('fecha_pago', fecha);
+    formData.append('soporte', archivo);
 
     try {
-      await ApiCliente.post('/api/nomina/pagar-empleado', { empleado_id: empleadoId, salario_base: salarioBase, descuentos: parseFloat(descuentos) || 0, soporte_pago_url: soporte });
-      this.toast(`Salario pagado a ${nombre} con soporte adjunto.`, 'success');
+      await ApiCliente.postForm('/api/nomina/pagar-empleado', formData);
+      this.toast('Salario pagado y registrado con soporte en auditoría.', 'success');
+      this.closeModal('modalPagarSalarioEmpleado');
       this.loadNomina();
     } catch (err) {
-      this.toast('Error al registrar pago de salario.', 'error');
+      this.toast(err.message || 'Error al registrar pago de salario.', 'error');
+    }
+  },
+
+  async verSoportePago(tipo, id) {
+    try {
+      const respuesta = await fetch(`/api/nomina/${tipo}/${id}/soporte`, { headers: { Authorization: `Bearer ${ApiCliente.obtenerToken()}` } });
+      if (!respuesta.ok) throw new Error('No se pudo abrir el soporte de pago.');
+      const blob = await respuesta.blob();
+      const enlace = document.createElement('a');
+      enlace.href = URL.createObjectURL(blob);
+      enlace.target = '_blank';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo abrir el soporte de pago.', 'error');
     }
   },
 

@@ -291,7 +291,10 @@ CREATE TABLE liquidaciones_lavador (
     valor_a_pagar     DECIMAL(12,2) NOT NULL DEFAULT 0,
     estado            ENUM('pendiente','pagado') NOT NULL DEFAULT 'pendiente',
     fecha_pago        DATE NULL,
-    soporte_pago_url  VARCHAR(255) NULL,
+    soporte_pago_url    VARCHAR(255) NULL,
+    soporte_pago_nombre VARCHAR(255) NULL,
+    soporte_pago_tipo   VARCHAR(100) NULL,
+    soporte_pago_datos  LONGBLOB NULL,
     creado_en         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_liq_lavador FOREIGN KEY (lavador_id) REFERENCES lavadores(id)
 ) ENGINE=InnoDB;
@@ -307,7 +310,10 @@ CREATE TABLE pagos_salario (
     valor_a_pagar          DECIMAL(12,2) NOT NULL,
     estado                 ENUM('pendiente','pagado') NOT NULL DEFAULT 'pendiente',
     fecha_pago_real        DATE NULL,
-    soporte_pago_url       VARCHAR(255) NULL,
+    soporte_pago_url    VARCHAR(255) NULL,
+    soporte_pago_nombre VARCHAR(255) NULL,
+    soporte_pago_tipo   VARCHAR(100) NULL,
+    soporte_pago_datos  LONGBLOB NULL,
     creado_en              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_ps_empleado FOREIGN KEY (empleado_id) REFERENCES usuarios(id)
 ) ENGINE=InnoDB;

@@ -41,7 +41,9 @@ const ApiCliente = (function () {
     if (token) encabezados['Authorization'] = `Bearer ${token}`;
 
     let cuerpo = opciones.body;
-    if (cuerpo && typeof cuerpo !== 'string') {
+    if (cuerpo instanceof FormData) {
+      // No fijar Content-Type: el navegador arma el boundary multipart solo.
+    } else if (cuerpo && typeof cuerpo !== 'string') {
       encabezados['Content-Type'] = 'application/json';
       cuerpo = JSON.stringify(cuerpo);
     }
@@ -67,6 +69,7 @@ const ApiCliente = (function () {
   return {
     get: (ruta) => solicitar(ruta),
     post: (ruta, body) => solicitar(ruta, { method: 'POST', body }),
+    postForm: (ruta, formData) => solicitar(ruta, { method: 'POST', body: formData }),
     put: (ruta, body) => solicitar(ruta, { method: 'PUT', body }),
     obtenerToken,
     obtenerUsuario,
