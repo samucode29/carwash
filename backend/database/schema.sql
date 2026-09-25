@@ -346,6 +346,7 @@ CREATE TABLE asistencia (
     hora_entrada      TIME NULL,
     hora_salida       TIME NULL,
     horas_trabajadas  DECIMAL(5,2) NULL DEFAULT 0,
+    horas_descanso    DECIMAL(4,2) NOT NULL DEFAULT 0, -- almuerzo/descanso; no cuenta en horas_trabajadas
     inasistencia      BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE KEY uq_asistencia_persona_fecha (persona_tipo, persona_id, fecha)
 ) ENGINE=InnoDB;

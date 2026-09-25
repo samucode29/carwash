@@ -46,8 +46,13 @@ async function crearRegistro({ personaTipo, personaId, fecha, horaEntrada, inasi
   return filas[0];
 }
 
-async function marcarSalida(id, horaSalida, horasTrabajadas) {
-  await pool.query(`UPDATE asistencia SET hora_salida = ?, horas_trabajadas = ? WHERE id = ?`, [horaSalida, horasTrabajadas, id]);
+// horasTrabajadas ya viene neta (sin las horas de descanso/almuerzo); se
+// guarda también horasDescanso para que quede visible en el reporte.
+async function marcarSalida(id, horaSalida, horasTrabajadas, horasDescanso) {
+  await pool.query(
+    `UPDATE asistencia SET hora_salida = ?, horas_trabajadas = ?, horas_descanso = ? WHERE id = ?`,
+    [horaSalida, horasTrabajadas, horasDescanso || 0, id]
+  );
   const [filas] = await pool.query(`SELECT * FROM asistencia WHERE id = ?`, [id]);
   return filas[0];
 }
@@ -57,7 +62,7 @@ async function marcarSalida(id, horaSalida, horasTrabajadas) {
 // como "Finalizado" aunque acabe de registrar su entrada de nuevo.
 async function marcarEntrada(id, horaEntrada) {
   await pool.query(
-    `UPDATE asistencia SET hora_entrada = ?, hora_salida = NULL, horas_trabajadas = 0, inasistencia = FALSE WHERE id = ?`,
+    `UPDATE asistencia SET hora_entrada = ?, hora_salida = NULL, horas_trabajadas = 0, horas_descanso = 0, inasistencia = FALSE WHERE id = ?`,
     [horaEntrada, id]
   );
   const [filas] = await pool.query(`SELECT * FROM asistencia WHERE id = ?`, [id]);

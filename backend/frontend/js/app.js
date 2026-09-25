@@ -1501,13 +1501,14 @@ const app = {
               <td>${a.usuario_rol}</td>
               <td>${a.hora_entrada || '--:--'}</td>
               <td>${a.hora_salida || '--:--'}</td>
+              <td>${a.horas_descanso > 0 ? `${a.horas_descanso} hrs` : '--'}</td>
               <td>${a.horas_trabajadas} hrs</td>
               <td>${a.inasistencia
                 ? '<span class="role-badge" style="background: #ef4444">INASISTENCIA (Descuenta)</span>'
                 : a.hora_salida
                   ? '<span class="role-badge" style="background: #64748b">FINALIZADO</span>'
                   : '<span class="role-badge" style="background: #10b981">PRESENTE</span>'}</td>
-              <td>${!a.hora_salida && !a.inasistencia ? `<button class="btn btn-sm btn-secondary" onclick="app.marcarSalida('${a.persona_tipo}', ${a.persona_id})">Marcar Salida</button>` : '<span class="text-sm text-muted">Jornada finalizada</span>'}</td>
+              <td>${!a.hora_salida && !a.inasistencia ? `<button class="btn btn-sm btn-secondary" onclick="app.abrirModalMarcarSalida('${a.persona_tipo}', ${a.persona_id})">Marcar Salida</button>` : '<span class="text-sm text-muted">Jornada finalizada</span>'}</td>
             </tr>
           `).join('');
         }
@@ -1689,34 +1690,48 @@ const app = {
 
   async abrirModalAsistencia() {
     await this.cargarPersonalParaAsistencia();
+    document.getElementById('asistTipoSelect').value = 'entrada';
+    document.getElementById('asistHorasDescanso').value = 0;
+    this.actualizarVisibilidadDescanso();
     this.openModal('modalAsistencia');
+  },
+
+  async abrirModalMarcarSalida(personaTipo, personaId) {
+    await this.cargarPersonalParaAsistencia();
+    document.getElementById('asistPersonalSelect').value = `${personaTipo}:${personaId}`;
+    document.getElementById('asistTipoSelect').value = 'salida';
+    document.getElementById('asistHorasDescanso').value = 0;
+    this.actualizarVisibilidadDescanso();
+    this.openModal('modalAsistencia');
+  },
+
+  actualizarVisibilidadDescanso() {
+    const esSalida = document.getElementById('asistTipoSelect').value === 'salida';
+    document.getElementById('asistDescansoWrapper').style.display = esSalida ? '' : 'none';
   },
 
   async guardarAsistencia() {
     const [persona_tipo, persona_id] = document.getElementById('asistPersonalSelect').value.split(':');
     const tipo = document.getElementById('asistTipoSelect').value;
+    const horas_descanso = parseFloat(document.getElementById('asistHorasDescanso').value) || 0;
+
+    if (tipo === 'salida' && horas_descanso > 0 && horas_descanso < 1) {
+      this.toast('Si registra descanso/almuerzo, debe ser de mínimo 1 hora.', 'warning');
+      return;
+    }
 
     try {
       await ApiCliente.post('/api/nomina/asistencia', {
         persona_tipo, persona_id: parseInt(persona_id, 10),
         tipo: tipo === 'inasistencia' ? null : tipo,
-        inasistencia: tipo === 'inasistencia'
+        inasistencia: tipo === 'inasistencia',
+        horas_descanso
       });
       this.toast('Registro de asistencia guardado.', 'success');
       this.closeModal('modalAsistencia');
       this.loadNomina();
     } catch (err) {
-      this.toast('Error al registrar asistencia.', 'error');
-    }
-  },
-
-  async marcarSalida(personaTipo, personaId) {
-    try {
-      await ApiCliente.post('/api/nomina/asistencia', { persona_tipo: personaTipo, persona_id: personaId, tipo: 'salida' });
-      this.toast('Hora de salida registrada y horas laboradas calculadas.', 'success');
-      this.loadNomina();
-    } catch (err) {
-      this.toast('Error al marcar salida.', 'error');
+      this.toast(err.message || 'Error al registrar asistencia.', 'error');
     }
   },
 

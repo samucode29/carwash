@@ -527,6 +527,7 @@
                     <th>Rol</th>
                     <th>Entrada</th>
                     <th>Salida</th>
+                    <th>Descanso</th>
                     <th>Horas Laboradas</th>
                     <th>Estado</th>
                     <th>Acciones Rápidas</th>
@@ -1615,11 +1616,16 @@
         </div>
         <div class="form-group">
           <label>Tipo de Registro:</label>
-          <select id="asistTipoSelect">
+          <select id="asistTipoSelect" onchange="app.actualizarVisibilidadDescanso()">
             <option value="entrada">Marcar Hora de Entrada</option>
             <option value="salida">Marcar Hora de Salida (Calcula Horas)</option>
             <option value="inasistencia">Reportar Inasistencia (Descuento Nómina)</option>
           </select>
+        </div>
+        <div class="form-group" id="asistDescansoWrapper" style="display:none">
+          <label>Horas de Descanso/Almuerzo (no cuentan para el pago):</label>
+          <input type="number" id="asistHorasDescanso" min="0" step="0.5" value="0">
+          <p class="text-sm text-muted">Déjalo en 0 si no hubo descanso. Si hubo, debe ser de mínimo 1 hora (puede poner más, ej. 1.5, 2, 3...).</p>
         </div>
       </div>
       <div class="modal-footer">

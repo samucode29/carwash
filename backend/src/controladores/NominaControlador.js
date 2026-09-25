@@ -162,13 +162,19 @@ async function registrarAsistencia(req, res) {
   if (!registro) {
     registro = await AsistenciaRepositorio.crearRegistro({ personaTipo: persona_tipo, personaId: persona_id, fecha: hoy, horaEntrada: horaActual, inasistencia });
   } else if (tipo === 'salida') {
+    const horasDescanso = parseFloat(req.body.horas_descanso) || 0;
+    if (horasDescanso > 0 && horasDescanso < 1) {
+      return res.status(400).json({ error: 'Si registra horas de descanso/almuerzo, deben ser de mínimo 1 hora.' });
+    }
+
     let horasTrabajadas = 0;
     if (registro.hora_entrada) {
       const [h1, m1] = registro.hora_entrada.split(':').map(Number);
       const [h2, m2] = horaActual.split(':').map(Number);
-      horasTrabajadas = Math.max(0, parseFloat(((h2 + m2 / 60) - (h1 + m1 / 60)).toFixed(2)));
+      const horasBrutas = Math.max(0, parseFloat(((h2 + m2 / 60) - (h1 + m1 / 60)).toFixed(2)));
+      horasTrabajadas = Math.max(0, parseFloat((horasBrutas - horasDescanso).toFixed(2)));
     }
-    registro = await AsistenciaRepositorio.marcarSalida(registro.id, horaActual, horasTrabajadas);
+    registro = await AsistenciaRepositorio.marcarSalida(registro.id, horaActual, horasTrabajadas, horasDescanso);
   } else if (tipo === 'entrada') {
     registro = await AsistenciaRepositorio.marcarEntrada(registro.id, horaActual);
   } else if (inasistencia !== undefined) {
