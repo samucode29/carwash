@@ -65,6 +65,10 @@ async function crearUsuario(req, res) {
   if (existente) {
     return res.status(400).json({ error: 'Ya existe un usuario con este documento de identidad.' });
   }
+  const existeComoLavador = await LavadorRepositorio.obtenerPorDocumento(documento);
+  if (existeComoLavador) {
+    return res.status(400).json({ error: 'Ya existe un lavador registrado con este documento de identidad.' });
+  }
 
   // El usuario y la contraseña siempre se asignan automáticamente, no los
   // escribe el administrador: usuario = primernombre.primerapellido (con
@@ -197,6 +201,10 @@ async function crearLavador(req, res) {
   const existente = await LavadorRepositorio.obtenerPorDocumento(documento);
   if (existente) {
     return res.status(400).json({ error: 'Ya existe un lavador con este documento de identidad.' });
+  }
+  const existeComoUsuario = await UsuarioRepositorio.obtenerPorDocumento(documento);
+  if (existeComoUsuario) {
+    return res.status(400).json({ error: 'Ya existe un usuario (administrador/empleado) registrado con este documento de identidad.' });
   }
 
   const nuevoLavador = await LavadorRepositorio.crear({
