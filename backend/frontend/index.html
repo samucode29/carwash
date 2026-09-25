@@ -124,7 +124,7 @@
                   </div>
                   <div class="form-group flex-1">
                     <label>&nbsp;</label>
-                    <button type="button" class="btn btn-outline" onclick="app.openModal('modalNuevoCliente')">+ Nuevo Cliente</button>
+                    <button type="button" class="btn btn-outline" onclick="app.abrirModalNuevoCliente()">+ Nuevo Cliente</button>
                   </div>
                 </div>
                 <div class="form-row">
@@ -184,7 +184,7 @@
             <div class="pos-card queue-panel">
               <div class="panel-header">
                 <h3>Fila de Turnos del Día (Walk-In)</h3>
-                <button class="btn btn-sm btn-outline" onclick="app.openModal('modalNuevoTurno')">+ Turno Rápido</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalNuevoTurno()">+ Turno Rápido</button>
               </div>
               <p class="text-muted text-sm">Clientes en espera de atención por orden de llegada. El lavador se elige al presionar "Iniciar".</p>
 
@@ -263,7 +263,7 @@
             </div>
             <div class="d-flex gap-2">
               <input type="date" id="citasFechaFiltro" class="date-input" onchange="app.loadCitas()">
-              <button class="btn btn-primary" onclick="app.openModal('modalNuevaCita')">+ Agendar Cita</button>
+              <button class="btn btn-primary" onclick="app.abrirModalNuevaCita()">+ Agendar Cita</button>
             </div>
           </div>
 
@@ -297,10 +297,10 @@
               <p class="text-muted">Entregas de insumos a lavadores, entradas por compra y alertas de stock mínimo en tiempo real.</p>
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-outline" onclick="app.openModal('modalEntregaInsumo')">Entregar a Lavador</button>
+              <button class="btn btn-outline" onclick="app.abrirModalEntregaInsumo()">Entregar a Lavador</button>
               <button class="btn btn-secondary" onclick="app.abrirModalEntradaInsumo()">Entrada por Compra</button>
               <button class="btn btn-outline admin-only" onclick="app.abrirModalNuevoProveedor()">+ Nuevo Proveedor</button>
-              <button class="btn btn-primary admin-only" onclick="app.openModal('modalNuevoInsumo')">+ Nuevo Insumo</button>
+              <button class="btn btn-primary admin-only" onclick="app.abrirModalNuevoInsumo()">+ Nuevo Insumo</button>
             </div>
           </div>
 
@@ -539,7 +539,7 @@
               <p class="text-muted">Consolidación de ventas por método de pago y cierre formal de turno o día.</p>
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-success" id="btnCerrarCaja" onclick="app.openModal('modalCerrarCaja')">Realizar Cierre de Caja</button>
+              <button class="btn btn-success" id="btnCerrarCaja" onclick="app.abrirModalCerrarCaja()">Realizar Cierre de Caja</button>
             </div>
           </div>
 
@@ -745,7 +745,7 @@
             <div class="card-table-wrapper">
               <div class="panel-header">
                 <h4>Gastos Operativos del Lavadero</h4>
-                <button class="btn btn-sm btn-outline" onclick="app.openModal('modalNuevoGasto')">+ Registrar Gasto</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalNuevoGasto()">+ Registrar Gasto</button>
               </div>
               <table class="data-table data-table-sm">
                 <thead>

@@ -491,6 +491,13 @@ const app = {
     );
   },
 
+  abrirModalNuevoTurno() {
+    document.getElementById('turnoPlaca').value = '';
+    document.getElementById('turnoTipo').value = 'carro';
+    document.getElementById('turnoNumeroTurno').value = '';
+    this.openModal('modalNuevoTurno');
+  },
+
   async guardarNuevoTurno() {
     const placa = document.getElementById('turnoPlaca').value;
     const tipo = document.getElementById('turnoTipo').value;
@@ -656,6 +663,17 @@ const app = {
     if (c && c.vehiculos) {
       vSelect.innerHTML = c.vehiculos.map(v => `<option value="${v.id}">${v.placa} - ${v.marca} (${v.color})</option>`).join('');
     }
+  },
+
+  abrirModalNuevaCita() {
+    document.getElementById('citaClienteSelect').value = '';
+    document.getElementById('citaAnonNombre').value = '';
+    document.getElementById('citaAnonPlaca').value = '';
+    document.getElementById('citaServicioSelect').value = '';
+    document.getElementById('citaFechaInput').value = '';
+    document.getElementById('citaHoraInput').value = '';
+    this.onCitaClienteChange();
+    this.openModal('modalNuevaCita');
   },
 
   async guardarNuevaCita() {
@@ -1035,6 +1053,11 @@ const app = {
     }
   },
 
+  abrirModalEntregaInsumo() {
+    document.getElementById('entregaCantidad').value = '';
+    this.openModal('modalEntregaInsumo');
+  },
+
   async guardarEntregaInsumo() {
     const lavador_id = document.getElementById('entregaLavadorSelect').value;
     const insumo_id = document.getElementById('entregaInsumoSelect').value;
@@ -1050,6 +1073,15 @@ const app = {
     } catch (err) {
       this.toast(err.message || 'Stock insuficiente.', 'error');
     }
+  },
+
+  abrirModalNuevoInsumo() {
+    document.getElementById('newInsNombre').value = '';
+    document.getElementById('newInsUnidad').value = 'ml';
+    document.getElementById('newInsCosto').value = '';
+    document.getElementById('newInsStockActual').value = '';
+    document.getElementById('newInsStockMinimo').value = '';
+    this.openModal('modalNuevoInsumo');
   },
 
   async guardarNuevoInsumo() {
@@ -1697,6 +1729,11 @@ const app = {
     } catch (err) { console.error(err); }
   },
 
+  abrirModalCerrarCaja() {
+    document.getElementById('cierreObservaciones').value = '';
+    this.openModal('modalCerrarCaja');
+  },
+
   async confirmarCierreCaja() {
     const observaciones = document.getElementById('cierreObservaciones').value;
     try {
@@ -2069,6 +2106,12 @@ const app = {
     }
   },
 
+  abrirModalNuevoGasto() {
+    document.getElementById('gastoConcepto').value = '';
+    document.getElementById('gastoMonto').value = '';
+    this.openModal('modalNuevoGasto');
+  },
+
   async guardarGasto() {
     const concepto = document.getElementById('gastoConcepto').value;
     const monto = document.getElementById('gastoMonto').value;
@@ -2082,6 +2125,17 @@ const app = {
     } catch (err) {
       this.toast('Error al guardar gasto.', 'error');
     }
+  },
+
+  abrirModalNuevoCliente() {
+    document.getElementById('newClientNombre').value = '';
+    document.getElementById('newClientTelefono').value = '';
+    document.getElementById('newClientCorreo').value = '';
+    document.getElementById('newClientPlaca').value = '';
+    document.getElementById('newClientTipo').value = 'carro';
+    document.getElementById('newClientMarca').value = '';
+    document.getElementById('newClientColor').value = '';
+    this.openModal('modalNuevoCliente');
   },
 
   // Crear Cliente desde Modal
