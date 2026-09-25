@@ -256,6 +256,37 @@ async function descargarReporteAsistenciaPdf(req, res) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Clientes (activos/inactivos según última compra, foto del momento)
+// ---------------------------------------------------------------------------
+async function obtenerReporteClientes(req, res) {
+  res.json(await ReporteRepositorio.calcularReporteClientes());
+}
+
+async function descargarReporteClientesPdf(req, res) {
+  const r = await ReporteRepositorio.calcularReporteClientes();
+  const ETIQUETA_ESTADO = { activo: 'ACTIVO', inactivo: 'INACTIVO', nunca_compro: 'NUNCA HA COMPRADO' };
+  generarPdfGenerico(res, {
+    titulo: 'Reporte de Clientes', subtitulo: `Inactivo = sin compras en más de ${r.diasInactividad} días`,
+    nombreArchivo: `reporte_clientes.pdf`,
+    secciones: [
+      { titulo: 'Resumen', filas: [
+        ['Total de Clientes', String(r.totalClientes)],
+        ['Activos', String(r.activos)],
+        ['Inactivos', String(r.inactivos)],
+        ['Nunca Han Comprado', String(r.nuncaCompraron)]
+      ] },
+      { titulo: 'Detalle de Clientes', filas: [], tabla: {
+        encabezados: ['Cliente', 'Teléfono', 'Última Compra', 'Compras', 'Total Gastado', 'Estado'],
+        filas: r.clientes.map(c => [
+          c.nombre, c.telefono || '-', c.ultimaCompra || 'Nunca', String(c.totalCompras),
+          formatearMoneda(c.totalGastado), ETIQUETA_ESTADO[c.estado] || c.estado
+        ])
+      } }
+    ]
+  });
+}
+
 module.exports = {
   obtenerReporte, descargarReportePdf,
   obtenerReporteVentas, descargarReporteVentasPdf,
@@ -264,5 +295,6 @@ module.exports = {
   obtenerReporteNomina, descargarReporteNominaPdf,
   obtenerReporteComparativo, descargarReporteComparativoPdf,
   obtenerReporteOperativo, descargarReporteOperativoPdf,
-  obtenerReporteAsistencia, descargarReporteAsistenciaPdf
+  obtenerReporteAsistencia, descargarReporteAsistenciaPdf,
+  obtenerReporteClientes, descargarReporteClientesPdf
 };

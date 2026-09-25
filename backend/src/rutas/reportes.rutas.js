@@ -33,4 +33,7 @@ router.get('/operativo/pdf', envolverAsync(ReporteControlador.descargarReporteOp
 router.get('/asistencia', envolverAsync(ReporteControlador.obtenerReporteAsistencia));
 router.get('/asistencia/pdf', envolverAsync(ReporteControlador.descargarReporteAsistenciaPdf));
 
+router.get('/clientes', envolverAsync(ReporteControlador.obtenerReporteClientes));
+router.get('/clientes/pdf', envolverAsync(ReporteControlador.descargarReporteClientesPdf));
+
 module.exports = router;

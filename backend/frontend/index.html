@@ -669,6 +669,7 @@
             <button class="period-btn" data-reporte="comparativo" onclick="app.setReporteTipo('comparativo')">Comparativo</button>
             <button class="period-btn" data-reporte="operativo" onclick="app.setReporteTipo('operativo')">Operativo</button>
             <button class="period-btn" data-reporte="asistencia" onclick="app.setReporteTipo('asistencia')">Asistencia</button>
+            <button class="period-btn" data-reporte="clientes" onclick="app.setReporteTipo('clientes')">Clientes</button>
           </div>
 
           <!-- Rango de fechas personalizado + descarga de reporte en PDF -->
@@ -963,6 +964,35 @@
               <table class="data-table data-table-sm">
                 <thead><tr><th>Fecha</th><th>Trabajador</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Inasistencia</th></tr></thead>
                 <tbody id="asistDetalleBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ============ CLIENTES ============ -->
+          <div id="reporte-clientes" class="reporte-subview hidden">
+            <div class="kpi-grid mt-3">
+              <div class="kpi-card">
+                <span class="kpi-title">Total de Clientes</span>
+                <span class="kpi-value" id="clienTotal">0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Activos</span>
+                <span class="kpi-value text-success" id="clienActivos">0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Inactivos</span>
+                <span class="kpi-value text-danger" id="clienInactivos">0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Nunca Han Comprado</span>
+                <span class="kpi-value text-warning" id="clienNuncaCompraron">0</span>
+              </div>
+            </div>
+            <p class="text-sm text-muted mt-2" id="clienNotaInactividad"></p>
+            <div class="card-table-wrapper mt-3">
+              <table class="data-table data-table-sm">
+                <thead><tr><th>Cliente</th><th>Teléfono</th><th>Última Compra</th><th>Compras</th><th>Total Gastado</th><th>Estado</th></tr></thead>
+                <tbody id="clienTableBody"></tbody>
               </table>
             </div>
           </div>

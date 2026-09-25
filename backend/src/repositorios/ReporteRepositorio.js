@@ -7,7 +7,7 @@
 const { pool } = require('../config/baseDeDatos');
 const InsumoRepositorio = require('./InsumoRepositorio');
 const AuditoriaRepositorio = require('./AuditoriaRepositorio');
-const { formatearFechaLocal } = require('../utilidades/fechas');
+const { formatearFechaLocal, obtenerFechaHoy } = require('../utilidades/fechas');
 
 function parsearFechaLocal(fechaStr) {
   const [anio, mes, dia] = fechaStr.split('-').map(Number);
@@ -365,6 +365,54 @@ async function calcularReporteAsistencia(inicio, fin) {
   };
 }
 
+// Un cliente sin compras en los últimos 60 días se considera inactivo (foto
+// del momento actual, no depende del período de reporte seleccionado).
+const DIAS_INACTIVIDAD_CLIENTE = 60;
+
+/** Clientes: activos/inactivos según su última compra (foto del momento, no por período). */
+async function calcularReporteClientes() {
+  const [filas] = await pool.query(
+    `SELECT cl.id, cl.nombre, cl.telefono, cl.correo, cl.creado_en,
+            MAX(DATE(p.fecha_pago)) AS ultima_compra,
+            COUNT(p.id) AS total_compras,
+            SUM(p.monto) AS total_gastado
+     FROM clientes cl
+     LEFT JOIN ordenes_servicio o ON o.cliente_id = cl.id
+     LEFT JOIN pagos p ON p.orden_id = o.id
+     GROUP BY cl.id, cl.nombre, cl.telefono, cl.correo, cl.creado_en
+     ORDER BY ultima_compra IS NULL, ultima_compra DESC`
+  );
+
+  const hoy = parsearFechaLocal(obtenerFechaHoy());
+  const clientes = filas.map((f) => {
+    let estado = 'nunca_compro';
+    if (f.ultima_compra) {
+      const dias = Math.round((hoy - parsearFechaLocal(f.ultima_compra)) / 86400000);
+      estado = dias <= DIAS_INACTIVIDAD_CLIENTE ? 'activo' : 'inactivo';
+    }
+    return {
+      id: f.id,
+      nombre: f.nombre,
+      telefono: f.telefono,
+      correo: f.correo,
+      fechaRegistro: f.creado_en,
+      ultimaCompra: f.ultima_compra,
+      totalCompras: f.total_compras || 0,
+      totalGastado: Number(f.total_gastado) || 0,
+      estado
+    };
+  });
+
+  return {
+    diasInactividad: DIAS_INACTIVIDAD_CLIENTE,
+    totalClientes: clientes.length,
+    activos: clientes.filter((c) => c.estado === 'activo').length,
+    inactivos: clientes.filter((c) => c.estado === 'inactivo').length,
+    nuncaCompraron: clientes.filter((c) => c.estado === 'nunca_compro').length,
+    clientes
+  };
+}
+
 module.exports = {
   calcularReporte,
   calcularReporteVentas,
@@ -373,5 +421,6 @@ module.exports = {
   calcularReporteNomina,
   calcularReporteComparativo,
   calcularReporteOperativo,
-  calcularReporteAsistencia
+  calcularReporteAsistencia,
+  calcularReporteClientes
 };

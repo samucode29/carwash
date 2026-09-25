@@ -1891,10 +1891,10 @@ const app = {
     document.querySelectorAll('#reporteTipoSelector .period-btn').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-reporte') === tipo));
     document.querySelectorAll('.reporte-subview').forEach(v => v.classList.toggle('hidden', v.id !== `reporte-${tipo}`));
 
-    // El reporte de Inventario es una foto del momento: no aplica período.
-    const esInventario = tipo === 'inventario';
-    document.querySelector('#tab-dashboard .period-selector:not(#reporteTipoSelector)').classList.toggle('hidden', esInventario);
-    document.getElementById('reportePersonalizadoBox').classList.toggle('hidden', esInventario || this.dashboardPeriod !== 'personalizado');
+    // Inventario y Clientes son una foto del momento: no aplica período.
+    const sinPeriodo = tipo === 'inventario' || tipo === 'clientes';
+    document.querySelector('#tab-dashboard .period-selector:not(#reporteTipoSelector)').classList.toggle('hidden', sinPeriodo);
+    document.getElementById('reportePersonalizadoBox').classList.toggle('hidden', sinPeriodo || this.dashboardPeriod !== 'personalizado');
 
     this.loadReporteActivo();
   },
@@ -1910,7 +1910,8 @@ const app = {
       nomina: () => this.loadReporteNomina(),
       comparativo: () => this.loadReporteComparativo(),
       operativo: () => this.loadReporteOperativo(),
-      asistencia: () => this.loadReporteAsistencia()
+      asistencia: () => this.loadReporteAsistencia(),
+      clientes: () => this.loadReporteClientes()
     };
     (cargadores[tipo] || cargadores.resumen)();
   },
@@ -2102,6 +2103,33 @@ const app = {
     } catch (err) { console.error(err); }
   },
 
+  async loadReporteClientes() {
+    try {
+      const r = await ApiCliente.get('/api/reportes/clientes');
+      document.getElementById('clienTotal').textContent = r.totalClientes;
+      document.getElementById('clienActivos').textContent = r.activos;
+      document.getElementById('clienInactivos').textContent = r.inactivos;
+      document.getElementById('clienNuncaCompraron').textContent = r.nuncaCompraron;
+      document.getElementById('clienNotaInactividad').textContent = `Un cliente se marca inactivo si no ha comprado en más de ${r.diasInactividad} días.`;
+
+      const ETIQUETA_ESTADO = {
+        activo: '<span class="role-badge" style="background: #10b981">ACTIVO</span>',
+        inactivo: '<span class="role-badge" style="background: #ef4444">INACTIVO</span>',
+        nunca_compro: '<span class="role-badge" style="background: #f59e0b">NUNCA HA COMPRADO</span>'
+      };
+      document.getElementById('clienTableBody').innerHTML = r.clientes.map(c => `
+        <tr>
+          <td><strong>${c.nombre}</strong></td>
+          <td>${c.telefono || '-'}</td>
+          <td>${c.ultimaCompra || 'Nunca'}</td>
+          <td>${c.totalCompras}</td>
+          <td>${this.formatMoney(c.totalGastado)}</td>
+          <td>${ETIQUETA_ESTADO[c.estado] || c.estado}</td>
+        </tr>
+      `).join('') || `<tr><td colspan="6" class="text-center text-muted text-sm py-3">Sin clientes registrados.</td></tr>`;
+    } catch (err) { console.error(err); }
+  },
+
   construirQueryPeriodo() {
     let query = `periodo=${this.dashboardPeriod}`;
     if (this.dashboardPeriod === 'personalizado') {
@@ -2180,7 +2208,7 @@ const app = {
   async descargarReportePdf() {
     const tipo = this.reporteTipoActivo || 'resumen';
     const endpoint = tipo === 'resumen' ? 'dashboard' : tipo;
-    const query = tipo === 'inventario' ? '' : `?${this.construirQueryPeriodo()}`;
+    const query = (tipo === 'inventario' || tipo === 'clientes') ? '' : `?${this.construirQueryPeriodo()}`;
     const url = `/api/reportes/${endpoint}/pdf${query}`;
     try {
       const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${ApiCliente.obtenerToken()}` } });
