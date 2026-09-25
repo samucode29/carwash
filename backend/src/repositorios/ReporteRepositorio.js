@@ -132,12 +132,25 @@ async function calcularReporteVentas(inicio, fin) {
     [inicio, fin]
   );
 
+  // Ventas atendidas por cada lavador (cuántas órdenes pagadas trabajó y
+  // cuánta comisión generó en el período), no solo el total del negocio.
+  const [porLavadorFilas] = await pool.query(
+    `SELECT l.nombre, COUNT(DISTINCT ol.orden_id) AS servicios, SUM(ol.valor_comision) AS comision
+     FROM orden_lavadores ol
+     INNER JOIN lavadores l ON l.id = ol.lavador_id
+     INNER JOIN pagos p ON p.orden_id = ol.orden_id
+     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?
+     GROUP BY l.id, l.nombre ORDER BY comision DESC`,
+    [inicio, fin]
+  );
+
   return {
     rango: { inicio, fin },
     totalVentas: total,
     cantidadVentas: pagos.length,
     ticketPromedio: pagos.length > 0 ? Math.round(total / pagos.length) : 0,
     porServicio, porMetodoPago, porVehiculo,
+    porLavador: porLavadorFilas.map(f => ({ nombre: f.nombre, servicios: f.servicios, comision: Number(f.comision) || 0 })),
     topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total) }))
   };
 }
@@ -296,6 +309,61 @@ async function calcularReporteOperativo(inicio, fin) {
   };
 }
 
+/**
+ * Asistencia: detalle día a día por cada trabajador (empleado/administrador
+ * o lavador) en el período — no solo el total agregado del negocio que ya
+ * trae el reporte de Nómina.
+ */
+async function calcularReporteAsistencia(inicio, fin) {
+  const [porTrabajadorFilas] = await pool.query(
+    `SELECT a.persona_tipo, a.persona_id,
+            COALESCE(u.nombre, l.nombre) AS nombre,
+            CASE WHEN a.persona_tipo = 'usuario' THEN u.rol ELSE 'lavador' END AS rol,
+            SUM(CASE WHEN a.inasistencia = FALSE THEN 1 ELSE 0 END) AS presentes,
+            SUM(CASE WHEN a.inasistencia = TRUE THEN 1 ELSE 0 END) AS inasistencias,
+            SUM(a.horas_trabajadas) AS horasTrabajadas
+     FROM asistencia a
+     LEFT JOIN usuarios u ON a.persona_tipo = 'usuario' AND u.id = a.persona_id
+     LEFT JOIN lavadores l ON a.persona_tipo = 'lavador' AND l.id = a.persona_id
+     WHERE a.fecha BETWEEN ? AND ?
+     GROUP BY a.persona_tipo, a.persona_id, nombre, rol
+     ORDER BY nombre`,
+    [inicio, fin]
+  );
+
+  const [detalleFilas] = await pool.query(
+    `SELECT a.fecha, a.persona_tipo, a.hora_entrada, a.hora_salida, a.horas_trabajadas, a.inasistencia,
+            COALESCE(u.nombre, l.nombre) AS nombre
+     FROM asistencia a
+     LEFT JOIN usuarios u ON a.persona_tipo = 'usuario' AND u.id = a.persona_id
+     LEFT JOIN lavadores l ON a.persona_tipo = 'lavador' AND l.id = a.persona_id
+     WHERE a.fecha BETWEEN ? AND ?
+     ORDER BY a.fecha DESC, nombre`,
+    [inicio, fin]
+  );
+
+  const porTrabajador = porTrabajadorFilas.map(f => ({
+    nombre: f.nombre || `(${f.persona_tipo} #${f.persona_id})`,
+    rol: f.rol,
+    presentes: Number(f.presentes) || 0,
+    inasistencias: Number(f.inasistencias) || 0,
+    horasTrabajadas: Number(f.horasTrabajadas) || 0
+  }));
+
+  return {
+    rango: { inicio, fin },
+    totalPresentes: porTrabajador.reduce((s, t) => s + t.presentes, 0),
+    totalInasistencias: porTrabajador.reduce((s, t) => s + t.inasistencias, 0),
+    totalHorasTrabajadas: porTrabajador.reduce((s, t) => s + t.horasTrabajadas, 0),
+    porTrabajador,
+    detalle: detalleFilas.map(f => ({
+      fecha: f.fecha, nombre: f.nombre, tipo: f.persona_tipo,
+      horaEntrada: f.hora_entrada, horaSalida: f.hora_salida,
+      horasTrabajadas: Number(f.horas_trabajadas) || 0, inasistencia: !!f.inasistencia
+    }))
+  };
+}
+
 module.exports = {
   calcularReporte,
   calcularReporteVentas,
@@ -303,5 +371,6 @@ module.exports = {
   calcularReporteInventario,
   calcularReporteNomina,
   calcularReporteComparativo,
-  calcularReporteOperativo
+  calcularReporteOperativo,
+  calcularReporteAsistencia
 };

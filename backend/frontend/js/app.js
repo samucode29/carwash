@@ -1759,7 +1759,8 @@ const app = {
       inventario: () => this.loadReporteInventario(),
       nomina: () => this.loadReporteNomina(),
       comparativo: () => this.loadReporteComparativo(),
-      operativo: () => this.loadReporteOperativo()
+      operativo: () => this.loadReporteOperativo(),
+      asistencia: () => this.loadReporteAsistencia()
     };
     (cargadores[tipo] || cargadores.resumen)();
   },
@@ -1817,6 +1818,15 @@ const app = {
         { label: 'Carros', value: r.porVehiculo.carro, color: '#0077b6' },
         { label: 'Motos', value: r.porVehiculo.moto, color: '#00b4d8' }
       ]);
+
+      const elPorLav = document.getElementById('ventasPorLavadorChart');
+      if (elPorLav) {
+        elPorLav.innerHTML = (r.porLavador && r.porLavador.length)
+          ? '' : '<p class="text-sm text-muted">Sin servicios atendidos por lavadores en el período.</p>';
+        if (r.porLavador && r.porLavador.length) {
+          this.renderBarChart('ventasPorLavadorChart', r.porLavador.map(l => ({ label: `${l.nombre} (${l.servicios})`, value: l.comision })), { color: '#10b981' });
+        }
+      }
 
       document.getElementById('ventasTopClientesBody').innerHTML = r.topClientes.map(c => `
         <tr><td>${c.nombre}</td><td>${c.cantidad}</td><td><strong>${this.formatMoney(c.total)}</strong></td></tr>
@@ -1909,6 +1919,36 @@ const app = {
       document.getElementById('opClientesRecurrentes').textContent = r.clientesRecurrentes;
       const coloresEstado = { agendada: '#0077b6', reprogramada: '#f59e0b', atendida: '#10b981', cancelada: '#ef4444' };
       this.renderDonutChart('opCitasChart', Object.entries(r.porEstadoCitas).map(([label, value]) => ({ label: label[0].toUpperCase() + label.slice(1), value, color: coloresEstado[label] || '#64748b' })));
+    } catch (err) { console.error(err); }
+  },
+
+  async loadReporteAsistencia() {
+    try {
+      const r = await ApiCliente.get(`/api/reportes/asistencia?${this.construirQueryPeriodo()}`);
+      document.getElementById('asistTotalPresentes').textContent = r.totalPresentes;
+      document.getElementById('asistTotalInasistencias').textContent = r.totalInasistencias;
+      document.getElementById('asistTotalHoras').textContent = `${r.totalHorasTrabajadas} hrs`;
+
+      document.getElementById('asistPorTrabajadorBody').innerHTML = r.porTrabajador.map(t => `
+        <tr>
+          <td><strong>${t.nombre}</strong></td>
+          <td><span class="role-badge">${(t.rol || '').toUpperCase()}</span></td>
+          <td class="text-success">${t.presentes}</td>
+          <td class="text-danger">${t.inasistencias}</td>
+          <td>${t.horasTrabajadas} hrs</td>
+        </tr>
+      `).join('') || `<tr><td colspan="5" class="text-center text-muted text-sm py-3">Sin registros de asistencia en el período.</td></tr>`;
+
+      document.getElementById('asistDetalleBody').innerHTML = r.detalle.map(d => `
+        <tr>
+          <td>${d.fecha}</td>
+          <td>${d.nombre}</td>
+          <td>${d.horaEntrada || '-'}</td>
+          <td>${d.horaSalida || '-'}</td>
+          <td>${d.horasTrabajadas} hrs</td>
+          <td>${d.inasistencia ? '<span class="text-danger">Sí</span>' : 'No'}</td>
+        </tr>
+      `).join('') || `<tr><td colspan="6" class="text-center text-muted text-sm py-3">Sin registros de asistencia en el período.</td></tr>`;
     } catch (err) { console.error(err); }
   },
 

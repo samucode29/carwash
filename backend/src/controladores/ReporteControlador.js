@@ -61,6 +61,10 @@ async function descargarReporteVentasPdf(req, res) {
       { titulo: 'Por Servicio', filas: Object.entries(r.porServicio).map(([k, v]) => [k, formatearMoneda(v)]) },
       { titulo: 'Por Método de Pago', filas: Object.entries(r.porMetodoPago).map(([k, v]) => [k.toUpperCase(), formatearMoneda(v)]) },
       { titulo: 'Por Tipo de Vehículo', filas: [['Carros', formatearMoneda(r.porVehiculo.carro)], ['Motos', formatearMoneda(r.porVehiculo.moto)]] },
+      { titulo: 'Por Lavador', filas: [], tabla: {
+        encabezados: ['Lavador', 'Servicios Atendidos', 'Comisión Generada'],
+        filas: r.porLavador.map(l => [l.nombre, String(l.servicios), formatearMoneda(l.comision)])
+      } },
       { titulo: 'Top 5 Clientes', tabla: {
         encabezados: ['Cliente', 'Compras', 'Total'],
         filas: r.topClientes.map(c => [c.nombre, String(c.cantidad), formatearMoneda(c.total)])
@@ -219,6 +223,39 @@ async function descargarReporteOperativoPdf(req, res) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Asistencia (detalle por trabajador)
+// ---------------------------------------------------------------------------
+async function obtenerReporteAsistencia(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const reporte = await ReporteRepositorio.calcularReporteAsistencia(rango.inicio, rango.fin);
+  res.json({ periodo, ...reporte });
+}
+
+async function descargarReporteAsistenciaPdf(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const r = await ReporteRepositorio.calcularReporteAsistencia(rango.inicio, rango.fin);
+  generarPdfGenerico(res, {
+    titulo: 'Reporte de Asistencia', subtitulo: `Período: ${etiquetaDe(periodo, rango)}`,
+    nombreArchivo: `reporte_asistencia_${rango.inicio}_a_${rango.fin}.pdf`,
+    secciones: [
+      { titulo: 'Resumen', filas: [
+        ['Días Presentes (total)', String(r.totalPresentes)],
+        ['Inasistencias (total)', String(r.totalInasistencias)],
+        ['Horas Trabajadas (total)', `${r.totalHorasTrabajadas} hrs`]
+      ] },
+      { titulo: 'Por Trabajador', filas: [], tabla: {
+        encabezados: ['Trabajador', 'Rol', 'Presentes', 'Inasistencias', 'Horas Trabajadas'],
+        filas: r.porTrabajador.map(t => [t.nombre, t.rol, String(t.presentes), String(t.inasistencias), `${t.horasTrabajadas} hrs`])
+      } },
+      { titulo: 'Detalle Día a Día', filas: [], tabla: {
+        encabezados: ['Fecha', 'Trabajador', 'Entrada', 'Salida', 'Horas', 'Inasistencia'],
+        filas: r.detalle.map(d => [d.fecha, d.nombre, d.horaEntrada || '-', d.horaSalida || '-', String(d.horasTrabajadas), d.inasistencia ? 'Sí' : 'No'])
+      } }
+    ]
+  });
+}
+
 module.exports = {
   obtenerReporte, descargarReportePdf,
   obtenerReporteVentas, descargarReporteVentasPdf,
@@ -226,5 +263,6 @@ module.exports = {
   obtenerReporteInventario, descargarReporteInventarioPdf,
   obtenerReporteNomina, descargarReporteNominaPdf,
   obtenerReporteComparativo, descargarReporteComparativoPdf,
-  obtenerReporteOperativo, descargarReporteOperativoPdf
+  obtenerReporteOperativo, descargarReporteOperativoPdf,
+  obtenerReporteAsistencia, descargarReporteAsistenciaPdf
 };

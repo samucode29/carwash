@@ -658,6 +658,7 @@
             <button class="period-btn" data-reporte="nomina" onclick="app.setReporteTipo('nomina')">Nómina</button>
             <button class="period-btn" data-reporte="comparativo" onclick="app.setReporteTipo('comparativo')">Comparativo</button>
             <button class="period-btn" data-reporte="operativo" onclick="app.setReporteTipo('operativo')">Operativo</button>
+            <button class="period-btn" data-reporte="asistencia" onclick="app.setReporteTipo('asistencia')">Asistencia</button>
           </div>
 
           <!-- Rango de fechas personalizado + descarga de reporte en PDF -->
@@ -806,6 +807,12 @@
                 <div class="mt-2" id="ventasPorVehiculoChart"></div>
               </div>
             </div>
+            <div class="grid-3-cols mt-4">
+              <div class="chart-card">
+                <h4>Ventas Atendidas por Lavador</h4>
+                <div class="mt-2" id="ventasPorLavadorChart"></div>
+              </div>
+            </div>
             <div class="card-table-wrapper mt-4">
               <div class="panel-header"><h4>Top 5 Clientes</h4></div>
               <table class="data-table data-table-sm">
@@ -930,6 +937,38 @@
             <div class="chart-card mt-4">
               <h4>Citas por Estado</h4>
               <div class="mt-2" id="opCitasChart"></div>
+            </div>
+          </div>
+
+          <!-- ============ ASISTENCIA ============ -->
+          <div id="reporte-asistencia" class="reporte-subview hidden">
+            <div class="kpi-grid mt-3">
+              <div class="kpi-card">
+                <span class="kpi-title">Días Presentes (total)</span>
+                <span class="kpi-value text-success" id="asistTotalPresentes">0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Inasistencias (total)</span>
+                <span class="kpi-value text-danger" id="asistTotalInasistencias">0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Horas Trabajadas (total)</span>
+                <span class="kpi-value" id="asistTotalHoras">0 hrs</span>
+              </div>
+            </div>
+            <div class="card-table-wrapper mt-4">
+              <div class="panel-header"><h4>Por Trabajador</h4></div>
+              <table class="data-table data-table-sm">
+                <thead><tr><th>Trabajador</th><th>Rol</th><th>Presentes</th><th>Inasistencias</th><th>Horas Trabajadas</th></tr></thead>
+                <tbody id="asistPorTrabajadorBody"></tbody>
+              </table>
+            </div>
+            <div class="card-table-wrapper mt-4">
+              <div class="panel-header"><h4>Detalle Día a Día</h4></div>
+              <table class="data-table data-table-sm">
+                <thead><tr><th>Fecha</th><th>Trabajador</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Inasistencia</th></tr></thead>
+                <tbody id="asistDetalleBody"></tbody>
+              </table>
             </div>
           </div>
         </section>
