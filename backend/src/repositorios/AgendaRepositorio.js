@@ -77,10 +77,12 @@ async function actualizarCita(id, cambios) {
 // ---------------------------------------------------------------------------
 async function listarTurnosDeHoy(hoy) {
   const [filas] = await pool.query(
-    `SELECT t.*, cl.nombre AS cliente_nombre_reg, s.nombre AS servicio_nombre, s.precio AS servicio_precio
+    `SELECT t.*, cl.nombre AS cliente_nombre_reg, s.nombre AS servicio_nombre, s.precio AS servicio_precio,
+            v.placa AS placa_vehiculo
      FROM turnos t
      LEFT JOIN clientes cl ON cl.id = t.cliente_id
      LEFT JOIN servicios s ON s.id = t.servicio_id
+     LEFT JOIN vehiculos v ON v.id = t.vehiculo_id
      WHERE t.fecha = ?
      ORDER BY (t.numero_turno IS NULL), t.numero_turno, t.hora_llegada`,
     [hoy]
@@ -88,7 +90,7 @@ async function listarTurnosDeHoy(hoy) {
   return filas.map(fila => ({
     ...fila,
     cliente_nombre: fila.cliente_nombre_reg || 'Venta Rápida / Anónima',
-    placa: fila.placa_temporal || 'Sin Placa'
+    placa: fila.placa_temporal || fila.placa_vehiculo || 'Sin Placa'
   }));
 }
 

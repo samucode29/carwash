@@ -6,7 +6,7 @@ const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 
 async function listarServicios(req, res) {
-  const servicios = await ServicioRepositorio.listar();
+  const servicios = await ServicioRepositorio.listar({ soloActivos: req.query.activos === 'true' });
   res.json(servicios);
 }
 

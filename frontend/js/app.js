@@ -269,7 +269,7 @@ const app = {
   // ===========================================================================
   async loadServices() {
     try {
-      this.services = await ApiCliente.get('/api/servicios');
+      this.services = await ApiCliente.get('/api/servicios?activos=true');
       this.renderPosServices();
 
       ['citaServicioSelect', 'turnoServicioSelect'].forEach(id => {
@@ -468,15 +468,18 @@ const app = {
             <strong>#${t.numero_turno || (idx + 1)} Turno - ${t.placa || 'Sin Placa'} (${t.tipo_vehiculo})</strong>
             <span>${t.servicio_nombre} • Hora: ${t.hora_llegada} • ${this.formatMoney(t.servicio_precio)}</span>
           </div>
-          <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}')">Iniciar</button>
+          <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}', ${t.cliente_id || 'null'}, ${t.vehiculo_id || 'null'})">Iniciar</button>
         </div>
       `).join('');
     } catch (err) { console.error(err); }
   },
 
-  atenderTurno(turnoId, servicioId, placa, tipo) {
+  atenderTurno(turnoId, servicioId, placa, tipo, clienteId, vehiculoId) {
+    const payload = clienteId
+      ? { turno_id: turnoId, servicio_id: servicioId, cliente_id: clienteId, vehiculo_id: vehiculoId }
+      : { turno_id: turnoId, servicio_id: servicioId, es_venta_anonima: true, placa_anonima: placa, tipo_vehiculo_anonimo: tipo };
     this.abrirModalAsignarLavador(
-      { turno_id: turnoId, servicio_id: servicioId, es_venta_anonima: true, placa_anonima: placa, tipo_vehiculo_anonimo: tipo },
+      payload,
       () => { this.loadTurnos(); this.loadOrders(); this.setTab('tablero'); }
     );
   },
@@ -633,13 +636,24 @@ const app = {
   },
 
   onCitaClienteChange() {
-    const cid = document.getElementById('citaClienteSelect').value;
+    const cid = parseInt(document.getElementById('citaClienteSelect').value, 10);
     const anonFields = document.getElementById('citaCamposAnonimos');
+    const vehFields = document.getElementById('citaCampoVehiculo');
     anonFields.classList.toggle('hidden', !!cid);
+    vehFields.classList.toggle('hidden', !cid);
+
+    const vSelect = document.getElementById('citaVehiculoSelect');
+    vSelect.innerHTML = '<option value="">-- Seleccione el vehículo --</option>';
+    if (!cid) return;
+    const c = (this.clients || []).find(item => item.id === cid);
+    if (c && c.vehiculos) {
+      vSelect.innerHTML = c.vehiculos.map(v => `<option value="${v.id}">${v.placa} - ${v.marca} (${v.color})</option>`).join('');
+    }
   },
 
   async guardarNuevaCita() {
     const cliente_id = document.getElementById('citaClienteSelect').value || null;
+    const vehiculo_id = cliente_id ? (document.getElementById('citaVehiculoSelect').value || null) : null;
     const cliente_nombre = document.getElementById('citaAnonNombre').value;
     const placa = document.getElementById('citaAnonPlaca').value;
     const servicio_id = document.getElementById('citaServicioSelect').value;
@@ -649,7 +663,7 @@ const app = {
     if (!servicio_id || !fecha || !hora) { this.toast('Complete el servicio, la fecha y la hora.', 'warning'); return; }
 
     try {
-      await ApiCliente.post('/api/citas', { cliente_id, cliente_nombre, placa, servicio_id, fecha, hora });
+      await ApiCliente.post('/api/citas', { cliente_id, vehiculo_id, cliente_nombre, placa, servicio_id, fecha, hora });
       this.toast('Cita agendada correctamente.', 'success');
       this.closeModal('modalNuevaCita');
       this.loadCitas();

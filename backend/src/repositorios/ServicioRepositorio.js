@@ -6,8 +6,10 @@
  */
 const { pool } = require('../config/baseDeDatos');
 
-async function listar() {
-  const [servicios] = await pool.query(`SELECT * FROM servicios ORDER BY tipo_vehiculo, nombre`);
+async function listar({ soloActivos = false } = {}) {
+  const [servicios] = await pool.query(
+    `SELECT * FROM servicios ${soloActivos ? 'WHERE activo = TRUE' : ''} ORDER BY tipo_vehiculo, nombre`
+  );
   return servicios;
 }
 
