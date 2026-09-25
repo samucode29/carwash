@@ -70,6 +70,17 @@ async function listarEmpleados(req, res) {
   res.json(await NominaRepositorio.listarEmpleadosConUltimoPago());
 }
 
+/** Cuánto le corresponde a un empleado en un rango, según horas realmente trabajadas. */
+async function calcularPagoEmpleado(req, res) {
+  const { periodo_inicio, periodo_fin } = req.query;
+  if (!periodo_inicio || !periodo_fin) {
+    return res.status(400).json({ error: 'periodo_inicio y periodo_fin son obligatorios.' });
+  }
+  const calculo = await NominaRepositorio.calcularPagoEmpleado(Number(req.params.id), periodo_inicio, periodo_fin);
+  if (!calculo) return res.status(404).json({ error: 'Empleado no encontrado.' });
+  res.json(calculo);
+}
+
 async function pagarSalarioEmpleado(req, res) {
   const { empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, fecha_pago } = req.body;
   if (!req.file) {
@@ -149,6 +160,6 @@ async function registrarAsistencia(req, res) {
 
 module.exports = {
   listarResumenLavadores, generarLiquidacion, pagarLiquidacion, listarLiquidaciones, descargarSoporteLiquidacion,
-  listarEmpleados, pagarSalarioEmpleado, listarPagosSalario, descargarSoportePagoSalario,
+  listarEmpleados, calcularPagoEmpleado, pagarSalarioEmpleado, listarPagosSalario, descargarSoportePagoSalario,
   listarAsistenciaDelDia, registrarAsistencia
 };

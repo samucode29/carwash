@@ -46,6 +46,12 @@ CREATE TABLE usuarios (
     fecha_ingreso       DATE NOT NULL,
     salario_fijo        DECIMAL(12,2),
     periodicidad_pago   ENUM('semanal','quincenal','mensual') DEFAULT 'quincenal',
+    -- Jornada laboral y descanso: el pago de nómina se calcula por hora
+    -- (salario_fijo entre las horas esperadas de la jornada) multiplicado
+    -- por las horas realmente trabajadas (ver asistencia), no como un
+    -- monto fijo sin importar cuánto se trabajó.
+    jornada_horas_dia      DECIMAL(4,2) NOT NULL DEFAULT 8,
+    dias_descanso_semana   TINYINT NOT NULL DEFAULT 1,
     creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

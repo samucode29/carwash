@@ -4,6 +4,7 @@
  */
 const { pool } = require('../config/baseDeDatos');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
+const { calcularValorHora, calcularHorasEsperadasPorPeriodo } = require('../utilidades/jornada');
 
 // ---------------------------------------------------------------------------
 // Comisiones de lavadores
@@ -110,6 +111,8 @@ async function listarEmpleadosConUltimoPago() {
       correo: emp.correo || '',
       salario_fijo: emp.salario_fijo || 0,
       periodicidad_pago: emp.periodicidad_pago || 'quincenal',
+      jornada_horas_dia: Number(emp.jornada_horas_dia) || 8,
+      dias_descanso_semana: emp.dias_descanso_semana ?? 1,
       fecha_ingreso: emp.fecha_ingreso,
       es_admin_principal: !!emp.es_admin_principal,
       estado: emp.estado || 'activo',
@@ -130,6 +133,43 @@ async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, perio
   );
   const [filas] = await pool.query(`SELECT * FROM pagos_salario WHERE id = ?`, [resultado.insertId]);
   return filas[0];
+}
+
+/**
+ * El pago no es el salario fijo completo sin importar nada: se calcula un
+ * valor-hora (salario_fijo entre las horas esperadas de la jornada) y se
+ * multiplica por las horas realmente trabajadas (asistencia) en el rango.
+ */
+async function calcularPagoEmpleado(empleadoId, periodoInicio, periodoFin) {
+  const [empFilas] = await pool.query(`SELECT * FROM usuarios WHERE id = ?`, [empleadoId]);
+  const emp = empFilas[0];
+  if (!emp) return null;
+
+  const [asistFilas] = await pool.query(
+    `SELECT SUM(horas_trabajadas) AS horas,
+            SUM(CASE WHEN inasistencia = FALSE THEN 1 ELSE 0 END) AS presentes,
+            SUM(CASE WHEN inasistencia = TRUE THEN 1 ELSE 0 END) AS inasistencias
+     FROM asistencia WHERE persona_tipo = 'usuario' AND persona_id = ? AND fecha BETWEEN ? AND ?`,
+    [empleadoId, periodoInicio, periodoFin]
+  );
+
+  const valorHora = calcularValorHora(emp.salario_fijo, emp.jornada_horas_dia, emp.dias_descanso_semana, emp.periodicidad_pago);
+  const horasEsperadasPeriodo = calcularHorasEsperadasPorPeriodo(emp.jornada_horas_dia, emp.dias_descanso_semana, emp.periodicidad_pago);
+  const horasTrabajadas = Number(asistFilas[0].horas) || 0;
+
+  return {
+    empleadoId,
+    salarioFijo: Number(emp.salario_fijo) || 0,
+    jornadaHorasDia: Number(emp.jornada_horas_dia),
+    diasDescansoSemana: emp.dias_descanso_semana,
+    periodicidadPago: emp.periodicidad_pago,
+    valorHora,
+    horasEsperadasPeriodo,
+    horasTrabajadas,
+    diasPresentes: Number(asistFilas[0].presentes) || 0,
+    inasistencias: Number(asistFilas[0].inasistencias) || 0,
+    montoCalculado: Number((valorHora * horasTrabajadas).toFixed(2))
+  };
 }
 
 async function listarPagosSalario() {
@@ -160,6 +200,7 @@ module.exports = {
   listarLiquidaciones,
   obtenerSoporteLiquidacion,
   listarEmpleadosConUltimoPago,
+  calcularPagoEmpleado,
   crearPagoSalario,
   listarPagosSalario,
   obtenerSoportePagoSalario

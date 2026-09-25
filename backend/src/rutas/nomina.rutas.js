@@ -23,6 +23,7 @@ router.get('/liquidaciones/:id/soporte', envolverAsync(NominaControlador.descarg
 
 // Salarios fijos de empleados/administradores: exclusivo de administrador.
 router.get('/empleados', permitirRoles('administrador'), envolverAsync(NominaControlador.listarEmpleados));
+router.get('/empleados/:id/calculo-pago', permitirRoles('administrador'), envolverAsync(NominaControlador.calcularPagoEmpleado));
 router.post('/pagar-empleado', permitirRoles('administrador'), subirSoporte.single('soporte'), envolverAsync(NominaControlador.pagarSalarioEmpleado));
 router.get('/pagos-salario', permitirRoles('administrador'), envolverAsync(NominaControlador.listarPagosSalario));
 router.get('/pagos-salario/:id/soporte', permitirRoles('administrador'), envolverAsync(NominaControlador.descargarSoportePagoSalario));

@@ -19,6 +19,12 @@ function fechaLocalHoy() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function fechaLocalHaceDias(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const app = {
   currentUser: null,
   activeTab: 'pos',
@@ -1348,8 +1354,8 @@ const app = {
               <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
               <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
               <td>
-                <button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', ${e.salario_fijo})">Pagar Salario</button>
-                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${(e.telefono || '').replace(/'/g, "\\'")}', '${(e.correo || '').replace(/'/g, "\\'")}', ${e.salario_fijo}, '${e.periodicidad_pago}')">Editar</button>
+                <button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${e.periodicidad_pago || 'quincenal'}')">Pagar Salario</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${(e.telefono || '').replace(/'/g, "\\'")}', '${(e.correo || '').replace(/'/g, "\\'")}', ${e.salario_fijo}, '${e.periodicidad_pago}', ${e.jornada_horas_dia || 8}, ${e.dias_descanso_semana ?? 1})">Editar</button>
                 <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">Reiniciar Contraseña</button>
                 ${(e.empleado_id === this.currentUser.id || e.es_admin_principal)
                   ? ''
@@ -1479,15 +1485,37 @@ const app = {
     }
   },
 
-  abrirModalPagarSalario(empleadoId, nombre, salarioBase) {
+  abrirModalPagarSalario(empleadoId, nombre, periodicidadPago) {
     this.payingEmpleadoId = empleadoId;
     document.getElementById('pagSalEmpleadoNombre').textContent = nombre;
-    document.getElementById('pagSalBase').value = salarioBase;
     document.getElementById('pagSalDescuentos').value = 0;
     document.getElementById('pagSalSoporteArchivo').value = '';
     document.getElementById('pagSalFecha').value = fechaLocalHoy();
-    this.recalcSalarioTotal();
+
+    // Rango por defecto según la periodicidad de pago del empleado; el
+    // administrador puede ajustarlo antes de calcular.
+    const diasAtras = { semanal: 6, quincenal: 14, mensual: 29 }[periodicidadPago] ?? 14;
+    document.getElementById('pagSalPeriodoInicio').value = fechaLocalHaceDias(diasAtras);
+    document.getElementById('pagSalPeriodoFin').value = fechaLocalHoy();
+
     this.openModal('modalPagarSalarioEmpleado');
+    this.recalcularPagoPorHoras();
+  },
+
+  async recalcularPagoPorHoras() {
+    const inicio = document.getElementById('pagSalPeriodoInicio').value;
+    const fin = document.getElementById('pagSalPeriodoFin').value;
+    if (!inicio || !fin) return;
+
+    try {
+      const c = await ApiCliente.get(`/api/nomina/empleados/${this.payingEmpleadoId}/calculo-pago?periodo_inicio=${inicio}&periodo_fin=${fin}`);
+      document.getElementById('pagSalValorHora').value = this.formatMoney(c.valorHora);
+      document.getElementById('pagSalHorasTrabajadas').value = `${c.horasTrabajadas} hrs (jornada esperada: ${c.horasEsperadasPeriodo} hrs)`;
+      document.getElementById('pagSalBase').value = c.montoCalculado;
+      this.recalcSalarioTotal();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo calcular el pago por horas.', 'error');
+    }
   },
 
   recalcSalarioTotal() {
@@ -1508,6 +1536,8 @@ const app = {
     formData.append('salario_base', salarioBase);
     formData.append('descuentos', descuentos);
     formData.append('fecha_pago', fecha);
+    formData.append('periodo_inicio', document.getElementById('pagSalPeriodoInicio').value);
+    formData.append('periodo_fin', document.getElementById('pagSalPeriodoFin').value);
     formData.append('soporte', archivo);
 
     try {
@@ -2089,6 +2119,8 @@ const app = {
     document.getElementById('usrComision').value = 60;
     document.getElementById('usrSalario').value = 1400000;
     document.getElementById('usrPeriodicidad').value = 'quincenal';
+    document.getElementById('usrJornadaHoras').value = 8;
+    document.getElementById('usrDiasDescanso').value = 1;
     this.onUsrRolChange();
     this.openModal('modalNuevoUsuario');
   },
@@ -2122,8 +2154,10 @@ const app = {
       } else {
         const salarioFijo = document.getElementById('usrSalario').value;
         const periodicidadPago = document.getElementById('usrPeriodicidad').value;
+        const jornadaHorasDia = document.getElementById('usrJornadaHoras').value;
+        const diasDescansoSemana = document.getElementById('usrDiasDescanso').value;
 
-        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombre, documento, telefono, rol, salarioFijo, periodicidadPago });
+        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombre, documento, telefono, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
         alert(`Cuenta creada para ${nombre}.\n\nUsuario: ${nuevo.username}\nContraseña temporal: ${nuevo.passwordAsignada}\n\nCompártela con la persona; puede cambiarla desde "Mi Perfil" -> "Cambiar Contraseña".`);
         this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       }
@@ -2173,13 +2207,15 @@ const app = {
   },
 
   /** Botón visible solo para admin: edita los datos de un empleado (el empleado mismo solo puede cambiar su contraseña). */
-  abrirModalEditarEmpleado(id, nombre, telefono, correo, salarioFijo, periodicidadPago) {
+  abrirModalEditarEmpleado(id, nombre, telefono, correo, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana) {
     this.editingEmpleadoId = id;
     document.getElementById('editEmpNombre').value = nombre;
     document.getElementById('editEmpTelefono').value = telefono;
     document.getElementById('editEmpCorreo').value = correo;
     document.getElementById('editEmpSalario').value = salarioFijo;
     document.getElementById('editEmpPeriodicidad').value = periodicidadPago;
+    document.getElementById('editEmpJornadaHoras').value = jornadaHorasDia || 8;
+    document.getElementById('editEmpDiasDescanso').value = diasDescansoSemana ?? 1;
     this.openModal('modalEditarEmpleado');
   },
 
@@ -2189,10 +2225,12 @@ const app = {
     const correo = document.getElementById('editEmpCorreo').value.trim();
     const salarioFijo = document.getElementById('editEmpSalario').value;
     const periodicidadPago = document.getElementById('editEmpPeriodicidad').value;
+    const jornadaHorasDia = document.getElementById('editEmpJornadaHoras').value;
+    const diasDescansoSemana = document.getElementById('editEmpDiasDescanso').value;
     if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
 
     try {
-      await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombre, telefono, correo, salarioFijo, periodicidadPago });
+      await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombre, telefono, correo, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
       this.toast('Datos del empleado actualizados.', 'success');
       this.closeModal('modalEditarEmpleado');
       this.loadNomina();

@@ -47,7 +47,7 @@ async function obtenerMiPerfil(req, res) {
 }
 
 async function crearUsuario(req, res) {
-  const { nombre, documento, telefono, correo, rol, salarioFijo, periodicidadPago } = req.body;
+  const { nombre, documento, telefono, correo, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana } = req.body;
 
   if (!nombre || !documento || !rol) {
     return res.status(400).json({ error: 'Nombre, documento y rol son obligatorios.' });
@@ -85,7 +85,9 @@ async function crearUsuario(req, res) {
     passwordHash: hashearContrasena(passwordAsignada),
     rol,
     salarioFijo: salarioFijo ? parseFloat(salarioFijo) : 1400000,
-    periodicidadPago: periodicidadPago || 'quincenal'
+    periodicidadPago: periodicidadPago || 'quincenal',
+    jornadaHorasDia: jornadaHorasDia ? parseFloat(jornadaHorasDia) : 8,
+    diasDescansoSemana: diasDescansoSemana !== undefined ? parseInt(diasDescansoSemana, 10) : 1
   });
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_usuario', `Creado usuario ${nombre} con rol ${rol}`);
@@ -97,7 +99,7 @@ async function crearUsuario(req, res) {
 
 async function actualizarUsuario(req, res) {
   const id = Number(req.params.id);
-  const { nombre, telefono, correo, rol, estado, salarioFijo, periodicidadPago, password } = req.body;
+  const { nombre, telefono, correo, rol, estado, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana, password } = req.body;
 
   if (rol === 'administrador' && !req.usuarioAutenticado.esAdminPrincipal) {
     return res.status(403).json({ error: 'Solo el administrador principal puede otorgar el rol de administrador.' });
@@ -123,6 +125,8 @@ async function actualizarUsuario(req, res) {
   if (estado) cambios.estado = estado;
   if (salarioFijo !== undefined) cambios.salario_fijo = parseFloat(salarioFijo);
   if (periodicidadPago) cambios.periodicidad_pago = periodicidadPago;
+  if (jornadaHorasDia !== undefined) cambios.jornada_horas_dia = parseFloat(jornadaHorasDia);
+  if (diasDescansoSemana !== undefined) cambios.dias_descanso_semana = parseInt(diasDescansoSemana, 10);
   if (password) cambios.password_hash = hashearContrasena(password);
 
   const usuario = await UsuarioRepositorio.actualizar(id, cambios);

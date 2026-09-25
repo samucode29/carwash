@@ -1361,6 +1361,16 @@
             </select>
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Jornada Laboral (horas por día):</label>
+            <input type="number" id="editEmpJornadaHoras" min="1" max="12" step="0.5">
+          </div>
+          <div class="form-group flex-1">
+            <label>Días de Descanso a la Semana:</label>
+            <input type="number" id="editEmpDiasDescanso" min="0" max="7">
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalEditarEmpleado')">Cancelar</button>
@@ -1403,8 +1413,28 @@
       </div>
       <div class="modal-body">
         <p>Empleado: <strong id="pagSalEmpleadoNombre">--</strong></p>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Período Inicio:</label>
+            <input type="date" id="pagSalPeriodoInicio" onchange="app.recalcularPagoPorHoras()">
+          </div>
+          <div class="form-group flex-1">
+            <label>Período Fin:</label>
+            <input type="date" id="pagSalPeriodoFin" onchange="app.recalcularPagoPorHoras()">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Valor Hora:</label>
+            <input type="text" id="pagSalValorHora" readonly class="input-readonly">
+          </div>
+          <div class="form-group flex-1">
+            <label>Horas Trabajadas (según asistencia):</label>
+            <input type="text" id="pagSalHorasTrabajadas" readonly class="input-readonly">
+          </div>
+        </div>
         <div class="form-group">
-          <label>Salario Base:</label>
+          <label>Monto Calculado (Valor Hora × Horas Trabajadas):</label>
           <input type="number" id="pagSalBase" readonly class="input-readonly">
         </div>
         <div class="form-group">
@@ -1498,7 +1528,7 @@
         <div id="usrEmpleadoFields" class="hidden">
           <div class="form-row">
             <div class="form-group flex-1">
-              <label>Salario Base Fijo:</label>
+              <label>Salario Base (por la jornada completa del período):</label>
               <input type="number" id="usrSalario" value="1400000">
             </div>
             <div class="form-group flex-1">
@@ -1510,6 +1540,17 @@
               </select>
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Jornada Laboral (horas por día):</label>
+              <input type="number" id="usrJornadaHoras" value="8" min="1" max="12" step="0.5">
+            </div>
+            <div class="form-group flex-1">
+              <label>Días de Descanso a la Semana:</label>
+              <input type="number" id="usrDiasDescanso" value="1" min="0" max="7">
+            </div>
+          </div>
+          <p class="text-sm text-muted mb-2">El pago de nómina se calcula por hora: el salario base se divide entre las horas esperadas de la jornada, y se paga según las horas que realmente marque en asistencia.</p>
         </div>
         <p class="text-sm text-muted mt-2">
           El usuario y la contraseña de acceso se asignan automáticamente
