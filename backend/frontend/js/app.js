@@ -107,6 +107,13 @@ const app = {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-tab') === tabId));
     document.querySelectorAll('.tab-view').forEach(view => view.classList.toggle('active', view.id === `tab-${tabId}`));
 
+    // En celular, el menú lateral tapa la pantalla mientras está abierto:
+    // al elegir una sección se cierra solo, en vez de dejarlo ahí tapando.
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      document.getElementById('appShell').classList.add('sidebar-collapsed');
+      localStorage.setItem('carwash_sidebar', 'colapsado');
+    }
+
     switch (tabId) {
       case 'pos': this.loadTurnos(); break;
       case 'tablero': this.loadOrders(); break;
@@ -136,7 +143,11 @@ const app = {
   // ===========================================================================
   initSidebar() {
     const guardado = localStorage.getItem('carwash_sidebar');
-    if (guardado === 'colapsado') {
+    // En celular el menú es un panel deslizable que tapa la pantalla: si
+    // nunca se ha guardado una preferencia, mejor arrancar cerrado (en
+    // escritorio, sin preferencia guardada, sigue arrancando abierto).
+    const esMobil = window.matchMedia('(max-width: 768px)').matches;
+    if (guardado === 'colapsado' || (guardado === null && esMobil)) {
       document.getElementById('appShell').classList.add('sidebar-collapsed');
     }
   },

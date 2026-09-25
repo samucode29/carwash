@@ -2024,3 +2024,180 @@ body.pagina-login {
   flex-wrap: wrap;
 }
 
+/* ==========================================================================
+   MODO MÓVIL/CELULAR
+   En escritorio no cambia nada de lo anterior. Acá solo se ajusta cómo se
+   ve en pantallas angostas: la barra lateral pasa a ser un panel deslizable
+   (drawer) con fondo oscuro detrás, y varios bloques que en escritorio van
+   en fila (formularios de 2 columnas, selector de reportes, fila de turnos,
+   etc.) pasan a apilarse verticalmente para que se vean cómodos con el dedo.
+   ========================================================================== */
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* La barra lateral se vuelve un panel flotante en vez de empujar el
+     contenido: por eso "position: fixed". El ancho 0 del estado colapsado
+     ya lo define la regla de escritorio (.sidebar-collapsed .sidebar-nav),
+     así que aquí solo hace falta el ancho de cuando está abierta. */
+  .sidebar-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 82%;
+    max-width: 300px;
+    z-index: 300;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 250;
+  }
+
+  .app-shell:not(.sidebar-collapsed) .sidebar-backdrop {
+    display: block;
+  }
+
+  .content-wrapper {
+    padding: 1rem 0.9rem 2rem;
+  }
+
+  .top-nav {
+    padding: 0.6rem 0.9rem;
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  .nav-controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    row-gap: 0.5rem;
+  }
+
+  /* El reloj y el nombre de la sesión son los elementos menos esenciales
+     cuando el espacio es angosto; se ocultan para que quepa el resto sin
+     amontonarse (los botones de Mi Perfil / Cerrar sesión siguen ahí). */
+  .live-clock {
+    display: none;
+  }
+
+  .sesion-usuario-nombre {
+    display: none;
+  }
+
+  .sesion-usuario-card {
+    padding: 4px 6px 4px 10px;
+    gap: 6px;
+  }
+
+  .theme-toggle-btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .section-top-bar h2 {
+    font-size: 1.15rem;
+  }
+
+  /* Cualquier fila de dos campos (form-row) se apila para que cada campo
+     tenga todo el ancho disponible en vez de quedar apretado. */
+  .form-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* El selector de tipo de reporte y las sub-pestañas de Nómina tienen
+     demasiados botones para caber en una fila angosta: en vez de que se
+     amontonen o corten, se dejan deslizar horizontalmente con el dedo. */
+  .period-selector,
+  .sub-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .period-selector .period-btn,
+  .sub-tabs .sub-tab-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .modal-overlay {
+    padding: 0.6rem;
+  }
+
+  .modal-box {
+    max-width: 100%;
+  }
+
+  .modal-header,
+  .modal-footer {
+    padding: 0.9rem 1rem;
+  }
+
+  .modal-body {
+    padding: 1rem;
+    max-height: 70vh;
+  }
+
+  .modal-footer {
+    flex-wrap: wrap;
+  }
+
+  .modal-footer .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .card-table-wrapper {
+    padding: 0.85rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 0.6rem 0.65rem;
+    font-size: 0.82rem;
+  }
+
+  .pos-summary-bar {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    gap: 0.75rem;
+  }
+
+  .search-input-group {
+    flex-direction: column;
+  }
+
+  .search-input-group .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* La fila de turnos en espera: el botón "Iniciar" pasa de estar al lado
+     del texto a quedar debajo, de ancho completo, más fácil de tocar. */
+  .queue-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+
+  .queue-item .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .payment-methods-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+}
+
