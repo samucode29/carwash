@@ -179,7 +179,7 @@ CREATE TABLE turnos (
     cliente_id      INT NULL,
     vehiculo_id     INT NULL,
     cita_id         INT NULL,        -- si esta fila viene de una cita agendada que se pasó a la fila
-    numero_turno    INT NULL,        -- número de turno asignado a mano; si es NULL se usa el orden de llegada
+    numero_turno    INT NULL,        -- ya no se usa (el número visible se calcula por orden de llegada); columna sin uso, se deja NULL
     placa_temporal  VARCHAR(15),
     tipo_vehiculo   VARCHAR(30) NOT NULL DEFAULT 'carro',
     servicio_id     INT NOT NULL,

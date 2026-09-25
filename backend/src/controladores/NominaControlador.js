@@ -176,6 +176,10 @@ async function registrarAsistencia(req, res) {
     }
     registro = await AsistenciaRepositorio.marcarSalida(registro.id, horaActual, horasTrabajadas, horasDescanso);
   } else if (tipo === 'entrada') {
+    const yaPresente = registro.hora_entrada && !registro.hora_salida && !registro.inasistencia;
+    if (yaPresente) {
+      return res.status(400).json({ error: 'Esta persona ya está presente hoy (tiene entrada marcada y no ha marcado salida). Debe marcar su salida antes de registrar una nueva entrada.' });
+    }
     registro = await AsistenciaRepositorio.marcarEntrada(registro.id, horaActual);
   } else if (inasistencia !== undefined) {
     registro = await AsistenciaRepositorio.marcarInasistencia(registro.id, inasistencia);

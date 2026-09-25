@@ -520,14 +520,12 @@ const app = {
       tipo_vehiculo = document.getElementById('posAnonTipo').value;
     }
 
-    const numero_turno = document.getElementById('posNumeroTurno').value || null;
-    const payload = { cliente_id, vehiculo_id, servicio_id: this.selectedServiceId, placa_temporal, tipo_vehiculo, numero_turno };
+    const payload = { cliente_id, vehiculo_id, servicio_id: this.selectedServiceId, placa_temporal, tipo_vehiculo };
 
     try {
-      const data = await ApiCliente.post('/api/turnos', payload);
-      this.toast(`Turno #${data.numero_turno || ''} agregado a la fila.`, 'success');
+      await ApiCliente.post('/api/turnos', payload);
+      this.toast('Turno agregado a la fila.', 'success');
       this.selectedServiceId = null;
-      document.getElementById('posNumeroTurno').value = '';
       this.renderPosServices();
       this.loadTurnos();
     } catch (err) {
@@ -572,7 +570,6 @@ const app = {
   abrirModalNuevoTurno() {
     document.getElementById('turnoPlaca').value = '';
     document.getElementById('turnoTipo').value = 'carro';
-    document.getElementById('turnoNumeroTurno').value = '';
     this.openModal('modalNuevoTurno');
   },
 
@@ -580,12 +577,10 @@ const app = {
     const placa = document.getElementById('turnoPlaca').value;
     const tipo = document.getElementById('turnoTipo').value;
     const servicio_id = document.getElementById('turnoServicioSelect').value;
-    const numero_turno = document.getElementById('turnoNumeroTurno').value || null;
     try {
-      await ApiCliente.post('/api/turnos', { placa_temporal: placa, tipo_vehiculo: tipo, servicio_id, numero_turno });
+      await ApiCliente.post('/api/turnos', { placa_temporal: placa, tipo_vehiculo: tipo, servicio_id });
       this.toast('Turno registrado con éxito.', 'success');
       this.closeModal('modalNuevoTurno');
-      document.getElementById('turnoNumeroTurno').value = '';
       this.loadTurnos();
     } catch (err) {
       this.toast(err.message || 'Error al registrar turno.', 'error');
@@ -784,17 +779,17 @@ const app = {
 
   /**
    * Para cuando hay mucha fila o no hay lavador disponible a la hora de la
-   * cita: en vez de atenderla de inmediato, la pasa a la fila de turnos
-   * (con número de turno manual opcional). La cita queda vinculada al
-   * turno (cita_id) para que, cuando ese turno se atienda, la cita quede
-   * marcada como atendida automáticamente.
+   * cita: en vez de atenderla de inmediato, la pasa a la fila de turnos. El
+   * número de turno se asigna automáticamente por orden de llegada (no es
+   * manual). La cita queda vinculada al turno (cita_id) para que, cuando
+   * ese turno se atienda, la cita quede marcada como atendida
+   * automáticamente.
    */
   async agregarCitaAFila(citaId, servicioId, clienteId, vehiculoId, placa, tipo) {
-    const numero_turno = prompt('Número de turno (opcional, dejar vacío para asignarlo por orden de llegada):', '') || null;
     try {
       await ApiCliente.post('/api/turnos', {
         cliente_id: clienteId, vehiculo_id: vehiculoId, cita_id: citaId,
-        placa_temporal: placa, tipo_vehiculo: tipo, servicio_id: servicioId, numero_turno
+        placa_temporal: placa, tipo_vehiculo: tipo, servicio_id: servicioId
       });
       this.toast('Cita agregada a la fila de turnos.', 'success');
       this.loadCitas();

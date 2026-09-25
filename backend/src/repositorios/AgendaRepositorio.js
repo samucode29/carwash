@@ -75,6 +75,13 @@ async function actualizarCita(id, cambios) {
 // ---------------------------------------------------------------------------
 // Turnos (walk-in)
 // ---------------------------------------------------------------------------
+/**
+ * El número de turno visible NO se guarda fijo: se calcula aquí como la
+ * posición de cada turno entre los que siguen "en_espera", ordenados por
+ * llegada. Así, si el turno 1 se atiende (cambia de estado), deja de
+ * contar y el que era 2 pasa a ser automáticamente el 1, sin huecos ni
+ * necesidad de asignación manual.
+ */
 async function listarTurnosDeHoy(hoy) {
   const [filas] = await pool.query(
     `SELECT t.*, cl.nombre AS cliente_nombre_reg, s.nombre AS servicio_nombre, s.precio AS servicio_precio,
@@ -84,11 +91,14 @@ async function listarTurnosDeHoy(hoy) {
      LEFT JOIN servicios s ON s.id = t.servicio_id
      LEFT JOIN vehiculos v ON v.id = t.vehiculo_id
      WHERE t.fecha = ?
-     ORDER BY (t.numero_turno IS NULL), t.numero_turno, t.hora_llegada`,
+     ORDER BY t.hora_llegada, t.id`,
     [hoy]
   );
+
+  let posicion = 0;
   return filas.map(fila => ({
     ...fila,
+    numero_turno: fila.estado === 'en_espera' ? ++posicion : null,
     cliente_nombre: fila.cliente_nombre_reg || 'Venta Rápida / Anónima',
     placa: fila.placa_temporal || fila.placa_vehiculo || 'Sin Placa'
   }));
@@ -99,20 +109,12 @@ async function obtenerTurnoPorId(id) {
   return filas[0] || null;
 }
 
-async function existeTurnoConNumero(fecha, numeroTurno) {
-  const [filas] = await pool.query(
-    `SELECT id FROM turnos WHERE fecha = ? AND numero_turno = ? AND estado = 'en_espera'`,
-    [fecha, numeroTurno]
-  );
-  return filas.length > 0;
-}
-
 async function crearTurno(datos) {
   const [resultado] = await pool.query(
-    `INSERT INTO turnos (cliente_id, vehiculo_id, cita_id, numero_turno, placa_temporal, tipo_vehiculo, servicio_id, fecha, hora_llegada, estado, registrado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_espera', ?)`,
+    `INSERT INTO turnos (cliente_id, vehiculo_id, cita_id, placa_temporal, tipo_vehiculo, servicio_id, fecha, hora_llegada, estado, registrado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'en_espera', ?)`,
     [
-      datos.clienteId || null, datos.vehiculoId || null, datos.citaId || null, datos.numeroTurno || null,
+      datos.clienteId || null, datos.vehiculoId || null, datos.citaId || null,
       datos.placaTemporal || '', datos.tipoVehiculo || 'carro',
       datos.servicioId, datos.fecha, datos.horaLlegada, datos.registradoPor
     ]
@@ -142,7 +144,6 @@ module.exports = {
   actualizarCita,
   listarTurnosDeHoy,
   obtenerTurnoPorId,
-  existeTurnoConNumero,
   crearTurno,
   actualizarTurno
 };
