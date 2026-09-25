@@ -1972,6 +1972,18 @@ const app = {
 
   // Crear Personal (usuario con login o lavador sin login). Usuario y
   // contraseña siempre se asignan automáticamente (ver modal).
+  abrirModalNuevoUsuario() {
+    document.getElementById('usrNombre').value = '';
+    document.getElementById('usrDocumento').value = '';
+    document.getElementById('usrTelefono').value = '';
+    document.getElementById('usrRol').value = 'lavador';
+    document.getElementById('usrComision').value = 60;
+    document.getElementById('usrSalario').value = 1400000;
+    document.getElementById('usrPeriodicidad').value = 'quincenal';
+    this.onUsrRolChange();
+    this.openModal('modalNuevoUsuario');
+  },
+
   onUsrRolChange() {
     const rol = document.getElementById('usrRol').value;
     const lavFields = document.getElementById('usrLavadorFields');
