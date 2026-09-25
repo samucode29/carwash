@@ -241,6 +241,7 @@ como este.
    [`backend/.env.example`](backend/.env.example) con los datos de Aiven:
    `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `JWT_SECRET`
    (genera uno propio, largo y aleatorio), `JWT_EXPIRA_EN`, `CORS_ORIGEN`.
+   Aiven exige conexión SSL, así que agrega también **`DB_SSL=true`**.
    Render asigna `PORT` automáticamente, no hace falta declararla.
 4. El backend ya sirve `frontend/` como sitio estático (ver
    `backend/src/app.js`), así que con este único servicio de Render tienes
