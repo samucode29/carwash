@@ -23,5 +23,6 @@ router.post('/entregas', envolverAsync(InventarioControlador.registrarEntrega));
 
 router.get('/proveedores', envolverAsync(InventarioControlador.listarProveedores));
 router.post('/proveedores', permitirRoles('administrador'), envolverAsync(InventarioControlador.crearProveedor));
+router.put('/proveedores/:id', permitirRoles('administrador'), envolverAsync(InventarioControlador.actualizarProveedor));
 
 module.exports = router;

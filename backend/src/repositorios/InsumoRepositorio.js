@@ -7,11 +7,12 @@ const { pool } = require('../config/baseDeDatos');
 // ---------------------------------------------------------------------------
 // Insumos
 // ---------------------------------------------------------------------------
-async function listarInsumos() {
+async function listarInsumos({ soloActivos = false } = {}) {
   const [filas] = await pool.query(
     `SELECT i.*, p.nombre AS proveedor_nombre, p.telefono AS proveedor_telefono, p.contacto AS proveedor_contacto
      FROM insumos i
      LEFT JOIN proveedores p ON p.id = i.proveedor_id
+     ${soloActivos ? "WHERE i.estado = 'activo'" : ''}
      ORDER BY i.nombre`
   );
   return filas.map(i => ({ ...i, bajo_stock: Number(i.stock_actual) <= Number(i.stock_minimo) }));
@@ -23,7 +24,7 @@ async function obtenerInsumoPorId(id, conexion = pool) {
 }
 
 async function listarAlertasStockBajo() {
-  const insumos = await listarInsumos();
+  const insumos = await listarInsumos({ soloActivos: true });
   return insumos.filter(i => i.bajo_stock);
 }
 
@@ -128,9 +129,16 @@ async function registrarEntrega({ lavadorId, insumoId, cantidad, entregadoPor })
 // ---------------------------------------------------------------------------
 // Proveedores
 // ---------------------------------------------------------------------------
-async function listarProveedores() {
-  const [filas] = await pool.query(`SELECT * FROM proveedores ORDER BY nombre`);
+async function listarProveedores({ soloActivos = false } = {}) {
+  const [filas] = await pool.query(
+    `SELECT * FROM proveedores ${soloActivos ? "WHERE estado = 'activo'" : ''} ORDER BY nombre`
+  );
   return filas;
+}
+
+async function obtenerProveedorPorId(id) {
+  const [filas] = await pool.query(`SELECT * FROM proveedores WHERE id = ?`, [id]);
+  return filas[0] || null;
 }
 
 async function crearProveedor(datos) {
@@ -138,8 +146,21 @@ async function crearProveedor(datos) {
     `INSERT INTO proveedores (nombre, contacto, telefono, correo, direccion) VALUES (?, ?, ?, ?, ?)`,
     [datos.nombre, datos.contacto || '', datos.telefono || '', datos.correo || '', datos.direccion || '']
   );
-  const [filas] = await pool.query(`SELECT * FROM proveedores WHERE id = ?`, [resultado.insertId]);
-  return filas[0];
+  return obtenerProveedorPorId(resultado.insertId);
+}
+
+async function actualizarProveedor(id, cambios) {
+  const campos = [];
+  const valores = [];
+  for (const [columna, valor] of Object.entries(cambios)) {
+    campos.push(`${columna} = ?`);
+    valores.push(valor);
+  }
+  if (campos.length === 0) return obtenerProveedorPorId(id);
+
+  valores.push(id);
+  await pool.query(`UPDATE proveedores SET ${campos.join(', ')} WHERE id = ?`, valores);
+  return obtenerProveedorPorId(id);
 }
 
 module.exports = {
@@ -154,5 +175,7 @@ module.exports = {
   listarEntregas,
   registrarEntrega,
   listarProveedores,
-  crearProveedor
+  obtenerProveedorPorId,
+  crearProveedor,
+  actualizarProveedor
 };

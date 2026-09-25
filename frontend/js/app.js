@@ -860,6 +860,7 @@ const app = {
       ]);
 
       this.insumos = insumos;
+      this.proveedores = proveedores;
       document.getElementById('stockAlertCount').textContent = alertas.length;
 
       const banner = document.getElementById('bannerStockCritico');
@@ -875,33 +876,56 @@ const app = {
       if (grid) {
         grid.innerHTML = insumos.map(i => {
           const ratio = Math.min(100, (i.stock_actual / (i.stock_minimo * 2 || 1)) * 100);
-          const isLow = i.stock_actual <= i.stock_minimo;
+          const isLow = i.bajo_stock;
+          const isInactivo = i.estado === 'inactivo';
           return `
-            <div class="insumo-card ${isLow ? 'critical' : ''}">
+            <div class="insumo-card ${isLow ? 'critical' : ''}" style="${isInactivo ? 'opacity: 0.6' : ''}">
               <div class="insumo-header">
                 <span class="insumo-name">${i.nombre}</span>
-                <span class="role-badge" style="background: ${isLow ? '#ef4444' : '#10b981'}">${isLow ? 'BAJO STOCK' : 'EN ORDEN'}</span>
+                <span class="role-badge" style="background: ${isInactivo ? '#64748b' : (isLow ? '#ef4444' : '#10b981')}">${isInactivo ? 'INACTIVO' : (isLow ? 'BAJO STOCK' : 'EN ORDEN')}</span>
               </div>
               <div class="insumo-stock-val">${Number(i.stock_actual).toLocaleString()} <span class="insumo-unit">${i.unidad_medida}</span></div>
               <div class="text-sm text-muted">Stock Mínimo: ${i.stock_minimo} ${i.unidad_medida}</div>
               <div class="stock-meter"><div class="stock-meter-fill ${isLow ? 'low' : 'normal'}" style="width: ${ratio}%"></div></div>
               <div class="text-sm text-dim">Proveedor: ${i.proveedor_nombre || 'Sin proveedor'}</div>
               <div class="text-sm text-dim">Último costo: ${this.formatMoney(i.costo_unitario)} / ${i.unidad_medida}</div>
-              <button class="btn btn-sm btn-outline admin-only mt-2" style="width: 100%" onclick="app.abrirModalEditarInsumo(${i.id}, '${i.nombre.replace(/'/g, "\\'")}', '${i.unidad_medida}', ${i.stock_minimo}, ${i.proveedor_id || 'null'})">Editar</button>
+              <div class="d-flex gap-2 mt-2">
+                <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.abrirModalEditarInsumo(${i.id})">Editar</button>
+                <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.toggleEstadoInsumo(${i.id}, '${i.estado}', '${i.nombre.replace(/'/g, "\\'")}')">${isInactivo ? 'Activar' : 'Inactivar'}</button>
+              </div>
             </div>
           `;
         }).join('');
       }
 
+      const insumosActivos = insumos.filter(i => i.estado === 'activo');
       ['entradaInsumoSelect', 'entregaInsumoSelect'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.innerHTML = insumos.map(i => `<option value="${i.id}">${i.nombre} (Stock actual: ${i.stock_actual} ${i.unidad_medida})</option>`).join('');
+        if (el) el.innerHTML = insumosActivos.map(i => `<option value="${i.id}">${i.nombre} (Stock actual: ${i.stock_actual} ${i.unidad_medida})</option>`).join('');
       });
 
+      const proveedoresActivos = proveedores.filter(p => p.estado === 'activo');
       ['entradaProveedorSelect', 'editInsProveedorSelect'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.innerHTML = proveedores.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+        if (el) el.innerHTML = proveedoresActivos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
       });
+
+      const tbProv = document.getElementById('proveedoresTableBody');
+      if (tbProv) {
+        tbProv.innerHTML = proveedores.map(p => `
+          <tr>
+            <td><strong>${p.nombre}</strong></td>
+            <td>${p.contacto || '-'}</td>
+            <td>${p.telefono || '-'}</td>
+            <td>${p.correo || '-'}</td>
+            <td><span class="role-badge" style="background: ${p.estado === 'activo' ? '#10b981' : '#64748b'}">${p.estado.toUpperCase()}</span></td>
+            <td class="admin-only">
+              <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarProveedor(${p.id})">Editar</button>
+              <button class="btn btn-sm btn-outline" onclick="app.toggleEstadoProveedor(${p.id}, '${p.estado}', '${p.nombre.replace(/'/g, "\\'")}')">${p.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
+            </td>
+          </tr>
+        `).join('');
+      }
 
       const tbMov = document.getElementById('movimientosTableBody');
       if (tbMov) {
@@ -1026,13 +1050,15 @@ const app = {
     }
   },
 
-  abrirModalEditarInsumo(id, nombre, unidadMedida, stockMinimo, proveedorId) {
+  abrirModalEditarInsumo(id) {
+    const i = (this.insumos || []).find(item => item.id === id);
+    if (!i) return;
     this.editingInsumoId = id;
-    document.getElementById('editInsNombre').value = nombre;
-    document.getElementById('editInsUnidad').value = unidadMedida;
-    document.getElementById('editInsStockMinimo').value = stockMinimo;
+    document.getElementById('editInsNombre').value = i.nombre;
+    document.getElementById('editInsUnidad').value = i.unidad_medida;
+    document.getElementById('editInsStockMinimo').value = i.stock_minimo;
     const provSelect = document.getElementById('editInsProveedorSelect');
-    if (provSelect) provSelect.value = proveedorId || '';
+    if (provSelect) provSelect.value = i.proveedor_id || '';
     this.openModal('modalEditarInsumo');
   },
 
@@ -1050,6 +1076,19 @@ const app = {
       this.loadInsumos();
     } catch (err) {
       this.toast(err.message || 'No se pudo actualizar el insumo.', 'error');
+    }
+  },
+
+  /** Los insumos nunca se eliminan: solo se activan o inactivan. */
+  async toggleEstadoInsumo(id, estadoActual, nombre) {
+    const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+    if (!confirm(`¿${nuevoEstado === 'activo' ? 'Activar' : 'Inactivar'} el insumo "${nombre}"?`)) return;
+    try {
+      await ApiCliente.put(`/api/inventario/insumos/${id}`, { estado: nuevoEstado });
+      this.toast(`Insumo ${nuevoEstado === 'activo' ? 'activado' : 'inactivado'}.`, 'success');
+      this.loadInsumos();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cambiar el estado.', 'error');
     }
   },
 
@@ -1089,6 +1128,49 @@ const app = {
       this.proveedorReturnTo = null;
     } catch (err) {
       this.toast(err.message || 'No se pudo crear el proveedor.', 'error');
+    }
+  },
+
+  abrirModalEditarProveedor(id) {
+    const p = (this.proveedores || []).find(item => item.id === id);
+    if (!p) return;
+    this.editingProveedorId = id;
+    document.getElementById('editProvNombre').value = p.nombre;
+    document.getElementById('editProvContacto').value = p.contacto || '';
+    document.getElementById('editProvTelefono').value = p.telefono || '';
+    document.getElementById('editProvCorreo').value = p.correo || '';
+    document.getElementById('editProvDireccion').value = p.direccion || '';
+    this.openModal('modalEditarProveedor');
+  },
+
+  async guardarEdicionProveedor() {
+    const nombre = document.getElementById('editProvNombre').value.trim();
+    const contacto = document.getElementById('editProvContacto').value.trim();
+    const telefono = document.getElementById('editProvTelefono').value.trim();
+    const correo = document.getElementById('editProvCorreo').value.trim();
+    const direccion = document.getElementById('editProvDireccion').value.trim();
+    if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
+
+    try {
+      await ApiCliente.put(`/api/inventario/proveedores/${this.editingProveedorId}`, { nombre, contacto, telefono, correo, direccion });
+      this.toast('Proveedor actualizado.', 'success');
+      this.closeModal('modalEditarProveedor');
+      this.loadInsumos();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo actualizar el proveedor.', 'error');
+    }
+  },
+
+  /** Los proveedores nunca se eliminan: solo se activan o inactivan. */
+  async toggleEstadoProveedor(id, estadoActual, nombre) {
+    const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+    if (!confirm(`¿${nuevoEstado === 'activo' ? 'Activar' : 'Inactivar'} al proveedor "${nombre}"?`)) return;
+    try {
+      await ApiCliente.put(`/api/inventario/proveedores/${id}`, { estado: nuevoEstado });
+      this.toast(`Proveedor ${nuevoEstado === 'activo' ? 'activado' : 'inactivado'}.`, 'success');
+      this.loadInsumos();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cambiar el estado.', 'error');
     }
   },
 

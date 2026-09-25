@@ -108,6 +108,9 @@ CREATE TABLE servicios (
 -- ============================================================================
 -- 5. PROVEEDORES E INVENTARIO
 -- ============================================================================
+-- Los proveedores son globales (no pertenecen a un insumo en particular) y,
+-- como el resto del personal/catálogo del sistema, nunca se eliminan: solo
+-- se inactivan (estado).
 CREATE TABLE proveedores (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     nombre      VARCHAR(150) NOT NULL,
@@ -115,6 +118,7 @@ CREATE TABLE proveedores (
     telefono    VARCHAR(20),
     correo      VARCHAR(150),
     direccion   VARCHAR(200),
+    estado      ENUM('activo','inactivo') NOT NULL DEFAULT 'activo',
     creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -126,6 +130,7 @@ CREATE TABLE insumos (
     stock_minimo    DECIMAL(12,2) NOT NULL DEFAULT 0,
     costo_unitario  DECIMAL(12,2) NOT NULL DEFAULT 0,
     proveedor_id    INT NULL,
+    estado          ENUM('activo','inactivo') NOT NULL DEFAULT 'activo',
     creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_insumo_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedores(id)
 ) ENGINE=InnoDB;
