@@ -30,9 +30,7 @@ async function iniciarServidor() {
   } catch (err) {
     console.error('❌ No se pudo conectar a MySQL. Revisa DB_HOST/DB_USER/DB_PASSWORD/DB_NAME en tu .env.');
     console.error('   Detalle:', err.message);
-    // TEMPORAL: seguimos arrancando el servidor igual (en vez de salir) para
-    // poder usar /api/diagnostico-db y ver el error real desde adentro de
-    // Render. Revertir esto junto con el endpoint de diagnóstico.
+    process.exit(1);
   }
 
   app.listen(PUERTO, () => {
