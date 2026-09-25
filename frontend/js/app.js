@@ -102,6 +102,7 @@ const app = {
       case 'servicios': this.loadServicios(); break;
       case 'nomina': this.loadNomina(); break;
       case 'caja': this.loadCaja(); break;
+      case 'facturas': this.loadFacturas(); break;
       case 'dashboard': this.loadDashboard(); break;
     }
   },
@@ -261,7 +262,7 @@ const app = {
   },
 
   formatMoney(num) {
-    return '$' + (num || 0).toLocaleString('es-CO');
+    return '$' + Number(num || 0).toLocaleString('es-CO');
   },
 
   // ===========================================================================
@@ -589,8 +590,8 @@ const app = {
     if (!this.payingOrderId) return;
     const metodo = document.querySelector('input[name="payMetodo"]:checked').value;
     try {
-      await ApiCliente.post('/api/caja/pagos', { orden_id: this.payingOrderId, metodo_pago: metodo });
-      this.toast(`Pago de orden #${this.payingOrderId} registrado con éxito vía ${metodo.toUpperCase()}.`, 'success');
+      const data = await ApiCliente.post('/api/caja/pagos', { orden_id: this.payingOrderId, metodo_pago: metodo });
+      this.toast(`Pago registrado vía ${metodo.toUpperCase()}. Factura ${data.factura.numero_factura}.`, 'success');
       this.closeModal('modalPagarOrden');
       this.payingOrderId = null;
       this.loadOrders();
@@ -1019,8 +1020,8 @@ const app = {
     }
 
     try {
-      await ApiCliente.post('/api/inventario/entradas', { insumo_id, cantidad, costo_unitario, proveedor_id, observacion });
-      this.toast('Entrada registrada. Stock y costo actualizados inmediatamente.', 'success');
+      const data = await ApiCliente.post('/api/inventario/entradas', { insumo_id, cantidad, costo_unitario, proveedor_id, observacion });
+      this.toast(`Entrada registrada. Factura ${data.factura.numero_factura}.`, 'success');
       this.closeModal('modalEntradaInsumo');
       this.loadInsumos();
     } catch (err) {
@@ -1626,6 +1627,51 @@ const app = {
       this.loadCaja();
     } catch (err) {
       this.toast(err.message || 'Error al cerrar caja.', 'error');
+    }
+  },
+
+  // ===========================================================================
+  // 7B. FACTURAS (numeración automática CCPP-DDMMAA-NNN, ver backend)
+  // ===========================================================================
+  async loadFacturas() {
+    try {
+      const tipo = document.getElementById('facturasFiltroTipo').value;
+      const query = tipo ? `?tipo=${tipo}` : '';
+      const facturas = await ApiCliente.get(`/api/facturas${query}`);
+
+      const tb = document.getElementById('facturasTableBody');
+      if (tb) {
+        tb.innerHTML = facturas.map(f => `
+          <tr>
+            <td><strong>${f.numero_factura}</strong></td>
+            <td><span class="role-badge" style="background: ${f.tipo === 'venta' ? '#10b981' : '#f59e0b'}">${f.tipo.toUpperCase()}</span></td>
+            <td>${f.fecha}</td>
+            <td>${f.concepto}</td>
+            <td>${f.cliente_nombre || f.proveedor_nombre || '-'}</td>
+            <td>${this.formatMoney(f.total)}</td>
+            <td><button class="btn btn-sm btn-outline" onclick="app.verFacturaPdf(${f.id})">Ver PDF</button></td>
+          </tr>
+        `).join('');
+        if (facturas.length === 0) {
+          tb.innerHTML = `<tr><td colspan="7" class="text-center text-muted text-sm py-3">Aún no hay facturas registradas.</td></tr>`;
+        }
+      }
+    } catch (err) { console.error(err); }
+  },
+
+  async verFacturaPdf(id) {
+    try {
+      const respuesta = await fetch(`/api/facturas/${id}/pdf`, { headers: { Authorization: `Bearer ${ApiCliente.obtenerToken()}` } });
+      if (!respuesta.ok) throw new Error('No se pudo generar la factura.');
+      const blob = await respuesta.blob();
+      const enlace = document.createElement('a');
+      enlace.href = URL.createObjectURL(blob);
+      enlace.target = '_blank';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo abrir la factura.', 'error');
     }
   },
 

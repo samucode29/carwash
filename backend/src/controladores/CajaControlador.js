@@ -4,6 +4,8 @@
  */
 const CajaRepositorio = require('../repositorios/CajaRepositorio');
 const OrdenServicioRepositorio = require('../repositorios/OrdenServicioRepositorio');
+const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
+const FacturaRepositorio = require('../repositorios/FacturaRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
 
@@ -18,14 +20,22 @@ async function registrarPago(req, res) {
     return res.status(400).json({ error: 'Método de pago no válido.' });
   }
 
+  const montoPagado = parseFloat(monto) || Number(orden.total);
   const pago = await CajaRepositorio.registrarPago({
     ordenId: orden.id,
     metodoPago: metodo_pago,
-    monto: parseFloat(monto) || Number(orden.total)
+    monto: montoPagado
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'procesar_pago', `Pago registrado Orden #${orden.id}: $${pago.monto} vía ${metodo_pago}`);
-  res.status(201).json({ ordenId: orden.id, pago });
+  const servicio = await ServicioRepositorio.obtenerPorId(orden.servicio_id);
+  const factura = await FacturaRepositorio.crearFactura({
+    tipo: 'venta', ordenId: orden.id, clienteId: orden.cliente_id,
+    concepto: servicio ? servicio.nombre : 'Servicio de lavado',
+    total: montoPagado, fecha: obtenerFechaHoy(), creadoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'procesar_pago', `Pago registrado Orden #${orden.id}: $${pago.monto} vía ${metodo_pago} (Factura ${factura.numero_factura})`);
+  res.status(201).json({ ordenId: orden.id, pago, factura });
 }
 
 async function obtenerResumenCaja(req, res) {

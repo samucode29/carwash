@@ -4,6 +4,8 @@
  */
 const InsumoRepositorio = require('../repositorios/InsumoRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
+const FacturaRepositorio = require('../repositorios/FacturaRepositorio');
+const { obtenerFechaHoy } = require('../utilidades/fechas');
 
 async function listarInsumos(req, res) {
   res.json(await InsumoRepositorio.listarInsumos({ soloActivos: req.query.activos === 'true' }));
@@ -64,14 +66,21 @@ async function registrarEntrada(req, res) {
     return res.status(400).json({ error: 'El costo unitario de la compra no es válido.' });
   }
 
-  await InsumoRepositorio.registrarEntrada({
+  const proveedorId = proveedor_id ? parseInt(proveedor_id, 10) : insumo.proveedor_id;
+  const movimientoId = await InsumoRepositorio.registrarEntrada({
     insumoId: insumo.id, cantidad: cant,
-    proveedorId: proveedor_id ? parseInt(proveedor_id, 10) : insumo.proveedor_id,
-    usuarioId: req.usuarioAutenticado.id, observacion, costoUnitario
+    proveedorId, usuarioId: req.usuarioAutenticado.id, observacion, costoUnitario
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'entrada_inventario', `Entrada de ${cant} ${insumo.unidad_medida} de ${insumo.nombre}`);
-  res.status(201).json(await InsumoRepositorio.obtenerInsumoPorId(insumo.id));
+  const fecha = obtenerFechaHoy();
+  const costoTotal = cant * (costoUnitario !== null ? costoUnitario : Number(insumo.costo_unitario));
+  const factura = await FacturaRepositorio.crearFactura({
+    tipo: 'compra', movimientoId, proveedorId, concepto: insumo.nombre,
+    total: costoTotal, fecha, creadoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'entrada_inventario', `Entrada de ${cant} ${insumo.unidad_medida} de ${insumo.nombre} (Factura ${factura.numero_factura})`);
+  res.status(201).json({ ...(await InsumoRepositorio.obtenerInsumoPorId(insumo.id)), factura });
 }
 
 async function listarAlertas(req, res) {

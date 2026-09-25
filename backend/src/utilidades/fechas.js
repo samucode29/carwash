@@ -28,6 +28,12 @@ function obtenerHoraActual() {
   return new Date().toTimeString().substring(0, 5); // HH:mm local
 }
 
+/** Convierte 'YYYY-MM-DD' a 'DDMMAA' (usado en la numeración de facturas). */
+function formatearFechaCorta(fechaYyyyMmDd) {
+  const [anio, mes, dia] = fechaYyyyMmDd.split('-');
+  return `${dia}${mes}${anio.slice(2)}`;
+}
+
 /**
  * Calcula el rango [inicio, fin] (formato YYYY-MM-DD, ambos inclusive) para
  * los períodos de reporte soportados: día, semana, mes, año o un rango
@@ -67,5 +73,6 @@ module.exports = {
   obtenerFechaHoy,
   obtenerFechaHoraActual,
   obtenerHoraActual,
+  formatearFechaCorta,
   calcularRangoPorPeriodo
 };

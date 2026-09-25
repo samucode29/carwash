@@ -67,11 +67,12 @@ async function registrarEntrada({ insumoId, cantidad, proveedorId, usuarioId, ob
   } else {
     await pool.query(`UPDATE insumos SET stock_actual = stock_actual + ? WHERE id = ?`, [cantidad, insumoId]);
   }
-  await pool.query(
+  const [resultado] = await pool.query(
     `INSERT INTO movimientos_inventario (insumo_id, tipo, cantidad, proveedor_id, usuario_id, observacion)
      VALUES (?, 'entrada', ?, ?, ?, ?)`,
     [insumoId, cantidad, proveedorId || null, usuarioId, observacion || 'Entrada manual de inventario']
   );
+  return resultado.insertId;
 }
 
 async function listarMovimientos() {

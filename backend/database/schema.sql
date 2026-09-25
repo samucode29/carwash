@@ -352,6 +352,35 @@ CREATE TABLE auditoria (
     CONSTRAINT fk_audit_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 ) ENGINE=InnoDB;
 
+-- ============================================================================
+-- 13. FACTURACIÓN (numeración automática de compras y ventas)
+-- ============================================================================
+-- numero_factura se genera solo, con el formato CCPP-DDMMAA-NNN:
+--   CC  = categoría: COM (compra a proveedor) o VEN (venta/servicio)
+--   PP  = primeras 2 letras del insumo (compra) o del servicio (venta)
+--   DDMMAA = fecha del día en que se emite
+--   NNN = consecutivo del día para ese tipo (compra o venta), reinicia
+--         en 001 cada día
+CREATE TABLE facturas (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    numero_factura  VARCHAR(30) NOT NULL UNIQUE,
+    tipo            ENUM('compra','venta') NOT NULL,
+    orden_id        INT NULL,        -- factura de venta -> ordenes_servicio
+    movimiento_id   INT NULL,        -- factura de compra -> movimientos_inventario
+    cliente_id      INT NULL,
+    proveedor_id    INT NULL,
+    concepto        VARCHAR(150) NOT NULL,   -- nombre del servicio o insumo facturado
+    total           DECIMAL(12,2) NOT NULL DEFAULT 0,
+    fecha           DATE NOT NULL,
+    creado_por      INT NOT NULL,
+    creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_factura_orden      FOREIGN KEY (orden_id)      REFERENCES ordenes_servicio(id),
+    CONSTRAINT fk_factura_movimiento FOREIGN KEY (movimiento_id) REFERENCES movimientos_inventario(id),
+    CONSTRAINT fk_factura_cliente    FOREIGN KEY (cliente_id)    REFERENCES clientes(id),
+    CONSTRAINT fk_factura_proveedor  FOREIGN KEY (proveedor_id)  REFERENCES proveedores(id),
+    CONSTRAINT fk_factura_usuario    FOREIGN KEY (creado_por)    REFERENCES usuarios(id)
+) ENGINE=InnoDB;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================================
@@ -364,6 +393,7 @@ CREATE INDEX idx_cita_fecha          ON citas (fecha);
 CREATE INDEX idx_turno_fecha         ON turnos (fecha);
 CREATE INDEX idx_vehiculo_placa      ON vehiculos (placa);
 CREATE INDEX idx_movinv_fecha        ON movimientos_inventario (fecha);
+CREATE INDEX idx_factura_fecha_tipo  ON facturas (fecha, tipo);
 CREATE INDEX idx_liq_lavador_estado  ON liquidaciones_lavador (estado);
 CREATE INDEX idx_pago_salario_estado ON pagos_salario (estado);
 CREATE INDEX idx_gasto_fecha         ON gastos_operativos (fecha);

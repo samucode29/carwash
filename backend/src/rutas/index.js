@@ -19,5 +19,6 @@ router.use('/inventario', require('./inventario.rutas'));
 router.use('/nomina', require('./nomina.rutas'));
 router.use('/gastos', require('./gastos.rutas'));
 router.use('/reportes', require('./reportes.rutas'));
+router.use('/facturas', require('./facturas.rutas'));
 
 module.exports = router;

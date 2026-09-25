@@ -36,6 +36,7 @@
         <button class="tab-btn admin-only" data-tab="servicios" onclick="app.setTab('servicios')">Servicios</button>
         <button class="tab-btn" data-tab="nomina" onclick="app.setTab('nomina')">Personal &amp; Nómina</button>
         <button class="tab-btn" data-tab="caja" onclick="app.setTab('caja')">Caja Diaria</button>
+        <button class="tab-btn" data-tab="facturas" onclick="app.setTab('facturas')">Facturas</button>
         <button class="tab-btn admin-only" data-tab="dashboard" onclick="app.setTab('dashboard')">Reportes</button>
       </nav>
     </aside>
@@ -590,6 +591,42 @@
                 </tr>
               </thead>
               <tbody id="cierresCajaTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 7B. FACTURAS (numeración automática de compras y ventas) -->
+        <!-- ========================================== -->
+        <section id="tab-facturas" class="tab-view">
+          <div class="section-top-bar">
+            <div>
+              <h2>Facturas</h2>
+              <p class="text-muted">Se generan solas: al registrar una entrada por compra (factura de compra) y al cobrar una orden (factura de venta). Formato: CATEGORÍA+INICIALES-FECHA-CONSECUTIVO DEL DÍA.</p>
+            </div>
+            <div class="d-flex gap-2">
+              <select id="facturasFiltroTipo" onchange="app.loadFacturas()">
+                <option value="">Todas</option>
+                <option value="venta">Solo Ventas</option>
+                <option value="compra">Solo Compras</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="card-table-wrapper mt-3">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>No. Factura</th>
+                  <th>Tipo</th>
+                  <th>Fecha</th>
+                  <th>Concepto</th>
+                  <th>Cliente / Proveedor</th>
+                  <th>Total</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="facturasTableBody"></tbody>
             </table>
           </div>
         </section>
