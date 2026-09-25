@@ -103,7 +103,7 @@ const app = {
       case 'nomina': this.loadNomina(); break;
       case 'caja': this.loadCaja(); break;
       case 'facturas': this.loadFacturas(); break;
-      case 'dashboard': this.loadDashboard(); break;
+      case 'dashboard': this.loadReporteActivo(); break;
     }
   },
 
@@ -1680,9 +1680,167 @@ const app = {
   // ===========================================================================
   setDashboardPeriod(period) {
     this.dashboardPeriod = period;
-    document.querySelectorAll('.period-btn').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-period') === period));
+    document.querySelectorAll('#tab-dashboard .period-selector:not(#reporteTipoSelector) .period-btn')
+      .forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-period') === period));
     document.getElementById('reportePersonalizadoBox').classList.toggle('hidden', period !== 'personalizado');
-    this.loadDashboard();
+    this.loadReporteActivo();
+  },
+
+  /** Cambia cuál de los 7 reportes se está viendo en pantalla. */
+  setReporteTipo(tipo) {
+    this.reporteTipoActivo = tipo;
+    document.querySelectorAll('#reporteTipoSelector .period-btn').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-reporte') === tipo));
+    document.querySelectorAll('.reporte-subview').forEach(v => v.classList.toggle('hidden', v.id !== `reporte-${tipo}`));
+
+    // El reporte de Inventario es una foto del momento: no aplica período.
+    const esInventario = tipo === 'inventario';
+    document.querySelector('#tab-dashboard .period-selector:not(#reporteTipoSelector)').classList.toggle('hidden', esInventario);
+    document.getElementById('reportePersonalizadoBox').classList.toggle('hidden', esInventario || this.dashboardPeriod !== 'personalizado');
+
+    this.loadReporteActivo();
+  },
+
+  loadReporteActivo() {
+    const tipo = this.reporteTipoActivo || 'resumen';
+    if (tipo === 'personalizado' && this.dashboardPeriod === 'personalizado') return; // guard, no-op
+    const cargadores = {
+      resumen: () => this.loadDashboard(),
+      ventas: () => this.loadReporteVentas(),
+      compras: () => this.loadReporteCompras(),
+      inventario: () => this.loadReporteInventario(),
+      nomina: () => this.loadReporteNomina(),
+      comparativo: () => this.loadReporteComparativo(),
+      operativo: () => this.loadReporteOperativo()
+    };
+    (cargadores[tipo] || cargadores.resumen)();
+  },
+
+  /** Barras horizontales simples (sin librerías externas). data = [{label, value}] */
+  renderBarChart(elId, data, { color = '#0077b6', money = true } = {}) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!data || data.length === 0) {
+      el.innerHTML = '<p class="text-muted text-sm text-center py-3">Sin datos en el período.</p>';
+      return;
+    }
+    const max = Math.max(...data.map(d => d.value), 1);
+    el.innerHTML = `<div class="bar-chart-list">${data.map(d => `
+      <div class="bar-chart-row">
+        <span class="bar-chart-label" title="${d.label}">${d.label}</span>
+        <div class="bar-chart-track"><div class="bar-chart-fill" style="width:${Math.max(2, (d.value / max) * 100).toFixed(1)}%; background:${color}"></div></div>
+        <span class="bar-chart-value">${money ? this.formatMoney(d.value) : d.value}</span>
+      </div>
+    `).join('')}</div>`;
+  },
+
+  /** Dona SVG simple. data = [{label, value, color}] */
+  renderDonutChart(elId, data) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const total = data.reduce((s, d) => s + d.value, 0);
+    if (!total) {
+      el.innerHTML = '<p class="text-muted text-sm text-center py-3">Sin datos en el período.</p>';
+      return;
+    }
+    const radio = 45, circunferencia = 2 * Math.PI * radio;
+    let acumulado = 0;
+    const circulos = data.filter(d => d.value > 0).map(d => {
+      const frac = d.value / total;
+      const largo = frac * circunferencia;
+      const circle = `<circle r="${radio}" cx="60" cy="60" fill="transparent" stroke="${d.color}" stroke-width="18" stroke-dasharray="${largo} ${circunferencia - largo}" stroke-dashoffset="${-acumulado}" transform="rotate(-90 60 60)"></circle>`;
+      acumulado += largo;
+      return circle;
+    }).join('');
+    const leyenda = data.map(d => `<div class="donut-legend-item"><span class="donut-dot" style="background:${d.color}"></span>${d.label}: ${d.value} (${Math.round((d.value / total) * 100)}%)</div>`).join('');
+    el.innerHTML = `<div class="donut-chart-wrapper"><svg width="120" height="120" viewBox="0 0 120 120">${circulos}</svg><div class="donut-legend">${leyenda}</div></div>`;
+  },
+
+  async loadReporteVentas() {
+    try {
+      const r = await ApiCliente.get(`/api/reportes/ventas?${this.construirQueryPeriodo()}`);
+      document.getElementById('ventasTotal').textContent = this.formatMoney(r.totalVentas);
+      document.getElementById('ventasCantidad').textContent = r.cantidadVentas;
+      document.getElementById('ventasTicketProm').textContent = this.formatMoney(r.ticketPromedio);
+
+      this.renderBarChart('ventasPorServicioChart', Object.entries(r.porServicio).map(([label, value]) => ({ label, value })), { color: '#0077b6' });
+      this.renderDonutChart('ventasPorMetodoChart', Object.entries(r.porMetodoPago).map(([label, value], i) => ({ label: label.toUpperCase(), value, color: ['#0077b6', '#00b4d8', '#10b981', '#f59e0b'][i % 4] })));
+      this.renderDonutChart('ventasPorVehiculoChart', [
+        { label: 'Carros', value: r.porVehiculo.carro, color: '#0077b6' },
+        { label: 'Motos', value: r.porVehiculo.moto, color: '#00b4d8' }
+      ]);
+
+      document.getElementById('ventasTopClientesBody').innerHTML = r.topClientes.map(c => `
+        <tr><td>${c.nombre}</td><td>${c.cantidad}</td><td><strong>${this.formatMoney(c.total)}</strong></td></tr>
+      `).join('') || `<tr><td colspan="3" class="text-center text-muted text-sm py-3">Sin clientes registrados con compras en el período.</td></tr>`;
+    } catch (err) { console.error(err); }
+  },
+
+  async loadReporteCompras() {
+    try {
+      const r = await ApiCliente.get(`/api/reportes/compras?${this.construirQueryPeriodo()}`);
+      document.getElementById('comprasTotal').textContent = this.formatMoney(r.totalCompras);
+      document.getElementById('comprasCantidad').textContent = r.cantidadCompras;
+      this.renderBarChart('comprasPorProveedorChart', Object.entries(r.porProveedor).map(([label, value]) => ({ label, value })), { color: '#f59e0b' });
+      this.renderBarChart('comprasPorInsumoChart', Object.entries(r.porInsumo).map(([label, value]) => ({ label, value })), { color: '#f59e0b' });
+    } catch (err) { console.error(err); }
+  },
+
+  async loadReporteInventario() {
+    try {
+      const r = await ApiCliente.get('/api/reportes/inventario');
+      document.getElementById('inventarioValorTotal').textContent = this.formatMoney(r.valorTotalInventario);
+      document.getElementById('inventarioAlertas').textContent = r.alertas.length;
+      this.renderBarChart('inventarioValorChart', r.insumos.map(i => ({ label: i.nombre, value: i.valor })), { color: '#0077b6' });
+    } catch (err) { console.error(err); }
+  },
+
+  async loadReporteNomina() {
+    try {
+      const r = await ApiCliente.get(`/api/reportes/nomina?${this.construirQueryPeriodo()}`);
+      document.getElementById('nominaSalarios').textContent = this.formatMoney(r.salariosPagados);
+      document.getElementById('nominaComisiones').textContent = this.formatMoney(r.comisionesPagadas);
+      document.getElementById('nominaPendiente').textContent = this.formatMoney(r.liquidacionesPendientesTotal);
+      document.getElementById('nominaHoras').textContent = `${r.horasTrabajadasTotal} hrs`;
+      this.renderDonutChart('nominaAsistenciaChart', [
+        { label: 'Presentes', value: r.asistenciasPresentes, color: '#10b981' },
+        { label: 'Inasistencias', value: r.inasistencias, color: '#ef4444' }
+      ]);
+    } catch (err) { console.error(err); }
+  },
+
+  async loadReporteComparativo() {
+    try {
+      const r = await ApiCliente.get(`/api/reportes/comparativo?${this.construirQueryPeriodo()}`);
+      const fmtVar = v => v === null ? 'Sin datos del período anterior' : `${v > 0 ? '▲' : v < 0 ? '▼' : '='} ${Math.abs(v)}% vs. período anterior`;
+
+      this.renderBarChart('compIngresosChart', [
+        { label: 'Actual', value: r.actual.totalIngresos },
+        { label: 'Anterior', value: r.anterior.totalIngresos }
+      ], { color: '#0077b6' });
+      document.getElementById('compIngresosVar').textContent = fmtVar(r.variacionIngresos);
+
+      this.renderBarChart('compGananciaChart', [
+        { label: 'Actual', value: r.actual.gananciaNeta },
+        { label: 'Anterior', value: r.anterior.gananciaNeta }
+      ], { color: '#10b981' });
+      document.getElementById('compGananciaVar').textContent = fmtVar(r.variacionGanancia);
+
+      this.renderBarChart('compServiciosChart', [
+        { label: 'Actual', value: r.actual.serviciosAtendidos },
+        { label: 'Anterior', value: r.anterior.serviciosAtendidos }
+      ], { color: '#f59e0b', money: false });
+      document.getElementById('compServiciosVar').textContent = fmtVar(r.variacionServicios);
+    } catch (err) { console.error(err); }
+  },
+
+  async loadReporteOperativo() {
+    try {
+      const r = await ApiCliente.get(`/api/reportes/operativo?${this.construirQueryPeriodo()}`);
+      document.getElementById('opClientesNuevos').textContent = r.clientesNuevos;
+      document.getElementById('opClientesRecurrentes').textContent = r.clientesRecurrentes;
+      const coloresEstado = { agendada: '#0077b6', reprogramada: '#f59e0b', atendida: '#10b981', cancelada: '#ef4444' };
+      this.renderDonutChart('opCitasChart', Object.entries(r.porEstadoCitas).map(([label, value]) => ({ label: label[0].toUpperCase() + label.slice(1), value, color: coloresEstado[label] || '#64748b' })));
+    } catch (err) { console.error(err); }
   },
 
   construirQueryPeriodo() {
@@ -1753,14 +1911,17 @@ const app = {
    * token JWT en el header Authorization, así que se pide como blob.
    */
   async descargarReportePdf() {
-    const url = `/api/reportes/dashboard/pdf?${this.construirQueryPeriodo()}`;
+    const tipo = this.reporteTipoActivo || 'resumen';
+    const endpoint = tipo === 'resumen' ? 'dashboard' : tipo;
+    const query = tipo === 'inventario' ? '' : `?${this.construirQueryPeriodo()}`;
+    const url = `/api/reportes/${endpoint}/pdf${query}`;
     try {
       const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${ApiCliente.obtenerToken()}` } });
       if (!respuesta.ok) throw new Error('No se pudo generar el PDF.');
       const blob = await respuesta.blob();
       const enlace = document.createElement('a');
       enlace.href = URL.createObjectURL(blob);
-      enlace.download = 'reporte_carwash.pdf';
+      enlace.download = `reporte_${tipo}.pdf`;
       document.body.appendChild(enlace);
       enlace.click();
       enlace.remove();

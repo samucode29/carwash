@@ -638,7 +638,7 @@
           <div class="section-top-bar">
             <div>
               <h2>Reportes Financieros y Operativos</h2>
-              <p class="text-muted">Cálculo de ganancias netas: Ingresos – (Costos Insumos + Gastos + Comisiones)</p>
+              <p class="text-muted">Cada reporte se puede ver aquí en pantalla (con gráficos) o descargar en PDF.</p>
             </div>
             <div class="period-selector">
               <button class="period-btn active" data-period="dia" onclick="app.setDashboardPeriod('dia')">Hoy</button>
@@ -649,17 +649,30 @@
             </div>
           </div>
 
+          <!-- Selector de tipo de reporte -->
+          <div class="period-selector mt-2" id="reporteTipoSelector">
+            <button class="period-btn active" data-reporte="resumen" onclick="app.setReporteTipo('resumen')">Resumen General</button>
+            <button class="period-btn" data-reporte="ventas" onclick="app.setReporteTipo('ventas')">Ventas</button>
+            <button class="period-btn" data-reporte="compras" onclick="app.setReporteTipo('compras')">Compras</button>
+            <button class="period-btn" data-reporte="inventario" onclick="app.setReporteTipo('inventario')">Inventario</button>
+            <button class="period-btn" data-reporte="nomina" onclick="app.setReporteTipo('nomina')">Nómina</button>
+            <button class="period-btn" data-reporte="comparativo" onclick="app.setReporteTipo('comparativo')">Comparativo</button>
+            <button class="period-btn" data-reporte="operativo" onclick="app.setReporteTipo('operativo')">Operativo</button>
+          </div>
+
           <!-- Rango de fechas personalizado + descarga de reporte en PDF -->
           <div class="section-top-bar mt-2">
             <div id="reportePersonalizadoBox" class="periodo-personalizado-box hidden">
               <label class="text-sm text-muted">Desde:</label>
-              <input type="date" id="reporteFechaInicio" class="date-input" onchange="app.loadDashboard()">
+              <input type="date" id="reporteFechaInicio" class="date-input" onchange="app.loadReporteActivo()">
               <label class="text-sm text-muted">Hasta:</label>
-              <input type="date" id="reporteFechaFin" class="date-input" onchange="app.loadDashboard()">
+              <input type="date" id="reporteFechaFin" class="date-input" onchange="app.loadReporteActivo()">
             </div>
-            <button class="btn btn-outline" onclick="app.descargarReportePdf()">Descargar Reporte en PDF</button>
+            <button class="btn btn-outline" id="btnDescargarReporte" onclick="app.descargarReportePdf()">Descargar Reporte en PDF</button>
           </div>
 
+          <!-- ============ RESUMEN GENERAL ============ -->
+          <div id="reporte-resumen" class="reporte-subview">
           <!-- Fórmula de Ganancia Neta Destacada -->
           <div class="profit-formula-card mt-3">
             <div class="formula-item">
@@ -668,7 +681,7 @@
             </div>
             <span class="formula-op">−</span>
             <div class="formula-item">
-              <span class="formula-label">Costos de Insumos</span>
+              <span class="formula-label">Compras de Insumos</span>
               <span class="formula-val text-danger" id="dashCostoInsumos">$0</span>
             </div>
             <span class="formula-op">−</span>
@@ -758,6 +771,155 @@
                 </thead>
                 <tbody id="auditoriaTableBody"></tbody>
               </table>
+            </div>
+          </div>
+          </div>
+          <!-- ============ FIN RESUMEN GENERAL ============ -->
+
+          <!-- ============ VENTAS ============ -->
+          <div id="reporte-ventas" class="reporte-subview hidden">
+            <div class="kpi-grid mt-3">
+              <div class="kpi-card">
+                <span class="kpi-title">Total Vendido</span>
+                <span class="kpi-value text-success" id="ventasTotal">$0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Cantidad de Ventas</span>
+                <span class="kpi-value" id="ventasCantidad">0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Ticket Promedio</span>
+                <span class="kpi-value" id="ventasTicketProm">$0</span>
+              </div>
+            </div>
+            <div class="grid-3-cols mt-4">
+              <div class="chart-card">
+                <h4>Ventas por Servicio</h4>
+                <div class="mt-2" id="ventasPorServicioChart"></div>
+              </div>
+              <div class="chart-card">
+                <h4>Por Método de Pago</h4>
+                <div class="mt-2" id="ventasPorMetodoChart"></div>
+              </div>
+              <div class="chart-card">
+                <h4>Por Tipo de Vehículo</h4>
+                <div class="mt-2" id="ventasPorVehiculoChart"></div>
+              </div>
+            </div>
+            <div class="card-table-wrapper mt-4">
+              <div class="panel-header"><h4>Top 5 Clientes</h4></div>
+              <table class="data-table data-table-sm">
+                <thead><tr><th>Cliente</th><th>Compras</th><th>Total</th></tr></thead>
+                <tbody id="ventasTopClientesBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ============ COMPRAS ============ -->
+          <div id="reporte-compras" class="reporte-subview hidden">
+            <div class="kpi-grid mt-3">
+              <div class="kpi-card">
+                <span class="kpi-title">Total Comprado</span>
+                <span class="kpi-value text-danger" id="comprasTotal">$0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Cantidad de Compras</span>
+                <span class="kpi-value" id="comprasCantidad">0</span>
+              </div>
+            </div>
+            <div class="grid-2-cols mt-4">
+              <div class="chart-card">
+                <h4>Por Proveedor</h4>
+                <div class="mt-2" id="comprasPorProveedorChart"></div>
+              </div>
+              <div class="chart-card">
+                <h4>Por Insumo</h4>
+                <div class="mt-2" id="comprasPorInsumoChart"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ INVENTARIO ============ -->
+          <div id="reporte-inventario" class="reporte-subview hidden">
+            <p class="text-muted text-sm mt-2">Foto del inventario en este momento (no depende del período elegido arriba).</p>
+            <div class="kpi-grid mt-2">
+              <div class="kpi-card highlight-card">
+                <span class="kpi-title">Valor Total del Inventario</span>
+                <span class="kpi-value" id="inventarioValorTotal">$0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Insumos en Bajo Stock</span>
+                <span class="kpi-value text-danger" id="inventarioAlertas">0</span>
+              </div>
+            </div>
+            <div class="chart-card mt-4">
+              <h4>Valor por Insumo</h4>
+              <div class="mt-2" id="inventarioValorChart"></div>
+            </div>
+          </div>
+
+          <!-- ============ NÓMINA ============ -->
+          <div id="reporte-nomina" class="reporte-subview hidden">
+            <div class="kpi-grid mt-3">
+              <div class="kpi-card">
+                <span class="kpi-title">Salarios Pagados</span>
+                <span class="kpi-value text-danger" id="nominaSalarios">$0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Comisiones Pagadas</span>
+                <span class="kpi-value text-danger" id="nominaComisiones">$0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Liquidaciones Pendientes</span>
+                <span class="kpi-value text-warning" id="nominaPendiente">$0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Horas Trabajadas</span>
+                <span class="kpi-value" id="nominaHoras">0 hrs</span>
+              </div>
+            </div>
+            <div class="chart-card mt-4">
+              <h4>Asistencia del Período</h4>
+              <div class="mt-2" id="nominaAsistenciaChart"></div>
+            </div>
+          </div>
+
+          <!-- ============ COMPARATIVO ============ -->
+          <div id="reporte-comparativo" class="reporte-subview hidden">
+            <div class="grid-3-cols mt-3">
+              <div class="chart-card">
+                <h4>Ingresos</h4>
+                <div class="mt-2" id="compIngresosChart"></div>
+                <p class="text-center text-sm mt-2" id="compIngresosVar">-</p>
+              </div>
+              <div class="chart-card">
+                <h4>Ganancia Neta</h4>
+                <div class="mt-2" id="compGananciaChart"></div>
+                <p class="text-center text-sm mt-2" id="compGananciaVar">-</p>
+              </div>
+              <div class="chart-card">
+                <h4>Servicios Atendidos</h4>
+                <div class="mt-2" id="compServiciosChart"></div>
+                <p class="text-center text-sm mt-2" id="compServiciosVar">-</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ OPERATIVO ============ -->
+          <div id="reporte-operativo" class="reporte-subview hidden">
+            <div class="kpi-grid mt-3">
+              <div class="kpi-card">
+                <span class="kpi-title">Clientes Nuevos</span>
+                <span class="kpi-value text-success" id="opClientesNuevos">0</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Clientes Recurrentes</span>
+                <span class="kpi-value" id="opClientesRecurrentes">0</span>
+              </div>
+            </div>
+            <div class="chart-card mt-4">
+              <h4>Citas por Estado</h4>
+              <div class="mt-2" id="opCitasChart"></div>
             </div>
           </div>
         </section>

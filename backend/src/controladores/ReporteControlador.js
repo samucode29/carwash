@@ -1,11 +1,12 @@
 /**
  * Controlador de reportes y dashboard (CU18, CU19, CU29 / RF19, RF20, RF25,
- * RF26). Soporta período rápido (día/semana/mes/año) o un rango
- * personalizado, en formato JSON o descargado como PDF.
+ * RF26). Cada reporte se puede ver en pantalla (JSON) o descargar en PDF;
+ * todos soportan período rápido (día/semana/mes/año) o un rango
+ * personalizado, salvo Inventario que es una foto del momento actual.
  */
 const ReporteRepositorio = require('../repositorios/ReporteRepositorio');
 const { calcularRangoPorPeriodo } = require('../utilidades/fechas');
-const { generarPdfReporte } = require('../utilidades/generadorReportePdf');
+const { generarPdfReporte, generarPdfGenerico, formatearMoneda } = require('../utilidades/generadorReportePdf');
 
 const ETIQUETAS_PERIODO = {
   dia: 'Hoy', semana: 'Últimos 7 días', mes: 'Mes actual', ano: 'Año actual', personalizado: 'Rango personalizado'
@@ -17,22 +18,207 @@ function resolverRango(query) {
   return { periodo, rango };
 }
 
-/** Reporte en JSON, usado por el dashboard interactivo del frontend. */
+function etiquetaDe(periodo, rango) {
+  return periodo === 'personalizado' ? `${rango.inicio} a ${rango.fin}` : (ETIQUETAS_PERIODO[periodo] || periodo);
+}
+
+// ---------------------------------------------------------------------------
+// Resumen general (el dashboard de siempre)
+// ---------------------------------------------------------------------------
 async function obtenerReporte(req, res) {
   const { periodo, rango } = resolverRango(req.query);
   const reporte = await ReporteRepositorio.calcularReporte(rango.inicio, rango.fin);
   res.json({ periodo, ...reporte });
 }
 
-/** Mismo reporte pero entregado como archivo PDF descargable. */
 async function descargarReportePdf(req, res) {
   const { periodo, rango } = resolverRango(req.query);
   const reporte = await ReporteRepositorio.calcularReporte(rango.inicio, rango.fin);
-  const etiqueta = periodo === 'personalizado'
-    ? `${rango.inicio} a ${rango.fin}`
-    : ETIQUETAS_PERIODO[periodo] || periodo;
-
-  generarPdfReporte(res, reporte, { etiquetaPeriodo: etiqueta });
+  generarPdfReporte(res, reporte, { etiquetaPeriodo: etiquetaDe(periodo, rango) });
 }
 
-module.exports = { obtenerReporte, descargarReportePdf };
+// ---------------------------------------------------------------------------
+// Ventas
+// ---------------------------------------------------------------------------
+async function obtenerReporteVentas(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const reporte = await ReporteRepositorio.calcularReporteVentas(rango.inicio, rango.fin);
+  res.json({ periodo, ...reporte });
+}
+
+async function descargarReporteVentasPdf(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const r = await ReporteRepositorio.calcularReporteVentas(rango.inicio, rango.fin);
+  generarPdfGenerico(res, {
+    titulo: 'Reporte de Ventas', subtitulo: `Período: ${etiquetaDe(periodo, rango)}`,
+    nombreArchivo: `reporte_ventas_${rango.inicio}_a_${rango.fin}.pdf`,
+    secciones: [
+      { titulo: 'Resumen', filas: [
+        ['Total Vendido', formatearMoneda(r.totalVentas)],
+        ['Cantidad de Ventas', String(r.cantidadVentas)],
+        ['Ticket Promedio', formatearMoneda(r.ticketPromedio)]
+      ] },
+      { titulo: 'Por Servicio', filas: Object.entries(r.porServicio).map(([k, v]) => [k, formatearMoneda(v)]) },
+      { titulo: 'Por Método de Pago', filas: Object.entries(r.porMetodoPago).map(([k, v]) => [k.toUpperCase(), formatearMoneda(v)]) },
+      { titulo: 'Por Tipo de Vehículo', filas: [['Carros', formatearMoneda(r.porVehiculo.carro)], ['Motos', formatearMoneda(r.porVehiculo.moto)]] },
+      { titulo: 'Top 5 Clientes', tabla: {
+        encabezados: ['Cliente', 'Compras', 'Total'],
+        filas: r.topClientes.map(c => [c.nombre, String(c.cantidad), formatearMoneda(c.total)])
+      } }
+    ]
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Compras
+// ---------------------------------------------------------------------------
+async function obtenerReporteCompras(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const reporte = await ReporteRepositorio.calcularReporteCompras(rango.inicio, rango.fin);
+  res.json({ periodo, ...reporte });
+}
+
+async function descargarReporteComprasPdf(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const r = await ReporteRepositorio.calcularReporteCompras(rango.inicio, rango.fin);
+  generarPdfGenerico(res, {
+    titulo: 'Reporte de Compras', subtitulo: `Período: ${etiquetaDe(periodo, rango)}`,
+    nombreArchivo: `reporte_compras_${rango.inicio}_a_${rango.fin}.pdf`,
+    secciones: [
+      { titulo: 'Resumen', filas: [
+        ['Total Comprado', formatearMoneda(r.totalCompras)],
+        ['Cantidad de Compras', String(r.cantidadCompras)]
+      ] },
+      { titulo: 'Por Proveedor', filas: Object.entries(r.porProveedor).map(([k, v]) => [k, formatearMoneda(v)]) },
+      { titulo: 'Por Insumo', filas: Object.entries(r.porInsumo).map(([k, v]) => [k, formatearMoneda(v)]) }
+    ]
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Inventario (foto del momento, no depende de un rango)
+// ---------------------------------------------------------------------------
+async function obtenerReporteInventario(req, res) {
+  res.json(await ReporteRepositorio.calcularReporteInventario());
+}
+
+async function descargarReporteInventarioPdf(req, res) {
+  const r = await ReporteRepositorio.calcularReporteInventario();
+  generarPdfGenerico(res, {
+    titulo: 'Reporte de Inventario Valorizado', subtitulo: `Corte: ${new Date().toLocaleDateString('es-CO')}`,
+    nombreArchivo: `reporte_inventario.pdf`,
+    secciones: [
+      { titulo: 'Resumen', filas: [['Valor Total del Inventario', formatearMoneda(r.valorTotalInventario)], ['Insumos en Bajo Stock', String(r.alertas.length)]] },
+      { titulo: 'Detalle por Insumo', tabla: {
+        encabezados: ['Insumo', 'Stock', 'Costo Unitario', 'Valor'],
+        filas: r.insumos.map(i => [i.nombre, `${i.stock_actual} ${i.unidad_medida}`, formatearMoneda(i.costo_unitario), formatearMoneda(i.valor)])
+      } }
+    ]
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Nómina
+// ---------------------------------------------------------------------------
+async function obtenerReporteNomina(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const reporte = await ReporteRepositorio.calcularReporteNomina(rango.inicio, rango.fin);
+  res.json({ periodo, ...reporte });
+}
+
+async function descargarReporteNominaPdf(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const r = await ReporteRepositorio.calcularReporteNomina(rango.inicio, rango.fin);
+  generarPdfGenerico(res, {
+    titulo: 'Reporte de Nómina', subtitulo: `Período: ${etiquetaDe(periodo, rango)}`,
+    nombreArchivo: `reporte_nomina_${rango.inicio}_a_${rango.fin}.pdf`,
+    secciones: [
+      { titulo: 'Salarios y Comisiones Pagados', filas: [
+        ['Salarios Pagados', formatearMoneda(r.salariosPagados)],
+        ['Cantidad de Pagos de Salario', String(r.salariosCantidad)],
+        ['Comisiones Pagadas a Lavadores', formatearMoneda(r.comisionesPagadas)],
+        ['Cantidad de Liquidaciones Pagadas', String(r.comisionesCantidad)]
+      ] },
+      { titulo: 'Pendiente por Pagar', filas: [
+        ['Liquidaciones Pendientes', formatearMoneda(r.liquidacionesPendientesTotal)],
+        ['Cantidad Pendiente', String(r.liquidacionesPendientesCantidad)]
+      ] },
+      { titulo: 'Asistencia', filas: [
+        ['Días Presentes Registrados', String(r.asistenciasPresentes)],
+        ['Inasistencias', String(r.inasistencias)],
+        ['Horas Trabajadas Totales', `${r.horasTrabajadasTotal} hrs`]
+      ] }
+    ]
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Comparativo de períodos
+// ---------------------------------------------------------------------------
+async function obtenerReporteComparativo(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const reporte = await ReporteRepositorio.calcularReporteComparativo(rango.inicio, rango.fin);
+  res.json({ periodo, ...reporte });
+}
+
+async function descargarReporteComparativoPdf(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const r = await ReporteRepositorio.calcularReporteComparativo(rango.inicio, rango.fin);
+  const fmtVar = v => v === null ? 'N/A' : `${v > 0 ? '+' : ''}${v}%`;
+  generarPdfGenerico(res, {
+    titulo: 'Reporte Comparativo de Períodos', subtitulo: `${r.actual.rango.inicio} a ${r.actual.rango.fin}  vs.  ${r.anterior.rango.inicio} a ${r.anterior.rango.fin}`,
+    nombreArchivo: `reporte_comparativo_${rango.inicio}_a_${rango.fin}.pdf`,
+    secciones: [
+      { titulo: 'Ingresos', filas: [
+        ['Período Actual', formatearMoneda(r.actual.totalIngresos)],
+        ['Período Anterior', formatearMoneda(r.anterior.totalIngresos)],
+        ['Variación', fmtVar(r.variacionIngresos)]
+      ] },
+      { titulo: 'Ganancia Neta', filas: [
+        ['Período Actual', formatearMoneda(r.actual.gananciaNeta)],
+        ['Período Anterior', formatearMoneda(r.anterior.gananciaNeta)],
+        ['Variación', fmtVar(r.variacionGanancia)]
+      ] },
+      { titulo: 'Servicios Atendidos', filas: [
+        ['Período Actual', String(r.actual.serviciosAtendidos)],
+        ['Período Anterior', String(r.anterior.serviciosAtendidos)],
+        ['Variación', fmtVar(r.variacionServicios)]
+      ] }
+    ]
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Operativo (citas y clientes)
+// ---------------------------------------------------------------------------
+async function obtenerReporteOperativo(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const reporte = await ReporteRepositorio.calcularReporteOperativo(rango.inicio, rango.fin);
+  res.json({ periodo, ...reporte });
+}
+
+async function descargarReporteOperativoPdf(req, res) {
+  const { periodo, rango } = resolverRango(req.query);
+  const r = await ReporteRepositorio.calcularReporteOperativo(rango.inicio, rango.fin);
+  generarPdfGenerico(res, {
+    titulo: 'Reporte Operativo', subtitulo: `Período: ${etiquetaDe(periodo, rango)}`,
+    nombreArchivo: `reporte_operativo_${rango.inicio}_a_${rango.fin}.pdf`,
+    secciones: [
+      { titulo: 'Citas por Estado', filas: Object.entries(r.porEstadoCitas).map(([k, v]) => [k.toUpperCase(), String(v)]) },
+      { titulo: 'Clientes', filas: [
+        ['Clientes Nuevos', String(r.clientesNuevos)],
+        ['Clientes Recurrentes', String(r.clientesRecurrentes)]
+      ] }
+    ]
+  });
+}
+
+module.exports = {
+  obtenerReporte, descargarReportePdf,
+  obtenerReporteVentas, descargarReporteVentasPdf,
+  obtenerReporteCompras, descargarReporteComprasPdf,
+  obtenerReporteInventario, descargarReporteInventarioPdf,
+  obtenerReporteNomina, descargarReporteNominaPdf,
+  obtenerReporteComparativo, descargarReporteComparativoPdf,
+  obtenerReporteOperativo, descargarReporteOperativoPdf
+};

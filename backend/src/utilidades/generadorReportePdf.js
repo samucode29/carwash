@@ -84,4 +84,60 @@ function generarPdfReporte(res, reporte, opciones = {}) {
   doc.end();
 }
 
-module.exports = { generarPdfReporte, formatearMoneda };
+/**
+ * Generador genérico para los reportes de ventas/compras/inventario/nómina/
+ * comparativo/operativo: recibe secciones ya armadas por el controlador,
+ * cada una con filas [etiqueta, valor] o una tabla [encabezados, filas[]].
+ *
+ * @param {{titulo: string, subtitulo?: string, nombreArchivo: string,
+ *          secciones: Array<{titulo: string, filas?: [string, string][],
+ *          tabla?: {encabezados: string[], filas: string[][]}}>}} datos
+ */
+function generarPdfGenerico(res, datos) {
+  const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${datos.nombreArchivo}"`);
+  doc.pipe(res);
+
+  doc.fontSize(20).fillColor('#0077b6').text('CarWash Pro');
+  doc.fontSize(14).fillColor('#111').text(datos.titulo);
+  if (datos.subtitulo) {
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor('#555').text(datos.subtitulo);
+  }
+  doc.moveDown(0.3);
+  doc.fontSize(9).fillColor('#888').text(`Generado: ${new Date().toLocaleString('es-CO')}`);
+  doc.moveDown(1);
+  doc.moveTo(50, doc.y).lineTo(560, doc.y).strokeColor('#ddd').stroke();
+  doc.moveDown(1);
+
+  (datos.secciones || []).forEach(seccion => {
+    if (doc.y > 680) doc.addPage();
+    doc.fontSize(13).fillColor('#111').text(seccion.titulo, { underline: true });
+    doc.moveDown(0.5);
+
+    (seccion.filas || []).forEach(([etiqueta, valor]) => {
+      doc.fontSize(11).fillColor('#333').text(etiqueta, 50, doc.y, { continued: true, width: 320 });
+      doc.fontSize(11).fillColor('#000').text(String(valor), { align: 'right' });
+    });
+
+    if (seccion.tabla) {
+      doc.moveDown(0.3);
+      doc.fontSize(9).fillColor('#0077b6').text(seccion.tabla.encabezados.join('   |   '));
+      doc.moveDown(0.2);
+      if (seccion.tabla.filas.length === 0) {
+        doc.fontSize(9).fillColor('#888').text('Sin datos en el período.');
+      }
+      seccion.tabla.filas.forEach(fila => {
+        doc.fontSize(9).fillColor('#333').text(fila.join('   |   '));
+      });
+    }
+
+    doc.moveDown(1);
+  });
+
+  doc.end();
+}
+
+module.exports = { generarPdfReporte, generarPdfGenerico, formatearMoneda };
