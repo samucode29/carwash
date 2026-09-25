@@ -212,7 +212,48 @@ un proyecto Node estándar solo con `package.json`).
 
 ---
 
-## 8. Git
+## 8. Despliegue en Render (con MySQL en Aiven)
+
+Render no ofrece MySQL administrado (solo PostgreSQL/Redis), así que la
+base de datos vive en otro proveedor y el backend en Render. Recomendado:
+[Aiven](https://aiven.io/free-mysql-database) para el MySQL, que tiene un
+plan siempre-gratis (1GB, sin tarjeta) pensado para proyectos pequeños
+como este.
+
+1. **Base de datos (Aiven)**: crea una cuenta gratis en Aiven, crea un
+   servicio "MySQL" en el plan Free. Cuando esté listo (unos minutos), en
+   la pestaña "Overview" copia `Host`, `Port`, `User`, `Password` y
+   `Default database name`. Conéctate con esos datos desde MySQL
+   Workbench (SSL activado) y ejecuta
+   [`backend/database/schema.sql`](backend/database/schema.sql) (y
+   opcionalmente `datos_semilla.sql`) contra esa base.
+   > El plan Free de Aiven apaga el servicio tras un período de
+   > inactividad prolongado (te avisan por correo antes); se reactiva
+   > entrando de nuevo al panel de Aiven.
+2. **Backend (Render)**: crea una cuenta en Render, "New +" →
+   "Web Service", conecta este repositorio de GitHub. Configura:
+   - **Root Directory**: `backend`
+   - **Runtime**: Node
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Instance Type**: Free
+3. En la pestaña "Environment" de ese servicio, agrega las variables de
+   [`backend/.env.example`](backend/.env.example) con los datos de Aiven:
+   `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `JWT_SECRET`
+   (genera uno propio, largo y aleatorio), `JWT_EXPIRA_EN`, `CORS_ORIGEN`.
+   Render asigna `PORT` automáticamente, no hace falta declararla.
+4. El backend ya sirve `frontend/` como sitio estático (ver
+   `backend/src/app.js`), así que con este único servicio de Render tienes
+   todo funcionando: abre la URL pública que te da Render (termina en
+   `.onrender.com`) y entra por `/login.html`.
+
+> El plan Free de Render apaga el servicio tras ~15 minutos sin tráfico;
+> la siguiente visita tarda 30-60s en "despertar". Es normal y no indica
+> una falla.
+
+---
+
+## 9. Git
 
 ```bash
 git init
