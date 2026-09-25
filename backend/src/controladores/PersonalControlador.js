@@ -192,8 +192,12 @@ async function reiniciarContrasena(req, res) {
 async function listarLavadores(req, res) {
   const soloActivos = req.query.activos === 'true';
   const lavadores = await LavadorRepositorio.listar({ soloActivos });
-  const presentesIds = new Set(await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy()));
-  res.json(lavadores.map(l => ({ ...l, disponible_hoy: presentesIds.has(l.id) })));
+  const estados = await AsistenciaRepositorio.listarEstadoAsistenciaHoy('lavador', obtenerFechaHoy());
+  res.json(lavadores.map(l => ({
+    ...l,
+    disponible_hoy: estados[l.id] === 'presente',
+    estado_asistencia_hoy: estados[l.id] || 'sin_asistencia'
+  })));
 }
 
 async function crearLavador(req, res) {

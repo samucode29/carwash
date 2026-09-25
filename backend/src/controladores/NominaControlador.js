@@ -13,8 +13,12 @@ const { obtenerFechaHoy, obtenerHoraActual } = require('../utilidades/fechas');
 // ---------------------------------------------------------------------------
 async function listarResumenLavadores(req, res) {
   const resumen = await NominaRepositorio.resumenComisionesLavadores();
-  const presentesIds = new Set(await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy()));
-  res.json(resumen.map(l => ({ ...l, disponible_hoy: presentesIds.has(l.lavador_id) })));
+  const estados = await AsistenciaRepositorio.listarEstadoAsistenciaHoy('lavador', obtenerFechaHoy());
+  res.json(resumen.map(l => ({
+    ...l,
+    disponible_hoy: estados[l.lavador_id] === 'presente',
+    estado_asistencia_hoy: estados[l.lavador_id] || 'sin_asistencia'
+  })));
 }
 
 async function generarLiquidacion(req, res) {

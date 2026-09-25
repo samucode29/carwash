@@ -79,6 +79,28 @@ async function listarIdsPresentesHoy(personaTipo, fecha) {
   return filas.map(f => f.persona_id);
 }
 
+/**
+ * Estado de asistencia de hoy por persona: 'presente' (entrada marcada,
+ * sin salida), 'finalizado' (ya marcó salida) o 'inasistencia'. Quien no
+ * tiene ningún registro hoy no aparece en el resultado (equivale a "sin
+ * asistencia" para quien consuma esto). Solo 'presente' debe poder
+ * recibir asignación de un servicio nuevo.
+ */
+async function listarEstadoAsistenciaHoy(personaTipo, fecha) {
+  const [filas] = await pool.query(
+    `SELECT persona_id, hora_entrada, hora_salida, inasistencia
+     FROM asistencia WHERE persona_tipo = ? AND fecha = ?`,
+    [personaTipo, fecha]
+  );
+  const estados = {};
+  filas.forEach((f) => {
+    if (f.inasistencia) estados[f.persona_id] = 'inasistencia';
+    else if (f.hora_salida) estados[f.persona_id] = 'finalizado';
+    else if (f.hora_entrada) estados[f.persona_id] = 'presente';
+  });
+  return estados;
+}
+
 module.exports = {
   listarPorFecha,
   obtenerRegistroDelDia,
@@ -86,5 +108,6 @@ module.exports = {
   marcarSalida,
   marcarEntrada,
   marcarInasistencia,
-  listarIdsPresentesHoy
+  listarIdsPresentesHoy,
+  listarEstadoAsistenciaHoy
 };

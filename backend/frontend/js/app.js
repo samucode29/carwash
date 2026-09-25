@@ -271,6 +271,18 @@ const app = {
     return '$' + Number(num || 0).toLocaleString('es-CO');
   },
 
+  /** Badge de los 3 estados de asistencia del día (solo 'presente' habilita asignar servicio). */
+  etiquetaAsistencia(estado) {
+    const MAPA = {
+      presente: { color: '#10b981', texto: 'PRESENTE' },
+      finalizado: { color: '#64748b', texto: 'FINALIZADO' },
+      inasistencia: { color: '#ef4444', texto: 'INASISTENCIA' },
+      sin_asistencia: { color: '#f59e0b', texto: 'SIN ASISTENCIA' }
+    };
+    const e = MAPA[estado] || MAPA.sin_asistencia;
+    return `<span class="role-badge" style="background: ${e.color}">${e.texto}</span>`;
+  },
+
   // ===========================================================================
   // 1. MÓDULO POS (CU01, CU02, CU07, CU08)
   // ===========================================================================
@@ -843,16 +855,18 @@ const app = {
   renderAsignLavPills() {
     const list = document.getElementById('asignLavPillsList');
     if (!list) return;
+    const ETIQUETA_MOTIVO = { finalizado: 'jornada finalizada', inasistencia: 'inasistencia hoy', sin_asistencia: 'sin entrada hoy' };
     list.innerHTML = (this.washers || []).map(w => {
       const selected = this.selectedWashersAsignacion.includes(w.id);
       const disponible = !!w.disponible_hoy;
+      const motivo = ETIQUETA_MOTIVO[w.estado_asistencia_hoy] || 'sin entrada hoy';
       const clases = ['washer-pill'];
       if (selected) clases.push('selected');
       if (!disponible) clases.push('disabled');
       return `
-        <div class="${clases.join(' ')}" onclick="app.toggleAsignLavSelection(${w.id}, ${disponible})" title="${disponible ? '' : 'No ha registrado entrada hoy'}">
+        <div class="${clases.join(' ')}" onclick="app.toggleAsignLavSelection(${w.id}, ${disponible})" title="${disponible ? '' : motivo}">
           <span class="washer-status-dot"></span>
-          <span>${w.nombre.split(' ')[0]} (${w.porcentaje_comision}%)${disponible ? '' : ' — sin entrada'}</span>
+          <span>${w.nombre.split(' ')[0]} (${w.porcentaje_comision}%)${disponible ? '' : ` — ${motivo}`}</span>
         </div>
       `;
     }).join('');
@@ -1338,7 +1352,7 @@ const app = {
               </div>
               <div class="text-sm text-muted">Doc: ${w.documento} • Tel: ${w.telefono}</div>
               <div class="text-sm text-muted">Comisión configurada: <strong>${w.porcentaje_comision}%</strong></div>
-              <div class="text-sm mt-1">${w.disponible_hoy ? '<span class="role-badge" style="background: #10b981">DISPONIBLE HOY</span>' : '<span class="role-badge" style="background: #ef4444">SIN ENTRADA HOY</span>'}</div>
+              <div class="text-sm mt-1">${this.etiquetaAsistencia(w.estado_asistencia_hoy)}</div>
               <div class="commission-highlight">
                 <div>
                   <span class="text-sm text-muted" style="display: block">Por Cobrar (Pendiente):</span>
@@ -1427,7 +1441,11 @@ const app = {
               <td>${a.hora_entrada || '--:--'}</td>
               <td>${a.hora_salida || '--:--'}</td>
               <td>${a.horas_trabajadas} hrs</td>
-              <td>${a.inasistencia ? '<span class="role-badge" style="background: #ef4444">INASISTENCIA (Descuenta)</span>' : '<span class="role-badge" style="background: #10b981">PRESENTE</span>'}</td>
+              <td>${a.inasistencia
+                ? '<span class="role-badge" style="background: #ef4444">INASISTENCIA (Descuenta)</span>'
+                : a.hora_salida
+                  ? '<span class="role-badge" style="background: #64748b">FINALIZADO</span>'
+                  : '<span class="role-badge" style="background: #10b981">PRESENTE</span>'}</td>
               <td>${!a.hora_salida && !a.inasistencia ? `<button class="btn btn-sm btn-secondary" onclick="app.marcarSalida('${a.persona_tipo}', ${a.persona_id})">Marcar Salida</button>` : '<span class="text-sm text-muted">Jornada finalizada</span>'}</td>
             </tr>
           `).join('');
