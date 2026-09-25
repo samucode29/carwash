@@ -5,6 +5,7 @@
  */
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const rutasApi = require('./rutas');
 const { manejadorErrores } = require('./middlewares/manejadorErrores');
@@ -21,7 +22,19 @@ app.use('/api', rutasApi);
 // En desarrollo local, el backend también sirve el frontend estático para
 // poder probar todo con un solo comando (npm start) y un solo puerto. En
 // producción normalmente el frontend se despliega aparte (ver README).
-app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
+// Algunas plataformas (Railway) solo empaquetan el directorio raíz del
+// proyecto Node (backend/) y descartan carpetas hermanas como frontend/,
+// así que ahí el build copia frontend/ dentro de backend/frontend. Se
+// prueban ambas ubicaciones para no romper Render/local, donde sí quedan
+// como hermanas.
+const rutaFrontend = [
+  path.join(__dirname, '..', 'frontend'),
+  path.join(__dirname, '..', '..', 'frontend')
+].find((ruta) => fs.existsSync(path.join(ruta, 'index.html')));
+
+if (rutaFrontend) {
+  app.use(express.static(rutaFrontend));
+}
 
 app.use(manejadorErrores);
 
