@@ -153,6 +153,28 @@ CREATE TABLE insumos (
 ) ENGINE=InnoDB;
 
 -- ============================================================================
+-- 5B. HORARIO DE ATENCIÓN SEMANAL (editable por el administrador)
+-- ============================================================================
+-- Una fila por día (0=domingo..6=sábado, igual a Date.getDay() en JS). Las
+-- citas (CU04/RF04) no se pueden agendar fuera de este horario ni en un día
+-- marcado como cerrado (abierto=FALSE).
+CREATE TABLE horario_atencion (
+    dia_semana    TINYINT PRIMARY KEY,
+    abierto       BOOLEAN NOT NULL DEFAULT TRUE,
+    hora_apertura TIME NULL,
+    hora_cierre   TIME NULL
+) ENGINE=InnoDB;
+
+INSERT INTO horario_atencion (dia_semana, abierto, hora_apertura, hora_cierre) VALUES
+    (1, TRUE, '08:00:00', '18:00:00'),  -- lunes
+    (2, TRUE, '08:00:00', '18:00:00'),  -- martes
+    (3, TRUE, '08:00:00', '18:00:00'),  -- miércoles
+    (4, TRUE, '08:00:00', '18:00:00'),  -- jueves
+    (5, TRUE, '08:00:00', '18:00:00'),  -- viernes
+    (6, TRUE, '08:00:00', '17:00:00'),  -- sábado
+    (0, FALSE, NULL, NULL);             -- domingo: sin atención por defecto
+
+-- ============================================================================
 -- 6. AGENDAMIENTO: CITAS Y TURNOS (orden de llegada)
 -- ============================================================================
 CREATE TABLE citas (

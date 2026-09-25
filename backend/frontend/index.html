@@ -397,6 +397,25 @@
             <div class="washers-pill-list mt-2" id="tiposVehiculoPillList"></div>
           </div>
 
+          <div class="chart-card mt-3">
+            <h4 style="margin: 0">Horario de Atención Semanal</h4>
+            <p class="text-sm text-muted mt-1">Las citas no se pueden agendar fuera de este horario ni en un día marcado como "no atiende".</p>
+            <div class="card-table-wrapper mt-2" style="padding: 0; box-shadow: none; border: none; background: transparent;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Día</th>
+                    <th>¿Atiende?</th>
+                    <th>Apertura</th>
+                    <th>Cierre</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="horarioAtencionTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="card-table-wrapper mt-3">
             <table class="data-table">
               <thead>
@@ -1198,13 +1217,14 @@
         <div class="form-row">
           <div class="form-group flex-1">
             <label>Fecha:</label>
-            <input type="date" id="citaFechaInput">
+            <input type="date" id="citaFechaInput" onchange="app.actualizarInfoHorarioCita()">
           </div>
           <div class="form-group flex-1">
             <label>Hora:</label>
-            <input type="time" id="citaHoraInput">
+            <input type="time" id="citaHoraInput" onchange="app.actualizarInfoHorarioCita()">
           </div>
         </div>
+        <p class="text-sm text-muted" id="citaHorarioInfo"></p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalNuevaCita')">Cancelar</button>

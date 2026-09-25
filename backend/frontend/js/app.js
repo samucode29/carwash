@@ -201,9 +201,90 @@ const app = {
       this.loadClients(),
       this.loadTurnos(),
       this.loadInsumos(),
-      this.loadOrders()
+      this.loadOrders(),
+      this.loadHorarioAtencion()
     ]);
     this.updateRolePermissions();
+  },
+
+  // ===========================================================================
+  // HORARIO DE ATENCIÓN SEMANAL (usado para validar/orientar el agendamiento
+  // de citas; la edición vive en la pestaña Servicios, solo administrador)
+  // ===========================================================================
+  async loadHorarioAtencion() {
+    try {
+      this.horarioAtencion = await ApiCliente.get('/api/horario-atencion');
+      this.renderHorarioAtencionAdmin();
+    } catch (err) { console.error(err); }
+  },
+
+  renderHorarioAtencionAdmin() {
+    const tbody = document.getElementById('horarioAtencionTableBody');
+    if (!tbody || !this.horarioAtencion) return;
+
+    const NOMBRES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const ORDEN = [1, 2, 3, 4, 5, 6, 0]; // mostrar lunes a domingo
+
+    tbody.innerHTML = ORDEN.map(dia => {
+      const h = this.horarioAtencion.find(x => x.dia_semana === dia) || { abierto: false, hora_apertura: '', hora_cierre: '' };
+      const apertura = (h.hora_apertura || '08:00').substring(0, 5);
+      const cierre = (h.hora_cierre || '18:00').substring(0, 5);
+      return `
+        <tr>
+          <td><strong>${NOMBRES[dia]}</strong></td>
+          <td>
+            <label class="radio-label" style="display:inline-flex">
+              <input type="checkbox" id="horarioAbierto${dia}" ${h.abierto ? 'checked' : ''} onchange="app.toggleHorarioDia(${dia})">
+              <span>Atiende este día</span>
+            </label>
+          </td>
+          <td><input type="time" id="horarioApertura${dia}" value="${apertura}" ${h.abierto ? '' : 'disabled'}></td>
+          <td><input type="time" id="horarioCierre${dia}" value="${cierre}" ${h.abierto ? '' : 'disabled'}></td>
+          <td><button class="btn btn-sm btn-secondary" onclick="app.guardarHorarioDia(${dia})">Guardar</button></td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  toggleHorarioDia(dia) {
+    const abierto = document.getElementById(`horarioAbierto${dia}`).checked;
+    document.getElementById(`horarioApertura${dia}`).disabled = !abierto;
+    document.getElementById(`horarioCierre${dia}`).disabled = !abierto;
+  },
+
+  async guardarHorarioDia(dia) {
+    const abierto = document.getElementById(`horarioAbierto${dia}`).checked;
+    const hora_apertura = document.getElementById(`horarioApertura${dia}`).value;
+    const hora_cierre = document.getElementById(`horarioCierre${dia}`).value;
+
+    if (abierto && (!hora_apertura || !hora_cierre)) {
+      this.toast('Indique hora de apertura y de cierre.', 'warning');
+      return;
+    }
+
+    try {
+      await ApiCliente.put(`/api/horario-atencion/${dia}`, { abierto, hora_apertura, hora_cierre });
+      this.toast('Horario de atención actualizado.', 'success');
+      await this.loadHorarioAtencion();
+    } catch (err) {
+      this.toast(err.message || 'Error al actualizar el horario.', 'error');
+    }
+  },
+
+  /** Muestra el horario de atención del día elegido en el modal de Agendar Cita. */
+  actualizarInfoHorarioCita() {
+    const info = document.getElementById('citaHorarioInfo');
+    if (!info) return;
+    const fecha = document.getElementById('citaFechaInput').value;
+    if (!fecha || !this.horarioAtencion) { info.textContent = ''; return; }
+
+    const NOMBRES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const diaSemana = new Date(`${fecha}T00:00:00`).getDay();
+    const h = this.horarioAtencion.find(x => x.dia_semana === diaSemana);
+
+    info.textContent = (h && h.abierto)
+      ? `Horario de atención los ${NOMBRES[diaSemana]}: ${h.hora_apertura.substring(0, 5)} a ${h.hora_cierre.substring(0, 5)}.`
+      : `No hay atención los ${NOMBRES[diaSemana]}. Elija otra fecha.`;
   },
 
   // ===========================================================================
@@ -762,6 +843,7 @@ const app = {
     document.getElementById('citaServicioSelect').value = '';
     document.getElementById('citaFechaInput').value = '';
     document.getElementById('citaHoraInput').value = '';
+    document.getElementById('citaHorarioInfo').textContent = '';
     this.onCitaClienteChange();
     this.openModal('modalNuevaCita');
   },

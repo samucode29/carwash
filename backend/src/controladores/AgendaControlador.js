@@ -3,8 +3,30 @@
  * (CU04, CU05, CU06 / RF04-RF07).
  */
 const AgendaRepositorio = require('../repositorios/AgendaRepositorio');
+const HorarioAtencionRepositorio = require('../repositorios/HorarioAtencionRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
-const { obtenerFechaHoy, obtenerFechaHoraActual, obtenerHoraActual } = require('../utilidades/fechas');
+const { obtenerFechaHoy, obtenerFechaHoraActual, obtenerHoraActual, obtenerDiaSemana, NOMBRES_DIAS_SEMANA } = require('../utilidades/fechas');
+
+/**
+ * Una cita no se puede agendar/reprogramar fuera del horario de atención
+ * configurado por el administrador para ese día de la semana (CU04 / RF04).
+ */
+async function validarDentroDeHorarioAtencion(fecha, hora) {
+  const diaSemana = obtenerDiaSemana(fecha);
+  const horario = await HorarioAtencionRepositorio.obtenerPorDia(diaSemana);
+  const nombreDia = NOMBRES_DIAS_SEMANA[diaSemana];
+
+  if (!horario || !horario.abierto) {
+    throw Object.assign(new Error(`No hay atención los días ${nombreDia}. Elija otra fecha para la cita.`), { codigoHttp: 400 });
+  }
+
+  const horaComparable = hora.length === 5 ? `${hora}:00` : hora;
+  if (horaComparable < horario.hora_apertura || horaComparable > horario.hora_cierre) {
+    throw Object.assign(new Error(
+      `El horario de atención los ${nombreDia} es de ${horario.hora_apertura.substring(0, 5)} a ${horario.hora_cierre.substring(0, 5)}. Elija una hora dentro de ese rango.`
+    ), { codigoHttp: 400 });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Citas
@@ -19,6 +41,8 @@ async function crearCita(req, res) {
   if (!servicio_id || !fecha || !hora) {
     return res.status(400).json({ error: 'Servicio, fecha y hora son obligatorios.' });
   }
+
+  await validarDentroDeHorarioAtencion(fecha, hora);
 
   const ocupada = await AgendaRepositorio.existeCitaEnHorario(fecha, hora);
   if (ocupada) {
@@ -44,6 +68,12 @@ async function crearCita(req, res) {
 async function actualizarCita(req, res) {
   const id = Number(req.params.id);
   const { estado, fecha, hora } = req.body;
+
+  if (fecha || hora) {
+    const actual = await AgendaRepositorio.obtenerCitaPorId(id);
+    if (!actual) return res.status(404).json({ error: 'Cita no encontrada.' });
+    await validarDentroDeHorarioAtencion(fecha || actual.fecha, hora || actual.hora);
+  }
 
   const cambios = {};
   if (estado) cambios.estado = estado;

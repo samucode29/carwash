@@ -34,6 +34,20 @@ function formatearFechaCorta(fechaYyyyMmDd) {
   return `${dia}${mes}${anio.slice(2)}`;
 }
 
+/** Convierte 'YYYY-MM-DD' a un Date en hora LOCAL (evita el corrimiento de día que da `new Date('YYYY-MM-DD')`, que interpreta la cadena como UTC). */
+function parsearFechaLocal(fechaYyyyMmDd) {
+  const [anio, mes, dia] = fechaYyyyMmDd.split('-').map(Number);
+  return new Date(anio, mes - 1, dia);
+}
+
+// Mismo índice que Date.prototype.getDay(): 0 = domingo ... 6 = sábado.
+const NOMBRES_DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+/** Día de la semana (0=domingo..6=sábado) de una fecha 'YYYY-MM-DD'. */
+function obtenerDiaSemana(fechaYyyyMmDd) {
+  return parsearFechaLocal(fechaYyyyMmDd).getDay();
+}
+
 /**
  * Calcula el rango [inicio, fin] (formato YYYY-MM-DD, ambos inclusive) para
  * los períodos de reporte soportados: día, semana, mes, año o un rango
@@ -75,5 +89,8 @@ module.exports = {
   obtenerFechaHoraActual,
   obtenerHoraActual,
   formatearFechaCorta,
-  calcularRangoPorPeriodo
+  calcularRangoPorPeriodo,
+  parsearFechaLocal,
+  obtenerDiaSemana,
+  NOMBRES_DIAS_SEMANA
 };
