@@ -18,24 +18,6 @@ const { verificarConexion } = require('./src/config/baseDeDatos');
 
 const PUERTO = process.env.PORT || 3000;
 
-// En plataformas como Render, la salida a internet del contenedor a veces
-// tarda unos segundos en quedar lista justo después del arranque, y el
-// primer intento de conexión a una base de datos externa puede fallar con
-// un timeout aunque la base esté perfectamente disponible. Reintentamos
-// unas cuantas veces antes de darnos por vencidos.
-async function verificarConexionConReintentos(intentos = 5, esperaMs = 3000) {
-  for (let intento = 1; intento <= intentos; intento++) {
-    try {
-      await verificarConexion();
-      return;
-    } catch (err) {
-      if (intento === intentos) throw err;
-      console.warn(`⚠️  Intento ${intento}/${intentos} de conexión a MySQL falló (${err.message}), reintentando en ${esperaMs / 1000}s...`);
-      await new Promise((resolve) => setTimeout(resolve, esperaMs));
-    }
-  }
-}
-
 async function iniciarServidor() {
   if (!process.env.JWT_SECRET) {
     console.error('❌ Falta JWT_SECRET en el archivo .env. Copia .env.example a .env y complétalo.');
@@ -43,7 +25,7 @@ async function iniciarServidor() {
   }
 
   try {
-    await verificarConexionConReintentos();
+    await verificarConexion();
     console.log('✅ Conexión a MySQL verificada.');
   } catch (err) {
     console.error('❌ No se pudo conectar a MySQL. Revisa DB_HOST/DB_USER/DB_PASSWORD/DB_NAME en tu .env.');
