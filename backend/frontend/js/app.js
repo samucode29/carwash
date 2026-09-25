@@ -25,6 +25,45 @@ function fechaLocalHaceDias(n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Filtros "en vivo" para campos de texto: quitan mientras se escribe
+ * cualquier carácter que de todos modos el backend va a rechazar (números
+ * en un nombre, letras en un documento/teléfono), para que el usuario vea
+ * el error de inmediato en vez de enterarse solo al guardar.
+ */
+function soloLetras(input) {
+  input.value = input.value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, '');
+}
+
+function soloNumeros(input) {
+  input.value = input.value.replace(/[^0-9]/g, '');
+}
+
+// Mismas reglas que backend/src/utilidades/validadores.js, para dar el
+// mensaje de error de inmediato sin esperar el viaje al servidor.
+const REGEX_NOMBRE_VALIDO = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
+const REGEX_CORREO_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function esNombreValido(texto) {
+  const limpio = (texto || '').trim();
+  return limpio.length >= 3 && REGEX_NOMBRE_VALIDO.test(limpio);
+}
+
+function esDocumentoValido(texto) {
+  const limpio = (texto || '').trim();
+  return limpio.length >= 4 && limpio.length <= 15 && /^[0-9]+$/.test(limpio);
+}
+
+function esTelefonoValido(texto) {
+  const limpio = (texto || '').trim();
+  return limpio.length >= 7 && limpio.length <= 10 && /^[0-9]+$/.test(limpio);
+}
+
+function esCorreoValido(texto) {
+  const limpio = (texto || '').trim();
+  return limpio === '' || REGEX_CORREO_VALIDO.test(limpio);
+}
+
 const app = {
   currentUser: null,
   activeTab: 'pos',
@@ -1956,6 +1995,8 @@ const app = {
     const telefono = document.getElementById('editLavTelefono').value.trim();
     const porcentajeComision = document.getElementById('editLavComision').value;
     if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
+    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
 
     try {
       await ApiCliente.put(`/api/personal/lavadores/${this.editingWasherId}`, { nombre, telefono, porcentajeComision });
@@ -2469,6 +2510,9 @@ const app = {
     const color = document.getElementById('newClientColor').value;
 
     if (!nombre || !telefono || !placa) { this.toast('Nombre, teléfono y placa son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
+    if (correo && !esCorreoValido(correo)) { this.toast('El correo electrónico no tiene un formato válido.', 'warning'); return; }
 
     try {
       const data = await ApiCliente.post('/api/clientes', { nombre, telefono, correo, placa, tipo, marca, color });
@@ -2528,6 +2572,9 @@ const app = {
     const telefono = document.getElementById('editClienteTelefono').value;
     const correo = document.getElementById('editClienteCorreo').value;
     if (!nombre || !telefono) { this.toast('Nombre y teléfono son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
+    if (correo && !esCorreoValido(correo)) { this.toast('El correo electrónico no tiene un formato válido.', 'warning'); return; }
 
     try {
       await ApiCliente.put(`/api/clientes/${this.editingClienteId}`, { nombre, telefono, correo });
@@ -2575,6 +2622,9 @@ const app = {
     const rol = document.getElementById('usrRol').value;
 
     if (!nombre || !documento) { this.toast('Nombre y documento son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!esDocumentoValido(documento)) { this.toast('El documento debe tener solo números, mínimo 4 dígitos.', 'warning'); return; }
+    if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
 
     try {
       if (rol === 'lavador') {
@@ -2658,6 +2708,9 @@ const app = {
     const jornadaHorasDia = document.getElementById('editEmpJornadaHoras').value;
     const diasDescansoSemana = document.getElementById('editEmpDiasDescanso').value;
     if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
+    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
+    if (correo && !esCorreoValido(correo)) { this.toast('El correo electrónico no tiene un formato válido.', 'warning'); return; }
 
     try {
       await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombre, telefono, correo, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });

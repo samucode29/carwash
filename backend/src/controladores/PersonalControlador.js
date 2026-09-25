@@ -9,6 +9,7 @@ const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { hashearContrasena, generarPasswordPorDefecto } = require('../utilidades/contrasenas');
 const { normalizarParaUsername } = require('../utilidades/texto');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
+const { esNombreValido, esDocumentoValido, esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
 
 /**
  * Genera un nombre de usuario único a partir del nombre completo:
@@ -51,6 +52,18 @@ async function crearUsuario(req, res) {
 
   if (!nombre || !documento || !rol) {
     return res.status(400).json({ error: 'Nombre, documento y rol son obligatorios.' });
+  }
+  if (!esNombreValido(nombre)) {
+    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  }
+  if (!esDocumentoValido(documento)) {
+    return res.status(400).json({ error: 'El documento debe tener solo números, mínimo 4 dígitos.' });
+  }
+  if (telefono && !esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
+  if (correo && !esCorreoValido(correo)) {
+    return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
   if (!['administrador', 'empleado'].includes(rol)) {
     return res.status(400).json({ error: "El rol debe ser 'administrador' o 'empleado'." });
@@ -104,6 +117,15 @@ async function actualizarUsuario(req, res) {
   if (rol === 'administrador' && !req.usuarioAutenticado.esAdminPrincipal) {
     return res.status(403).json({ error: 'Solo el administrador principal puede otorgar el rol de administrador.' });
   }
+  if (nombre && !esNombreValido(nombre)) {
+    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  }
+  if (telefono && !esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
+  if (correo && !esCorreoValido(correo)) {
+    return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
+  }
 
   // Nadie puede inactivar su propia cuenta (se quedaría sin poder volver a
   // entrar), y al administrador principal solo lo puede inactivar él mismo.
@@ -144,6 +166,16 @@ async function actualizarUsuario(req, res) {
 async function actualizarMiPerfil(req, res) {
   const { nombre, telefono, correo, username } = req.body;
   const idPropio = req.usuarioAutenticado.id;
+
+  if (nombre && !esNombreValido(nombre)) {
+    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  }
+  if (telefono && !esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
+  if (correo && !esCorreoValido(correo)) {
+    return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
+  }
 
   if (username) {
     const existente = await UsuarioRepositorio.obtenerPorUsername(username);
@@ -205,6 +237,15 @@ async function crearLavador(req, res) {
   if (!nombre || !documento) {
     return res.status(400).json({ error: 'Nombre y documento son obligatorios.' });
   }
+  if (!esNombreValido(nombre)) {
+    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  }
+  if (!esDocumentoValido(documento)) {
+    return res.status(400).json({ error: 'El documento debe tener solo números, mínimo 4 dígitos.' });
+  }
+  if (telefono && !esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
 
   const existente = await LavadorRepositorio.obtenerPorDocumento(documento);
   if (existente) {
@@ -230,6 +271,13 @@ async function crearLavador(req, res) {
 async function actualizarLavador(req, res) {
   const id = Number(req.params.id);
   const { nombre, telefono, estado, porcentajeComision } = req.body;
+
+  if (nombre && !esNombreValido(nombre)) {
+    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  }
+  if (telefono && !esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
 
   const cambios = {};
   if (nombre) cambios.nombre = nombre;

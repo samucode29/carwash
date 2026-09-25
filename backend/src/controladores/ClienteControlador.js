@@ -3,6 +3,7 @@
  */
 const ClienteRepositorio = require('../repositorios/ClienteRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
+const { esNombreValido, esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
 
 async function listarClientes(req, res) {
   const clientes = await ClienteRepositorio.listarConVehiculos();
@@ -13,6 +14,15 @@ async function crearClienteConVehiculo(req, res) {
   const { nombre, telefono, correo, placa, tipo, marca, color } = req.body;
   if (!nombre || !telefono) {
     return res.status(400).json({ error: 'Nombre y teléfono son obligatorios.' });
+  }
+  if (!esNombreValido(nombre)) {
+    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  }
+  if (!esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
+  if (correo && !esCorreoValido(correo)) {
+    return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
 
   const cliente = await ClienteRepositorio.crearCliente({ nombre, telefono, correo, creadoPor: req.usuarioAutenticado.id });
@@ -33,6 +43,15 @@ async function actualizarCliente(req, res) {
   const { nombre, telefono, correo } = req.body;
   if (!nombre || !telefono) {
     return res.status(400).json({ error: 'Nombre y teléfono son obligatorios.' });
+  }
+  if (!esNombreValido(nombre)) {
+    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  }
+  if (!esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
+  if (correo && !esCorreoValido(correo)) {
+    return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
 
   const cliente = await ClienteRepositorio.obtenerClientePorId(id);

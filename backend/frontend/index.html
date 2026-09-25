@@ -1108,11 +1108,11 @@
         <div class="form-row">
           <div class="form-group flex-1">
             <label>Nombre Completo: *</label>
-            <input type="text" id="newClientNombre" placeholder="Ej: Andrés Morales">
+            <input type="text" id="newClientNombre" placeholder="Ej: Andrés Morales" oninput="soloLetras(this)">
           </div>
           <div class="form-group flex-1">
             <label>Teléfono: *</label>
-            <input type="text" id="newClientTelefono" placeholder="Ej: 3001234567">
+            <input type="text" id="newClientTelefono" placeholder="Ej: 3001234567" oninput="soloNumeros(this)">
           </div>
         </div>
         <div class="form-group">
@@ -1163,11 +1163,11 @@
         <div class="form-row">
           <div class="form-group flex-1">
             <label>Nombre Completo: *</label>
-            <input type="text" id="editClienteNombre">
+            <input type="text" id="editClienteNombre" oninput="soloLetras(this)">
           </div>
           <div class="form-group flex-1">
             <label>Teléfono: *</label>
-            <input type="text" id="editClienteTelefono">
+            <input type="text" id="editClienteTelefono" oninput="soloNumeros(this)">
           </div>
         </div>
         <div class="form-group">
@@ -1203,7 +1203,7 @@
         <div id="citaCamposAnonimos" class="form-row">
           <div class="form-group flex-1">
             <label>Nombre del Cliente:</label>
-            <input type="text" id="citaAnonNombre" placeholder="Nombre de contacto">
+            <input type="text" id="citaAnonNombre" placeholder="Nombre de contacto" oninput="soloLetras(this)">
           </div>
           <div class="form-group flex-1">
             <label>Placa / Vehículo:</label>
@@ -1411,11 +1411,11 @@
       <div class="modal-body">
         <div class="form-group">
           <label>Nombre Completo:</label>
-          <input type="text" id="editLavNombre">
+          <input type="text" id="editLavNombre" oninput="soloLetras(this)">
         </div>
         <div class="form-group">
           <label>Teléfono:</label>
-          <input type="text" id="editLavTelefono">
+          <input type="text" id="editLavTelefono" oninput="soloNumeros(this)">
         </div>
         <div class="form-group">
           <label>Porcentaje de Comisión (% propio de este lavador, default 60%):</label>
@@ -1439,11 +1439,11 @@
       <div class="modal-body">
         <div class="form-group">
           <label>Nombre Completo:</label>
-          <input type="text" id="editEmpNombre">
+          <input type="text" id="editEmpNombre" oninput="soloLetras(this)">
         </div>
         <div class="form-group">
           <label>Teléfono:</label>
-          <input type="text" id="editEmpTelefono">
+          <input type="text" id="editEmpTelefono" oninput="soloNumeros(this)">
         </div>
         <div class="form-group">
           <label>Correo:</label>
@@ -1611,17 +1611,17 @@
         <div class="form-row">
           <div class="form-group flex-1">
             <label>Nombre Completo: *</label>
-            <input type="text" id="usrNombre" placeholder="Ej: Camilo Torres">
+            <input type="text" id="usrNombre" placeholder="Ej: Camilo Torres" oninput="soloLetras(this)">
           </div>
           <div class="form-group flex-1">
             <label>Documento de Identidad: *</label>
-            <input type="text" id="usrDocumento" placeholder="1020304050">
+            <input type="text" id="usrDocumento" placeholder="1020304050" oninput="soloNumeros(this)">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group flex-1">
             <label>Teléfono:</label>
-            <input type="text" id="usrTelefono" placeholder="3001234567">
+            <input type="text" id="usrTelefono" placeholder="3001234567" oninput="soloNumeros(this)">
           </div>
           <div class="form-group flex-1">
             <label>Rol: *</label>
