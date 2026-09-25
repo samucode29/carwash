@@ -69,13 +69,16 @@ async function pagarLiquidacion({ liquidacionId, soportePagoNombre, soportePagoT
     [fechaPago, soportePagoNombre, soportePagoNombre, soportePagoTipo, soportePagoDatos, liquidacionId]
   );
   const [actualizada] = await pool.query(
-    `SELECT liq.*, l.nombre AS lavador_nombre
+    `SELECT liq.id, liq.lavador_id, liq.periodo_inicio, liq.periodo_fin, liq.total_comision, liq.descuentos,
+            liq.valor_a_pagar, liq.estado, liq.fecha_pago, liq.soporte_pago_url, liq.soporte_pago_nombre,
+            liq.soporte_pago_tipo, (liq.soporte_pago_datos IS NOT NULL) AS tiene_soporte, liq.creado_en,
+            l.nombre AS lavador_nombre
      FROM liquidaciones_lavador liq
      LEFT JOIN lavadores l ON l.id = liq.lavador_id
      WHERE liq.id = ?`,
     [liquidacionId]
   );
-  return actualizada[0];
+  return actualizada[0] ? { ...actualizada[0], tiene_soporte: !!actualizada[0].tiene_soporte } : null;
 }
 
 async function listarLiquidaciones() {
@@ -104,7 +107,12 @@ async function obtenerSoporteLiquidacion(id) {
 // ---------------------------------------------------------------------------
 async function listarEmpleadosConUltimoPago() {
   const [empleados] = await pool.query(`SELECT * FROM usuarios ORDER BY nombre`);
-  const [pagos] = await pool.query(`SELECT * FROM pagos_salario ORDER BY creado_en ASC`);
+  const [pagos] = await pool.query(
+    `SELECT id, empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos,
+            valor_a_pagar, estado, fecha_pago_real, soporte_pago_url,
+            (soporte_pago_datos IS NOT NULL) AS tiene_soporte, creado_en
+     FROM pagos_salario ORDER BY creado_en ASC`
+  );
 
   return empleados.map(emp => {
     const pagosDelEmpleado = pagos.filter(p => p.empleado_id === emp.id);
@@ -138,13 +146,17 @@ async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, perio
     [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, valorAPagar, hoy, soportePagoNombre, soportePagoNombre, soportePagoTipo, soportePagoDatos]
   );
   const [filas] = await pool.query(
-    `SELECT ps.*, u.nombre AS empleado_nombre
+    `SELECT ps.id, ps.empleado_id, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin, ps.salario_base,
+            ps.descuentos, ps.valor_a_pagar, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
+            ps.soporte_pago_nombre, ps.soporte_pago_tipo,
+            (ps.soporte_pago_datos IS NOT NULL) AS tiene_soporte, ps.creado_en,
+            u.nombre AS empleado_nombre
      FROM pagos_salario ps
      LEFT JOIN usuarios u ON u.id = ps.empleado_id
      WHERE ps.id = ?`,
     [resultado.insertId]
   );
-  return filas[0];
+  return filas[0] ? { ...filas[0], tiene_soporte: !!filas[0].tiene_soporte } : null;
 }
 
 /**
