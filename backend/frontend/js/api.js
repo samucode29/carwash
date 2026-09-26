@@ -71,6 +71,7 @@ const ApiCliente = (function () {
     post: (ruta, body) => solicitar(ruta, { method: 'POST', body }),
     postForm: (ruta, formData) => solicitar(ruta, { method: 'POST', body: formData }),
     put: (ruta, body) => solicitar(ruta, { method: 'PUT', body }),
+    delete: (ruta) => solicitar(ruta, { method: 'DELETE' }),
     obtenerToken,
     obtenerUsuario,
     guardarSesion,

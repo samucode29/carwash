@@ -108,6 +108,21 @@ CREATE TABLE vehiculos (
     UNIQUE KEY uq_placa (placa)
 ) ENGINE=InnoDB;
 
+-- Notas por cliente: 'lista_negra' registra incidentes (no pagó, generó
+-- problemas, etc. — permite marcar al cliente como lista negra sin
+-- eliminar el historial de lo ocurrido) y 'preferencia' registra cómo le
+-- gusta que le hagan el servicio. Un cliente puede tener varias de cada una.
+CREATE TABLE cliente_notas (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    cliente_id  INT NOT NULL,
+    tipo        ENUM('lista_negra','preferencia') NOT NULL,
+    texto       VARCHAR(500) NOT NULL,
+    creado_por  INT NOT NULL,
+    creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_notacliente_cliente FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_notacliente_usuario FOREIGN KEY (creado_por) REFERENCES usuarios(id)
+) ENGINE=InnoDB;
+
 -- ============================================================================
 -- 4. CATÁLOGO DE SERVICIOS
 -- ============================================================================
@@ -188,6 +203,9 @@ CREATE TABLE citas (
     cliente_nombre_temp    VARCHAR(150),
     cliente_telefono_temp  VARCHAR(20),
     placa_temp             VARCHAR(15),
+    -- Nota libre al agendar (ej. "recién pintado, no polichar"): se pasa a
+    -- la orden cuando la cita se atiende, para que el lavador la vea.
+    observacion     VARCHAR(500),
     registrado_por  INT NOT NULL,
     creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_cita_cliente   FOREIGN KEY (cliente_id)     REFERENCES clientes(id)  ON DELETE SET NULL,
@@ -208,6 +226,9 @@ CREATE TABLE turnos (
     fecha           DATE NOT NULL,
     hora_llegada    TIME NOT NULL,
     estado          ENUM('en_espera','en_proceso','finalizado','cancelado') NOT NULL DEFAULT 'en_espera',
+    -- Nota libre al poner el vehículo en la fila (ej. "recién pintado, no
+    -- polichar"): se pasa a la orden cuando se atiende (ver "Iniciar").
+    observacion     VARCHAR(500),
     registrado_por  INT NOT NULL,
     creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_turno_cliente   FOREIGN KEY (cliente_id)     REFERENCES clientes(id)  ON DELETE SET NULL,
@@ -232,6 +253,10 @@ CREATE TABLE ordenes_servicio (
     tipo_vehiculo_anonimo   VARCHAR(30),
     estado                  ENUM('recibido','en_proceso','terminado','entregado','cancelado') NOT NULL DEFAULT 'recibido',
     total                   DECIMAL(12,2) NOT NULL,
+    -- Nota de entrada heredada del turno/cita de origen (o escrita directo
+    -- en una venta anónima/rápida): contexto para el lavador ("recién
+    -- pintado, no polichar").
+    observacion             VARCHAR(500),
     registrado_por          INT NOT NULL,
     fecha_hora_registro     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_hora_entrega      DATETIME NULL,
@@ -280,11 +305,20 @@ CREATE TABLE pagos (
     orden_id     INT NOT NULL,
     metodo_pago  ENUM('efectivo','tarjeta','transferencia','pse') NOT NULL,
     monto        DECIMAL(12,2) NOT NULL,
-    -- Descuento otorgado al cliente al momento de cobrar: lo asume el
-    -- negocio (reduce el ingreso real), nunca afecta la comisión del
-    -- lavador, que ya quedó calculada sobre el precio de lista del
-    -- servicio desde que se creó la orden (ver orden_lavadores).
-    descuento    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    -- Descuento otorgado al cliente al momento de cobrar, dividido según
+    -- quién lo asume (nunca cambia orden_lavadores.valor_comision, que
+    -- queda igual como registro del servicio; el descuento_trabajador se
+    -- resta aparte al calcular lo que se le liquida al lavador, ver
+    -- NominaRepositorio.resumenComisionesLavadores):
+    --   descuento_negocio:    lo pierde el negocio (ganancia neta).
+    --   descuento_trabajador: lo pierde el lavador (se descuenta de su
+    --                         comisión pendiente), ej. cliente no pagó por
+    --                         su culpa.
+    descuento_negocio    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    descuento_trabajador DECIMAL(12,2) NOT NULL DEFAULT 0,
+    -- Nota libre al cobrar (ej. "cliente se negó a pagar, es amigo del
+    -- lavador, él respondió por el servicio").
+    observacion  VARCHAR(500),
     estado       ENUM('confirmado','rechazado','pendiente') NOT NULL DEFAULT 'confirmado',
     fecha_pago   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_pago_orden FOREIGN KEY (orden_id) REFERENCES ordenes_servicio(id)
@@ -464,3 +498,4 @@ CREATE INDEX idx_liq_lavador_estado  ON liquidaciones_lavador (estado);
 CREATE INDEX idx_pago_salario_estado ON pagos_salario (estado);
 CREATE INDEX idx_gasto_fecha         ON gastos_operativos (fecha);
 CREATE INDEX idx_asistencia_fecha    ON asistencia (fecha);
+CREATE INDEX idx_notacliente_cliente ON cliente_notas (cliente_id, tipo);

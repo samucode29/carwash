@@ -85,11 +85,21 @@ async function crearOrden(req, res) {
 
   // Si la orden viene de un turno que a su vez venía de una cita (se agregó a
   // la fila en vez de atenderla de inmediato), heredamos su cita_id para que
-  // la cita original también quede marcada como atendida.
+  // la cita original también quede marcada como atendida. La observación
+  // escrita al agendar la cita o al ponerlo en fila pasa a la orden, para
+  // que el lavador la vea al trabajar el servicio.
   let citaId = cita_id ? parseInt(cita_id, 10) : null;
-  if (!citaId && turno_id) {
+  let observacion = null;
+  if (turno_id) {
     const turno = await AgendaRepositorio.obtenerTurnoPorId(parseInt(turno_id, 10));
-    if (turno && turno.cita_id) citaId = turno.cita_id;
+    if (turno) {
+      if (!citaId && turno.cita_id) citaId = turno.cita_id;
+      observacion = turno.observacion || null;
+    }
+  }
+  if (!observacion && citaId) {
+    const cita = await AgendaRepositorio.obtenerCitaPorId(citaId);
+    if (cita) observacion = cita.observacion || null;
   }
 
   const ordenId = await OrdenServicioRepositorio.crearOrdenConAsignacion({
@@ -102,6 +112,7 @@ async function crearOrden(req, res) {
     placaAnonima: placa_anonima ? placa_anonima.toUpperCase().trim() : null,
     tipoVehiculoAnonimo: tipo_vehiculo_anonimo || null,
     total: servicio.precio,
+    observacion,
     registradoPor: req.usuarioAutenticado.id,
     lavadoresAsignados
   });

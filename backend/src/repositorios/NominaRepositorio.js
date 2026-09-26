@@ -21,15 +21,43 @@ async function resumenComisionesLavadores() {
   const [liquidacionesPagadas] = await pool.query(
     `SELECT lavador_id, SUM(total_comision) AS total FROM liquidaciones_lavador WHERE estado = 'pagado' GROUP BY lavador_id`
   );
-  const [liquidacionesPendientesPeriodos] = await pool.query(
-    `SELECT lavador_id, periodo_inicio, periodo_fin FROM liquidaciones_lavador`
+
+  // Descuentos que le tocó asumir al trabajador (ej. cliente no pagó por su
+  // culpa): quedan en pagos.descuento_trabajador por orden y se reparten
+  // proporcionalmente entre los lavadores de esa orden según su parte de la
+  // comisión (lo normal es que haya uno solo). Esto reduce lo pendiente por
+  // pagarle, pero el registro original del servicio (valor_comision) no se
+  // toca — ver pagos.descuento_trabajador en el esquema.
+  const [descuentosPorOrden] = await pool.query(
+    `SELECT orden_id, descuento_trabajador AS total FROM pagos WHERE descuento_trabajador > 0`
   );
+  const descuentoPorOrdenMap = {};
+  descuentosPorOrden.forEach(d => { descuentoPorOrdenMap[d.orden_id] = Number(d.total); });
+
+  const comisionPorOrdenAgrupada = {};
+  comisionesPorOrden.forEach(c => {
+    if (!comisionPorOrdenAgrupada[c.orden_id]) comisionPorOrdenAgrupada[c.orden_id] = [];
+    comisionPorOrdenAgrupada[c.orden_id].push(c);
+  });
+
+  const descuentoTrabajadorPorLavador = {};
+  Object.entries(comisionPorOrdenAgrupada).forEach(([ordenId, filas]) => {
+    const descuentoOrden = descuentoPorOrdenMap[ordenId];
+    if (!descuentoOrden) return;
+    const totalComisionOrden = filas.reduce((s, f) => s + Number(f.valor_comision), 0);
+    if (totalComisionOrden <= 0) return;
+    filas.forEach(f => {
+      const parte = (Number(f.valor_comision) / totalComisionOrden) * descuentoOrden;
+      descuentoTrabajadorPorLavador[f.lavador_id] = (descuentoTrabajadorPorLavador[f.lavador_id] || 0) + parte;
+    });
+  });
 
   return lavadores.map(lavador => {
     const comisionesDeEsteLavador = comisionesPorOrden.filter(c => c.lavador_id === lavador.id);
     const comisionTotalHistorica = comisionesDeEsteLavador.reduce((suma, c) => suma + Number(c.valor_comision), 0);
+    const descuentoTrabajadorTotal = Number((descuentoTrabajadorPorLavador[lavador.id] || 0).toFixed(2));
     const comisionPagada = (liquidacionesPagadas.find(l => l.lavador_id === lavador.id) || {}).total || 0;
-    const comisionPendiente = Math.max(0, comisionTotalHistorica - Number(comisionPagada));
+    const comisionPendiente = Math.max(0, comisionTotalHistorica - descuentoTrabajadorTotal - Number(comisionPagada));
 
     return {
       lavador_id: lavador.id,
@@ -40,8 +68,51 @@ async function resumenComisionesLavadores() {
       porcentaje_comision: lavador.porcentaje_comision,
       servicios_realizados: comisionesDeEsteLavador.length,
       comision_historica_total: comisionTotalHistorica,
+      descuento_trabajador_total: descuentoTrabajadorTotal,
       comision_pagada: Number(comisionPagada),
       comision_pendiente: comisionPendiente
+    };
+  });
+}
+
+/**
+ * Historial de servicios de un lavador, más reciente primero, con el
+ * detalle de descuentos aplicados en el pago (parte negocio / parte
+ * trabajador) y la observación escrita al cobrar. Solo incluye órdenes que
+ * ya se cobraron (tienen pago): antes de eso no hay nada que liquidar.
+ */
+async function obtenerServiciosPorLavador(lavadorId) {
+  const [filas] = await pool.query(
+    `SELECT o.id AS orden_id, o.fecha_hora_registro AS fecha, s.nombre AS servicio_nombre,
+            o.total AS valor_servicio, ol.valor_comision AS comision_bruta,
+            p.descuento_negocio, p.descuento_trabajador, p.observacion,
+            (SELECT SUM(ol2.valor_comision) FROM orden_lavadores ol2 WHERE ol2.orden_id = o.id) AS comision_total_orden
+     FROM orden_lavadores ol
+     INNER JOIN ordenes_servicio o ON o.id = ol.orden_id
+     INNER JOIN pagos p ON p.orden_id = o.id
+     LEFT JOIN servicios s ON s.id = o.servicio_id
+     WHERE ol.lavador_id = ?
+     ORDER BY o.fecha_hora_registro DESC`,
+    [lavadorId]
+  );
+
+  return filas.map(f => {
+    const comisionTotalOrden = Number(f.comision_total_orden) || 0;
+    const comisionBruta = Number(f.comision_bruta);
+    const participacion = comisionTotalOrden > 0 ? comisionBruta / comisionTotalOrden : 1;
+    const descuentoNegocioParte = Number(f.descuento_negocio) * participacion;
+    const descuentoTrabajadorParte = Number(f.descuento_trabajador) * participacion;
+    return {
+      ordenId: f.orden_id,
+      fecha: f.fecha,
+      servicio: f.servicio_nombre,
+      valorServicio: Number(f.valor_servicio),
+      comisionBruta,
+      descuentoNegocio: Number(descuentoNegocioParte.toFixed(2)),
+      descuentoTrabajador: Number(descuentoTrabajadorParte.toFixed(2)),
+      descuentoTotal: Number((descuentoNegocioParte + descuentoTrabajadorParte).toFixed(2)),
+      comisionNeta: Number((comisionBruta - descuentoTrabajadorParte).toFixed(2)),
+      observacion: f.observacion || ''
     };
   });
 }
@@ -257,6 +328,7 @@ async function obtenerSoportePagoSalario(id) {
 
 module.exports = {
   resumenComisionesLavadores,
+  obtenerServiciosPorLavador,
   crearLiquidacion,
   pagarLiquidacion,
   listarLiquidaciones,

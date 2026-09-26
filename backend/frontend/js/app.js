@@ -25,6 +25,13 @@ function fechaLocalHaceDias(n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Escapa texto libre (observaciones, notas de cliente) antes de insertarlo con innerHTML. */
+function escapeHtml(texto) {
+  const div = document.createElement('div');
+  div.textContent = texto == null ? '' : String(texto);
+  return div.innerHTML;
+}
+
 /**
  * Filtros "en vivo" para campos de texto: quitan mientras se escribe
  * cualquier carácter que de todos modos el backend va a rechazar (números
@@ -655,12 +662,14 @@ const app = {
       tipo_vehiculo = document.getElementById('posAnonTipo').value;
     }
 
-    const payload = { cliente_id, vehiculo_id, servicio_id: this.selectedServiceId, placa_temporal, tipo_vehiculo };
+    const observacion = document.getElementById('posObservacion').value.trim();
+    const payload = { cliente_id, vehiculo_id, servicio_id: this.selectedServiceId, placa_temporal, tipo_vehiculo, observacion };
 
     try {
       await ApiCliente.post('/api/turnos', payload);
       this.toast('Turno agregado a la fila.', 'success');
       this.selectedServiceId = null;
+      document.getElementById('posObservacion').value = '';
       this.renderPosServices();
       this.loadTurnos();
     } catch (err) {
@@ -685,6 +694,7 @@ const app = {
           <div class="queue-item-info">
             <strong>#${t.numero_turno || (idx + 1)} Turno - ${t.placa || 'Sin Placa'} (${t.tipo_vehiculo})</strong>
             <span>${t.servicio_nombre} • Hora: ${t.hora_llegada} • ${this.formatMoney(t.servicio_precio)}</span>
+            ${t.observacion ? `<span class="text-sm text-warning">📝 ${escapeHtml(t.observacion)}</span>` : ''}
           </div>
           <div class="d-flex gap-2">
             <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}', ${t.cliente_id || 'null'}, ${t.vehiculo_id || 'null'})">Iniciar</button>
@@ -719,6 +729,7 @@ const app = {
   abrirModalNuevoTurno() {
     document.getElementById('turnoPlaca').value = '';
     document.getElementById('turnoTipo').value = 'carro';
+    document.getElementById('turnoObservacion').value = '';
     this.openModal('modalNuevoTurno');
   },
 
@@ -726,8 +737,9 @@ const app = {
     const placa = document.getElementById('turnoPlaca').value;
     const tipo = document.getElementById('turnoTipo').value;
     const servicio_id = document.getElementById('turnoServicioSelect').value;
+    const observacion = document.getElementById('turnoObservacion').value.trim();
     try {
-      await ApiCliente.post('/api/turnos', { placa_temporal: placa, tipo_vehiculo: tipo, servicio_id });
+      await ApiCliente.post('/api/turnos', { placa_temporal: placa, tipo_vehiculo: tipo, servicio_id, observacion });
       this.toast('Turno registrado con éxito.', 'success');
       this.closeModal('modalNuevoTurno');
       this.loadTurnos();
@@ -787,7 +799,8 @@ const app = {
     } else if (o.estado === 'en_proceso') {
       actionButtons = `<button class="btn btn-sm btn-success" style="width: 100%" onclick="app.updateOrderStatus(${o.id}, 'terminado')">Terminar Lavado</button>`;
     } else if (o.estado === 'terminado') {
-      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.openPayModal(${o.id}, ${o.total})">Cobrar y Entregar Vehículo</button>`;
+      const comisionTotalOrden = (o.lavadores || []).reduce((s, l) => s + Number(l.valor_comision), 0);
+      actionButtons = `<button class="btn btn-sm btn-primary" style="width: 100%" onclick="app.openPayModal(${o.id}, ${o.total}, ${comisionTotalOrden})">Cobrar y Entregar Vehículo</button>`;
     } else if (o.estado === 'entregado') {
       const metodo = o.pago ? o.pago.metodo_pago.toUpperCase() : 'PAGADO';
       actionButtons = `<span class="text-sm text-success" style="font-weight: 700">Entregado • Pago: ${metodo}</span>`;
@@ -799,6 +812,9 @@ const app = {
     const serviciosExtraHtml = (o.servicios_extra || []).length > 0
       ? `<div class="text-sm text-muted">+ ${o.servicios_extra.map(s => `${s.servicio_nombre} (${this.formatMoney(s.precio)})`).join(', ')}</div>`
       : '';
+    const observacionHtml = o.observacion
+      ? `<div class="text-sm text-warning">📝 ${escapeHtml(o.observacion)}</div>`
+      : '';
 
     return `
       <div class="order-card-header">
@@ -807,6 +823,7 @@ const app = {
       </div>
       <div class="order-service-title">${o.servicio_nombre}</div>
       ${serviciosExtraHtml}
+      ${observacionHtml}
       <div class="order-meta-info"><span>Cliente: ${o.cliente_nombre}</span> • <span>${this.formatMoney(o.total)}</span></div>
       <div class="order-washers-info">Lavador(es): <strong>${lavadoresNombres}</strong></div>
       <div class="order-actions">${actionButtons}</div>
@@ -869,22 +886,28 @@ const app = {
     }
   },
 
-  openPayModal(orderId, total) {
+  openPayModal(orderId, total, comisionTotalOrden) {
     this.payingOrderId = orderId;
     this.payingOrderTotal = Number(total);
+    this.payingOrderComision = Number(comisionTotalOrden) || 0;
     document.getElementById('payModalOrdenId').textContent = `#${orderId}`;
     document.getElementById('payModalMonto').textContent = this.formatMoney(total);
-    const descuentoInput = document.getElementById('payModalDescuento');
-    if (descuentoInput) descuentoInput.value = '';
+    const descNegocio = document.getElementById('payModalDescuentoNegocio');
+    const descTrabajador = document.getElementById('payModalDescuentoTrabajador');
+    if (descNegocio) descNegocio.value = '';
+    if (descTrabajador) descTrabajador.value = '';
+    document.getElementById('payModalObservacion').value = '';
+    const ayuda = document.getElementById('payModalDescuentoAyuda');
+    if (ayuda) ayuda.textContent = `El descuento negocio lo asume el negocio (ganancia). El descuento trabajador se le resta de su comisión pendiente (máximo ${this.formatMoney(this.payingOrderComision)}, lo que ganaría en este servicio) — úselo, por ejemplo, cuando el cliente no pagó por culpa del lavador. Entre los dos no pueden superar el total del servicio.`;
     this.actualizarTotalConDescuento();
     this.openModal('modalPagarOrden');
   },
 
-  /** Recalcula el total a cobrar restando el descuento (lo asume el negocio; no toca la comisión del lavador, ya fijada al crear la orden). */
+  /** Recalcula el total a cobrar restando ambos descuentos (negocio + trabajador; ninguno toca la comisión ya fijada al crear la orden, solo lo pendiente por pagar). */
   actualizarTotalConDescuento() {
-    const descuentoInput = document.getElementById('payModalDescuento');
-    const descuento = descuentoInput ? (parseFloat(descuentoInput.value) || 0) : 0;
-    const totalFinal = Math.max(0, (this.payingOrderTotal || 0) - descuento);
+    const descNegocio = parseFloat(document.getElementById('payModalDescuentoNegocio').value) || 0;
+    const descTrabajador = parseFloat(document.getElementById('payModalDescuentoTrabajador').value) || 0;
+    const totalFinal = Math.max(0, (this.payingOrderTotal || 0) - descNegocio - descTrabajador);
     const elFinal = document.getElementById('payModalTotalFinal');
     if (elFinal) elFinal.textContent = this.formatMoney(totalFinal);
   },
@@ -892,14 +915,21 @@ const app = {
   async confirmarPagoOrden() {
     if (!this.payingOrderId) return;
     const metodo = document.querySelector('input[name="payMetodo"]:checked').value;
-    const descuentoInput = document.getElementById('payModalDescuento');
-    const descuento = descuentoInput ? (parseFloat(descuentoInput.value) || 0) : 0;
-    if (descuento < 0 || descuento >= (this.payingOrderTotal || 0)) {
-      this.toast('El descuento debe ser mayor o igual a $0 y menor al total de la orden.', 'warning');
+    const descuento_negocio = parseFloat(document.getElementById('payModalDescuentoNegocio').value) || 0;
+    const descuento_trabajador = parseFloat(document.getElementById('payModalDescuentoTrabajador').value) || 0;
+    const observacion = document.getElementById('payModalObservacion').value.trim();
+    if (descuento_negocio < 0 || descuento_trabajador < 0) {
+      this.toast('Los descuentos no pueden ser negativos.', 'warning');
+      return;
+    }
+    if (descuento_negocio + descuento_trabajador > (this.payingOrderTotal || 0)) {
+      this.toast('La suma de los descuentos no puede superar el total del servicio.', 'warning');
       return;
     }
     try {
-      const data = await ApiCliente.post('/api/caja/pagos', { orden_id: this.payingOrderId, metodo_pago: metodo, descuento });
+      const data = await ApiCliente.post('/api/caja/pagos', {
+        orden_id: this.payingOrderId, metodo_pago: metodo, descuento_negocio, descuento_trabajador, observacion
+      });
       this.toast(`Pago registrado vía ${metodo.toUpperCase()}. Factura ${data.factura.numero_factura}.`, 'success');
       this.closeModal('modalPagarOrden');
       this.payingOrderId = null;
@@ -969,6 +999,7 @@ const app = {
     document.getElementById('citaFechaInput').value = '';
     document.getElementById('citaHoraInput').value = '';
     document.getElementById('citaHorarioInfo').textContent = '';
+    document.getElementById('citaObservacion').value = '';
     this.onCitaClienteChange();
     this.openModal('modalNuevaCita');
   },
@@ -981,11 +1012,12 @@ const app = {
     const servicio_id = document.getElementById('citaServicioSelect').value;
     const fecha = document.getElementById('citaFechaInput').value;
     const hora = document.getElementById('citaHoraInput').value;
+    const observacion = document.getElementById('citaObservacion').value.trim();
 
     if (!servicio_id || !fecha || !hora) { this.toast('Complete el servicio, la fecha y la hora.', 'warning'); return; }
 
     try {
-      await ApiCliente.post('/api/citas', { cliente_id, vehiculo_id, cliente_nombre, placa, servicio_id, fecha, hora });
+      await ApiCliente.post('/api/citas', { cliente_id, vehiculo_id, cliente_nombre, placa, servicio_id, fecha, hora, observacion });
       this.toast('Cita agendada correctamente.', 'success');
       this.closeModal('modalNuevaCita');
       this.loadCitas();
@@ -1726,10 +1758,14 @@ const app = {
                 </div>
                 <div class="text-sm text-muted text-right">${w.servicios_realizados} lavados<br>Total Ganado: ${this.formatMoney(w.comision_historica_total)}</div>
               </div>
+              ${w.descuento_trabajador_total > 0 ? `<div class="text-sm text-danger mt-1">Descuentos asumidos: -${this.formatMoney(w.descuento_trabajador_total)}</div>` : ''}
               <div class="d-flex gap-2 mt-2">
                 <button class="btn btn-sm btn-primary admin-only" style="flex: 1" onclick="app.abrirModalLiquidar(${w.lavador_id}, '${w.nombre}', ${w.comision_pendiente})">Liquidar Comisión</button>
-                <button class="btn btn-sm btn-outline admin-only" onclick="app.abrirModalEditarLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}', '${(w.telefono || '').replace(/'/g, "\\'")}', ${w.porcentaje_comision})">Editar</button>
-                <button class="btn btn-sm btn-outline admin-only" onclick="app.toggleEstadoLavador(${w.lavador_id}, '${w.estado}', '${w.nombre}')">${w.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalServiciosLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}')">Ver Servicios</button>
+              </div>
+              <div class="d-flex gap-2 mt-2">
+                <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.abrirModalEditarLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}', '${(w.telefono || '').replace(/'/g, "\\'")}', ${w.porcentaje_comision})">Editar</button>
+                <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.toggleEstadoLavador(${w.lavador_id}, '${w.estado}', '${w.nombre}')">${w.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
               </div>
             </div>
           `).join('');
@@ -1859,6 +1895,34 @@ const app = {
     document.getElementById('liqPeriodoInicio').value = hoy;
     document.getElementById('liqPeriodoFin').value = hoy;
     this.openModal('modalLiquidarLavador');
+  },
+
+  /** Historial de servicios de un lavador: valor, descuento negocio/trabajador y observación de cada pago, más reciente primero. */
+  async abrirModalServiciosLavador(lavadorId, nombre) {
+    document.getElementById('serviciosLavadorNombre').textContent = nombre;
+    const tbody = document.getElementById('serviciosLavadorTableBody');
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Cargando...</td></tr>`;
+    this.openModal('modalServiciosLavador');
+    try {
+      const servicios = await ApiCliente.get(`/api/nomina/lavadores/${lavadorId}/servicios`);
+      if (servicios.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Este lavador todavía no tiene servicios cobrados.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = servicios.map(s => `
+        <tr>
+          <td>${String(s.fecha).substring(0, 10)}</td>
+          <td>#${s.ordenId} ${s.servicio || ''}</td>
+          <td>${this.formatMoney(s.valorServicio)}</td>
+          <td>${this.formatMoney(s.comisionBruta)}</td>
+          <td class="${s.descuentoTotal > 0 ? 'text-danger' : ''}">${s.descuentoTotal > 0 ? `-${this.formatMoney(s.descuentoTotal)} (negocio ${this.formatMoney(s.descuentoNegocio)} / trabajador ${this.formatMoney(s.descuentoTrabajador)})` : '--'}</td>
+          <td><strong>${this.formatMoney(s.comisionNeta)}</strong></td>
+          <td class="text-sm text-muted">${s.observacion ? escapeHtml(s.observacion) : '--'}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar el historial.</td></tr>`;
+    }
   },
 
   recalcLiqTotal() {
@@ -2652,26 +2716,103 @@ const app = {
       tbody.innerHTML = this.clients.map(c => {
         const placas = (c.vehiculos || []).map(v => v.placa).join(', ') || 'Sin vehículos';
         const registrado = c.creado_en ? String(c.creado_en).substring(0, 10) : '--';
+        const badgeListaNegra = c.en_lista_negra ? `<span class="role-badge" style="background: #ef4444">LISTA NEGRA</span>` : '';
         return `
           <tr>
-            <td><strong>${c.nombre}</strong></td>
+            <td><strong>${c.nombre}</strong> ${badgeListaNegra}</td>
             <td>${c.telefono}</td>
             <td>${c.correo || '--'}</td>
             <td>${placas}</td>
             <td>${registrado}</td>
-            <td><button class="btn btn-sm btn-secondary" onclick="app.abrirModalEditarCliente(${c.id}, '${c.nombre.replace(/'/g, "\\'")}', '${c.telefono}', '${(c.correo || '').replace(/'/g, "\\'")}')">Editar</button></td>
+            <td><button class="btn btn-sm btn-secondary" onclick="app.abrirModalEditarCliente(${c.id})">Editar</button></td>
           </tr>
         `;
       }).join('');
     } catch (err) { console.error(err); }
   },
 
-  abrirModalEditarCliente(id, nombre, telefono, correo) {
+  abrirModalEditarCliente(id) {
+    const cliente = this.clients.find(c => c.id === id);
+    if (!cliente) return;
     this.editingClienteId = id;
-    document.getElementById('editClienteNombre').value = nombre;
-    document.getElementById('editClienteTelefono').value = telefono;
-    document.getElementById('editClienteCorreo').value = correo;
+    document.getElementById('editClienteNombre').value = cliente.nombre;
+    document.getElementById('editClienteTelefono').value = cliente.telefono;
+    document.getElementById('editClienteCorreo').value = cliente.correo || '';
+    document.getElementById('editClienteNuevaPlaca').value = '';
+    document.getElementById('editClienteNuevaMarca').value = '';
+    document.getElementById('editClienteNuevaNotaListaNegra').value = '';
+    document.getElementById('editClienteNuevaNotaPreferencia').value = '';
+    this.renderEditClienteExtras(cliente);
     this.openModal('modalEditarCliente');
+  },
+
+  /** Refresca las listas de vehículos y notas dentro del modal Editar Cliente (se llama al abrirlo y tras cada agregar). */
+  renderEditClienteExtras(cliente) {
+    const vehiculosDiv = document.getElementById('editClienteVehiculosList');
+    vehiculosDiv.innerHTML = (cliente.vehiculos || []).length > 0
+      ? (cliente.vehiculos || []).map(v => `<span class="washer-pill">${v.placa} — ${v.marca || 'Genérica'} (${v.tipo})</span>`).join(' ')
+      : `<p class="text-sm text-muted">Todavía no tiene vehículos registrados.</p>`;
+
+    const renderNotas = (notas, contenedorId) => {
+      const div = document.getElementById(contenedorId);
+      div.innerHTML = notas.length > 0
+        ? notas.map(n => `
+          <div class="d-flex justify-between" style="align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border-color, #eee)">
+            <span class="text-sm">${escapeHtml(n.texto)} <span class="text-muted">(${n.creado_por_nombre || ''}, ${String(n.creado_en).substring(0, 10)})</span></span>
+            <button class="btn btn-sm btn-outline" onclick="app.eliminarNotaCliente(${cliente.id}, ${n.id})">✕</button>
+          </div>
+        `).join('')
+        : `<p class="text-sm text-muted">Sin notas todavía.</p>`;
+    };
+    renderNotas(cliente.notas_lista_negra || [], 'editClienteNotasListaNegra');
+    renderNotas(cliente.notas_preferencia || [], 'editClienteNotasPreferencia');
+  },
+
+  async agregarVehiculoACliente() {
+    const placa = document.getElementById('editClienteNuevaPlaca').value;
+    const tipo = document.getElementById('editClienteNuevoTipo').value;
+    const marca = document.getElementById('editClienteNuevaMarca').value;
+    if (!placa) { this.toast('Ingrese la placa del vehículo.', 'warning'); return; }
+
+    try {
+      await ApiCliente.post(`/api/clientes/${this.editingClienteId}/vehiculos`, { placa, tipo, marca });
+      this.toast('Vehículo agregado.', 'success');
+      document.getElementById('editClienteNuevaPlaca').value = '';
+      document.getElementById('editClienteNuevaMarca').value = '';
+      await this.loadClients();
+      this.renderEditClienteExtras(this.clients.find(c => c.id === this.editingClienteId));
+      if (this.activeTab === 'clientes') this.loadClientesAdmin();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo agregar el vehículo.', 'error');
+    }
+  },
+
+  async agregarNotaCliente(tipo) {
+    const inputId = tipo === 'lista_negra' ? 'editClienteNuevaNotaListaNegra' : 'editClienteNuevaNotaPreferencia';
+    const texto = document.getElementById(inputId).value.trim();
+    if (!texto) { this.toast('Escriba el texto de la nota.', 'warning'); return; }
+
+    try {
+      await ApiCliente.post(`/api/clientes/${this.editingClienteId}/notas`, { tipo, texto });
+      document.getElementById(inputId).value = '';
+      await this.loadClients();
+      this.renderEditClienteExtras(this.clients.find(c => c.id === this.editingClienteId));
+      if (this.activeTab === 'clientes') this.loadClientesAdmin();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo agregar la nota.', 'error');
+    }
+  },
+
+  async eliminarNotaCliente(clienteId, notaId) {
+    if (!confirm('¿Eliminar esta nota?')) return;
+    try {
+      await ApiCliente.delete(`/api/clientes/${clienteId}/notas/${notaId}`);
+      await this.loadClients();
+      this.renderEditClienteExtras(this.clients.find(c => c.id === clienteId));
+      if (this.activeTab === 'clientes') this.loadClientesAdmin();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo eliminar la nota.', 'error');
+    }
   },
 
   async guardarEdicionCliente() {

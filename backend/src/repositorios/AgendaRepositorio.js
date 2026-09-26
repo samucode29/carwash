@@ -48,11 +48,12 @@ async function crearCita(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO citas
       (cliente_id, vehiculo_id, servicio_id, fecha, hora, estado,
-       cliente_nombre_temp, cliente_telefono_temp, placa_temp, registrado_por)
-     VALUES (?, ?, ?, ?, ?, 'agendada', ?, ?, ?, ?)`,
+       cliente_nombre_temp, cliente_telefono_temp, placa_temp, observacion, registrado_por)
+     VALUES (?, ?, ?, ?, ?, 'agendada', ?, ?, ?, ?, ?)`,
     [
       datos.clienteId || null, datos.vehiculoId || null, datos.servicioId, datos.fecha, datos.hora,
-      datos.clienteNombreTemp || '', datos.clienteTelefonoTemp || '', datos.placaTemp || '', datos.registradoPor
+      datos.clienteNombreTemp || '', datos.clienteTelefonoTemp || '', datos.placaTemp || '',
+      datos.observacion || null, datos.registradoPor
     ]
   );
   return obtenerCitaPorId(resultado.insertId);
@@ -142,12 +143,12 @@ async function existeVehiculoConServicioActivo({ vehiculoId, placa }) {
 
 async function crearTurno(datos) {
   const [resultado] = await pool.query(
-    `INSERT INTO turnos (cliente_id, vehiculo_id, cita_id, placa_temporal, tipo_vehiculo, servicio_id, fecha, hora_llegada, estado, registrado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'en_espera', ?)`,
+    `INSERT INTO turnos (cliente_id, vehiculo_id, cita_id, placa_temporal, tipo_vehiculo, servicio_id, fecha, hora_llegada, estado, observacion, registrado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'en_espera', ?, ?)`,
     [
       datos.clienteId || null, datos.vehiculoId || null, datos.citaId || null,
       datos.placaTemporal || '', datos.tipoVehiculo || 'carro',
-      datos.servicioId, datos.fecha, datos.horaLlegada, datos.registradoPor
+      datos.servicioId, datos.fecha, datos.horaLlegada, datos.observacion || null, datos.registradoPor
     ]
   );
   return obtenerTurnoPorId(resultado.insertId);

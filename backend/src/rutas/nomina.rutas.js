@@ -16,6 +16,7 @@ const subirSoporte = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 // Comisiones de lavadores: consultar es de uso diario; liquidar/pagar es
 // una decisión financiera exclusiva de administrador.
 router.get('/lavadores', envolverAsync(NominaControlador.listarResumenLavadores));
+router.get('/lavadores/:id/servicios', envolverAsync(NominaControlador.listarServiciosLavador));
 router.post('/liquidar-lavador', permitirRoles('administrador'), envolverAsync(NominaControlador.generarLiquidacion));
 router.post('/pagar-liquidacion', permitirRoles('administrador'), subirSoporte.single('soporte'), envolverAsync(NominaControlador.pagarLiquidacion));
 router.get('/liquidaciones', envolverAsync(NominaControlador.listarLiquidaciones));

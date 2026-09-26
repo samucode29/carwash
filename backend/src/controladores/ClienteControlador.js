@@ -25,17 +25,65 @@ async function crearClienteConVehiculo(req, res) {
     return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
 
+  // Un mismo vehículo (placa) no puede quedar asociado a dos clientes
+  // distintos: se valida antes de crear el cliente para no dejar un
+  // cliente huérfano si la placa ya es de otra persona.
+  let placaLimpia = null;
+  let vehiculoExistente = null;
+  if (placa && tipo) {
+    placaLimpia = placa.toUpperCase().trim();
+    vehiculoExistente = await ClienteRepositorio.obtenerVehiculoPorPlaca(placaLimpia);
+    if (vehiculoExistente && vehiculoExistente.cliente_id) {
+      const dueño = await ClienteRepositorio.obtenerClientePorId(vehiculoExistente.cliente_id);
+      return res.status(400).json({ error: `La placa ${placaLimpia} ya está registrada a otro cliente${dueño ? ` (${dueño.nombre})` : ''}.` });
+    }
+  }
+
   const cliente = await ClienteRepositorio.crearCliente({ nombre, telefono, correo, creadoPor: req.usuarioAutenticado.id });
 
   let vehiculo = null;
-  if (placa && tipo) {
-    const placaLimpia = placa.toUpperCase().trim();
-    const existente = await ClienteRepositorio.obtenerVehiculoPorPlaca(placaLimpia);
-    vehiculo = existente || await ClienteRepositorio.crearVehiculo({ clienteId: cliente.id, placa: placaLimpia, tipo, marca, color });
+  if (placaLimpia) {
+    if (vehiculoExistente) {
+      // Placa existía pero sin dueño (venta anónima previa): se adopta.
+      await ClienteRepositorio.actualizarVehiculoCliente(vehiculoExistente.id, cliente.id);
+      vehiculo = { ...vehiculoExistente, cliente_id: cliente.id };
+    } else {
+      vehiculo = await ClienteRepositorio.crearVehiculo({ clienteId: cliente.id, placa: placaLimpia, tipo, marca, color });
+    }
   }
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_cliente', `Registrado cliente ${nombre} con placa ${placa || 'N/A'}`);
   res.status(201).json({ cliente, vehiculo });
+}
+
+/** Agrega un vehículo adicional a un cliente ya existente (un cliente puede tener varios). */
+async function agregarVehiculo(req, res) {
+  const clienteId = Number(req.params.id);
+  const { placa, tipo, marca, color } = req.body;
+  if (!placa || !tipo) {
+    return res.status(400).json({ error: 'Placa y tipo de vehículo son obligatorios.' });
+  }
+
+  const cliente = await ClienteRepositorio.obtenerClientePorId(clienteId);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+
+  const placaLimpia = placa.toUpperCase().trim();
+  const existente = await ClienteRepositorio.obtenerVehiculoPorPlaca(placaLimpia);
+  if (existente && existente.cliente_id && existente.cliente_id !== clienteId) {
+    const dueño = await ClienteRepositorio.obtenerClientePorId(existente.cliente_id);
+    return res.status(400).json({ error: `La placa ${placaLimpia} ya está registrada a otro cliente${dueño ? ` (${dueño.nombre})` : ''}.` });
+  }
+
+  let vehiculo;
+  if (existente) {
+    if (!existente.cliente_id) await ClienteRepositorio.actualizarVehiculoCliente(existente.id, clienteId);
+    vehiculo = { ...existente, cliente_id: clienteId };
+  } else {
+    vehiculo = await ClienteRepositorio.crearVehiculo({ clienteId, placa: placaLimpia, tipo, marca, color });
+  }
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'agregar_vehiculo', `Vehículo ${placaLimpia} agregado al cliente #${clienteId}`);
+  res.status(201).json(vehiculo);
 }
 
 async function actualizarCliente(req, res) {
@@ -77,4 +125,38 @@ async function buscarVehiculoPorPlaca(req, res) {
   res.json({ encontrado: true, vehiculo, cliente, historial });
 }
 
-module.exports = { listarClientes, crearClienteConVehiculo, actualizarCliente, buscarVehiculoPorPlaca };
+const TIPOS_NOTA_VALIDOS = ['lista_negra', 'preferencia'];
+
+/**
+ * Nota sobre un cliente: 'lista_negra' para incidentes (no pagó, generó
+ * problemas...) y 'preferencia' para cómo le gusta el servicio. Se guardan
+ * como historial (varias por cliente), nunca se sobrescriben.
+ */
+async function agregarNotaCliente(req, res) {
+  const clienteId = Number(req.params.id);
+  const { tipo, texto } = req.body;
+  if (!TIPOS_NOTA_VALIDOS.includes(tipo)) {
+    return res.status(400).json({ error: 'Tipo de nota no válido.' });
+  }
+  if (!texto || !texto.trim()) {
+    return res.status(400).json({ error: 'Escriba el texto de la nota.' });
+  }
+
+  const cliente = await ClienteRepositorio.obtenerClientePorId(clienteId);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+
+  const nota = await ClienteRepositorio.agregarNota({ clienteId, tipo, texto: texto.trim(), creadoPor: req.usuarioAutenticado.id });
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'agregar_nota_cliente', `Nota (${tipo}) agregada al cliente #${clienteId}: ${texto.trim()}`);
+  res.status(201).json(nota);
+}
+
+async function eliminarNotaCliente(req, res) {
+  await ClienteRepositorio.eliminarNota(Number(req.params.notaId));
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'eliminar_nota_cliente', `Nota #${req.params.notaId} eliminada del cliente #${req.params.id}`);
+  res.status(204).end();
+}
+
+module.exports = {
+  listarClientes, crearClienteConVehiculo, actualizarCliente, agregarVehiculo, buscarVehiculoPorPlaca,
+  agregarNotaCliente, eliminarNotaCliente
+};

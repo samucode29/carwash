@@ -37,7 +37,7 @@ async function listarCitas(req, res) {
 }
 
 async function crearCita(req, res) {
-  const { cliente_id, vehiculo_id, servicio_id, fecha, hora, cliente_nombre, cliente_telefono, placa } = req.body;
+  const { cliente_id, vehiculo_id, servicio_id, fecha, hora, cliente_nombre, cliente_telefono, placa, observacion } = req.body;
   if (!servicio_id || !fecha || !hora) {
     return res.status(400).json({ error: 'Servicio, fecha y hora son obligatorios.' });
   }
@@ -58,6 +58,7 @@ async function crearCita(req, res) {
     clienteNombreTemp: cliente_nombre,
     clienteTelefonoTemp: cliente_telefono,
     placaTemp: placa ? placa.toUpperCase().trim() : '',
+    observacion: observacion || null,
     registradoPor: req.usuarioAutenticado.id
   });
 
@@ -96,7 +97,7 @@ async function listarTurnosDeHoy(req, res) {
 }
 
 async function crearTurno(req, res) {
-  const { cliente_id, vehiculo_id, cita_id, placa_temporal, tipo_vehiculo, servicio_id } = req.body;
+  const { cliente_id, vehiculo_id, cita_id, placa_temporal, tipo_vehiculo, servicio_id, observacion } = req.body;
   if (!servicio_id) {
     return res.status(400).json({ error: 'El servicio es obligatorio para generar un turno.' });
   }
@@ -126,6 +127,7 @@ async function crearTurno(req, res) {
     servicioId: parseInt(servicio_id, 10),
     fecha: hoy,
     horaLlegada: obtenerHoraActual(),
+    observacion: observacion || null,
     registradoPor: req.usuarioAutenticado.id
   });
 

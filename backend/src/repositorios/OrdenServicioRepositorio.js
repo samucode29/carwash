@@ -107,12 +107,12 @@ async function crearOrdenConAsignacion(datos) {
     const [resultadoOrden] = await conexion.query(
       `INSERT INTO ordenes_servicio
         (cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima,
-         placa_anonima, tipo_vehiculo_anonimo, estado, total, registrado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         datos.citaId || null, datos.turnoId || null, datos.clienteId || null, datos.vehiculoId || null,
         datos.servicioId, datos.esVentaAnonima ? 1 : 0, datos.placaAnonima || null, datos.tipoVehiculoAnonimo || null,
-        datos.lavadoresAsignados.length > 0 ? 'en_proceso' : 'recibido', datos.total, datos.registradoPor
+        datos.lavadoresAsignados.length > 0 ? 'en_proceso' : 'recibido', datos.total, datos.observacion || null, datos.registradoPor
       ]
     );
     const ordenId = resultadoOrden.insertId;

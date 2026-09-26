@@ -10,6 +10,9 @@ router.use(exigirAutenticacion);
 router.get('/', envolverAsync(ClienteControlador.listarClientes));
 router.post('/', envolverAsync(ClienteControlador.crearClienteConVehiculo));
 router.put('/:id', envolverAsync(ClienteControlador.actualizarCliente));
+router.post('/:id/vehiculos', envolverAsync(ClienteControlador.agregarVehiculo));
+router.post('/:id/notas', envolverAsync(ClienteControlador.agregarNotaCliente));
+router.delete('/:id/notas/:notaId', envolverAsync(ClienteControlador.eliminarNotaCliente));
 router.get('/vehiculos/buscar', envolverAsync(ClienteControlador.buscarVehiculoPorPlaca));
 
 module.exports = router;

@@ -4,10 +4,11 @@
  */
 const { pool } = require('../config/baseDeDatos');
 
-async function registrarPago({ ordenId, metodoPago, monto, descuento }) {
+async function registrarPago({ ordenId, metodoPago, monto, descuentoNegocio, descuentoTrabajador, observacion }) {
   const [resultado] = await pool.query(
-    `INSERT INTO pagos (orden_id, metodo_pago, monto, descuento, estado) VALUES (?, ?, ?, ?, 'confirmado')`,
-    [ordenId, metodoPago, monto, descuento || 0]
+    `INSERT INTO pagos (orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, observacion, estado)
+     VALUES (?, ?, ?, ?, ?, ?, 'confirmado')`,
+    [ordenId, metodoPago, monto, descuentoNegocio || 0, descuentoTrabajador || 0, observacion || null]
   );
   await pool.query(
     `UPDATE ordenes_servicio SET estado = 'entregado', fecha_hora_entrega = NOW() WHERE id = ? AND estado != 'entregado'`,

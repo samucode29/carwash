@@ -12,7 +12,7 @@ const { obtenerFechaHoy } = require('../utilidades/fechas');
 const METODOS_VALIDOS = ['efectivo', 'tarjeta', 'transferencia', 'pse'];
 
 async function registrarPago(req, res) {
-  const { orden_id, metodo_pago, descuento } = req.body;
+  const { orden_id, metodo_pago, descuento_negocio, descuento_trabajador, observacion } = req.body;
   const orden = await OrdenServicioRepositorio.obtenerOrdenPorId(parseInt(orden_id, 10));
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
 
@@ -20,23 +20,38 @@ async function registrarPago(req, res) {
     return res.status(400).json({ error: 'Método de pago no válido.' });
   }
 
-  // El total de la orden (y por lo tanto la comisión ya calculada del
-  // lavador en orden_lavadores) nunca cambia por un descuento: el
-  // descuento sale de la ganancia del negocio, no del bolsillo del
-  // empleado. Por eso el monto a cobrar se calcula aquí, en el backend,
-  // en vez de confiar en un monto que mande el cliente.
+  // El total de la orden (y por lo tanto orden_lavadores.valor_comision, ya
+  // fijada al crear la orden) nunca cambia por un descuento. Lo que sí
+  // puede pasar es que ese descuento lo asuma el negocio (descuento_negocio,
+  // sale de la ganancia) o el lavador (descuento_trabajador, ej. el cliente
+  // no pagó por su culpa: se le resta de su comisión pendiente más adelante,
+  // ver NominaRepositorio.resumenComisionesLavadores). Todo se valida acá,
+  // en el backend, en vez de confiar en lo que mande el cliente.
   const totalOrden = Number(orden.total);
-  const valorDescuento = parseFloat(descuento) || 0;
-  if (valorDescuento < 0 || valorDescuento >= totalOrden) {
-    return res.status(400).json({ error: 'El descuento debe ser mayor o igual a $0 y menor al total de la orden.' });
+  const valorDescNegocio = parseFloat(descuento_negocio) || 0;
+  const valorDescTrabajador = parseFloat(descuento_trabajador) || 0;
+  if (valorDescNegocio < 0 || valorDescTrabajador < 0) {
+    return res.status(400).json({ error: 'Los descuentos no pueden ser negativos.' });
   }
-  const montoPagado = totalOrden - valorDescuento;
+  if (valorDescNegocio + valorDescTrabajador > totalOrden) {
+    return res.status(400).json({ error: 'La suma de los descuentos no puede superar el total del servicio.' });
+  }
+  if (valorDescTrabajador > 0) {
+    const lavadoresPorOrden = await OrdenServicioRepositorio.obtenerLavadoresPorOrdenes([orden.id]);
+    const comisionTotalOrden = (lavadoresPorOrden[orden.id] || []).reduce((s, l) => s + Number(l.valor_comision), 0);
+    if (valorDescTrabajador > comisionTotalOrden) {
+      return res.status(400).json({ error: `El descuento al trabajador no puede superar su comisión en este servicio (${comisionTotalOrden}).` });
+    }
+  }
+  const montoPagado = totalOrden - valorDescNegocio - valorDescTrabajador;
 
   const pago = await CajaRepositorio.registrarPago({
     ordenId: orden.id,
     metodoPago: metodo_pago,
     monto: montoPagado,
-    descuento: valorDescuento
+    descuentoNegocio: valorDescNegocio,
+    descuentoTrabajador: valorDescTrabajador,
+    observacion: observacion || null
   });
 
   const servicio = await ServicioRepositorio.obtenerPorId(orden.servicio_id);
@@ -46,7 +61,10 @@ async function registrarPago(req, res) {
     total: montoPagado, fecha: obtenerFechaHoy(), creadoPor: req.usuarioAutenticado.id
   });
 
-  const detalleDescuento = valorDescuento > 0 ? ` con descuento de $${valorDescuento}` : '';
+  const detalles = [];
+  if (valorDescNegocio > 0) detalles.push(`descuento negocio $${valorDescNegocio}`);
+  if (valorDescTrabajador > 0) detalles.push(`descuento trabajador $${valorDescTrabajador}`);
+  const detalleDescuento = detalles.length ? ` (${detalles.join(', ')})` : '';
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'procesar_pago', `Pago registrado Orden #${orden.id}: $${pago.monto}${detalleDescuento} vía ${metodo_pago} (Factura ${factura.numero_factura})`);
   res.status(201).json({ ordenId: orden.id, pago, factura });
 }

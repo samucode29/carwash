@@ -21,6 +21,11 @@ async function listarResumenLavadores(req, res) {
   })));
 }
 
+async function listarServiciosLavador(req, res) {
+  const servicios = await NominaRepositorio.obtenerServiciosPorLavador(Number(req.params.id));
+  res.json(servicios);
+}
+
 async function generarLiquidacion(req, res) {
   const { lavador_id, periodo_inicio, periodo_fin, total_comision, descuentos } = req.body;
   const hoy = obtenerFechaHoy();
@@ -190,7 +195,7 @@ async function registrarAsistencia(req, res) {
 }
 
 module.exports = {
-  listarResumenLavadores, generarLiquidacion, pagarLiquidacion, listarLiquidaciones, descargarSoporteLiquidacion,
+  listarResumenLavadores, listarServiciosLavador, generarLiquidacion, pagarLiquidacion, listarLiquidaciones, descargarSoporteLiquidacion,
   listarEmpleados, calcularPagoEmpleado, pagarSalarioEmpleado, listarPagosSalario, descargarSoportePagoSalario,
   listarAsistenciaDelDia, registrarAsistencia
 };

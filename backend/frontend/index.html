@@ -166,6 +166,11 @@
                 </div>
               </div>
 
+              <div class="form-group mt-2">
+                <label>Observación (opcional):</label>
+                <textarea id="posObservacion" rows="2" placeholder="Ej: recién pintado, no polichar"></textarea>
+              </div>
+
               <!-- Número de turno manual (opcional) -->
               <!-- Resumen y Botón de Creación -->
               <div class="pos-summary-bar mt-4">
@@ -1075,14 +1080,24 @@
           <span class="pay-label">Total del Servicio:</span>
           <span class="pay-amount" id="payModalMonto">$0</span>
         </div>
-        <div class="form-group mt-3">
-          <label>Descuento ($):</label>
-          <input type="number" id="payModalDescuento" min="0" step="1000" placeholder="0" oninput="app.actualizarTotalConDescuento()">
-          <p class="text-sm text-muted mt-1">El descuento lo asume el negocio: no afecta la comisión del lavador, ya calculada sobre el precio de lista.</p>
+        <div class="form-row mt-3">
+          <div class="form-group flex-1">
+            <label>Descuento Negocio ($):</label>
+            <input type="number" id="payModalDescuentoNegocio" min="0" step="1000" placeholder="0" oninput="app.actualizarTotalConDescuento()">
+          </div>
+          <div class="form-group flex-1">
+            <label>Descuento Trabajador ($):</label>
+            <input type="number" id="payModalDescuentoTrabajador" min="0" step="1000" placeholder="0" oninput="app.actualizarTotalConDescuento()">
+          </div>
         </div>
+        <p class="text-sm text-muted mt-1" id="payModalDescuentoAyuda">El descuento negocio lo asume el negocio (ganancia). El descuento trabajador se le resta de su comisión pendiente — úselo, por ejemplo, cuando el cliente no pagó por culpa del lavador. Entre los dos no pueden superar el total del servicio.</p>
         <div class="pay-summary mt-2">
           <span class="pay-label">Total a Cobrar:</span>
           <span class="pay-amount" id="payModalTotalFinal">$0</span>
+        </div>
+        <div class="form-group mt-3">
+          <label>Observación (opcional):</label>
+          <textarea id="payModalObservacion" rows="2" placeholder="Ej: cliente se negó a pagar, es amigo del lavador, él respondió por el servicio."></textarea>
         </div>
         <div class="form-group mt-3">
           <label>Método de Pago:</label>
@@ -1170,7 +1185,7 @@
 
   <!-- Modal: Editar Cliente -->
   <div id="modalEditarCliente" class="modal-overlay hidden">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: 640px">
       <div class="modal-header">
         <h3>Editar Cliente</h3>
         <button class="close-btn" onclick="app.closeModal('modalEditarCliente')">&times;</button>
@@ -1190,9 +1205,58 @@
           <label>Correo Electrónico (Opcional):</label>
           <input type="email" id="editClienteCorreo">
         </div>
+
+        <hr class="modal-divider">
+        <h4 class="mb-2">Vehículos</h4>
+        <div id="editClienteVehiculosList" class="mb-2"></div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Placa Nueva:</label>
+            <input type="text" id="editClienteNuevaPlaca" placeholder="ABC-123" oninput="this.value = this.value.toUpperCase()">
+          </div>
+          <div class="form-group flex-1">
+            <label>Tipo:</label>
+            <select id="editClienteNuevoTipo">
+              <option value="carro">Carro / Camioneta</option>
+              <option value="moto">Moto</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label>Marca:</label>
+            <input type="text" id="editClienteNuevaMarca" placeholder="Toyota Hilux">
+          </div>
+          <div class="form-group flex-1">
+            <label>&nbsp;</label>
+            <button type="button" class="btn btn-outline" onclick="app.agregarVehiculoACliente()">+ Agregar Vehículo</button>
+          </div>
+        </div>
+
+        <hr class="modal-divider">
+        <h4 class="mb-2">Lista Negra <span class="text-sm text-muted">(incidentes: no pagó, problemas, etc.)</span></h4>
+        <div id="editClienteNotasListaNegra" class="mb-2"></div>
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <input type="text" id="editClienteNuevaNotaListaNegra" placeholder="Ej: no pagó el servicio del 12/03, se fue sin avisar">
+          </div>
+          <div class="form-group flex-1">
+            <button type="button" class="btn btn-outline" onclick="app.agregarNotaCliente('lista_negra')">+ Agregar</button>
+          </div>
+        </div>
+
+        <hr class="modal-divider">
+        <h4 class="mb-2">Preferencias <span class="text-sm text-muted">(cómo le gusta el servicio)</span></h4>
+        <div id="editClienteNotasPreferencia" class="mb-2"></div>
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <input type="text" id="editClienteNuevaNotaPreferencia" placeholder="Ej: le gusta el aromatizante de vainilla">
+          </div>
+          <div class="form-group flex-1">
+            <button type="button" class="btn btn-outline" onclick="app.agregarNotaCliente('preferencia')">+ Agregar</button>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="app.closeModal('modalEditarCliente')">Cancelar</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('modalEditarCliente')">Cerrar</button>
         <button class="btn btn-primary" onclick="app.guardarEdicionCliente()">Guardar Cambios</button>
       </div>
     </div>
@@ -1241,6 +1305,10 @@
           </div>
         </div>
         <p class="text-sm text-muted" id="citaHorarioInfo"></p>
+        <div class="form-group">
+          <label>Observación (opcional):</label>
+          <textarea id="citaObservacion" rows="2" placeholder="Ej: recién pintado, no polichar"></textarea>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalNuevaCita')">Cancelar</button>
@@ -1271,6 +1339,10 @@
         <div class="form-group">
           <label>Servicio:</label>
           <select id="turnoServicioSelect"></select>
+        </div>
+        <div class="form-group">
+          <label>Observación (opcional):</label>
+          <textarea id="turnoObservacion" rows="2" placeholder="Ej: recién pintado, no polichar"></textarea>
         </div>
       </div>
       <div class="modal-footer">
@@ -1434,6 +1506,37 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalLiquidarLavador')">Cancelar</button>
         <button class="btn btn-primary" onclick="app.guardarLiquidacionLavador()">Generar Liquidación (Pendiente)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Historial de Servicios de un Lavador -->
+  <div id="modalServiciosLavador" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width: 900px">
+      <div class="modal-header">
+        <h3>Servicios de <span id="serviciosLavadorNombre">--</span></h3>
+        <button class="close-btn" onclick="app.closeModal('modalServiciosLavador')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="overflow-x: auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Servicio</th>
+                <th>Valor</th>
+                <th>Comisión</th>
+                <th>Descuento (negocio/trabajador)</th>
+                <th>Comisión Neta</th>
+                <th>Observación</th>
+              </tr>
+            </thead>
+            <tbody id="serviciosLavadorTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modalServiciosLavador')">Cerrar</button>
       </div>
     </div>
   </div>

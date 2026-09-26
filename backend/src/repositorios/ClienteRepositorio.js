@@ -6,11 +6,20 @@ const { pool } = require('../config/baseDeDatos');
 async function listarConVehiculos() {
   const [clientes] = await pool.query(`SELECT * FROM clientes ORDER BY nombre`);
   const [vehiculos] = await pool.query(`SELECT * FROM vehiculos`);
+  const [notas] = await pool.query(
+    `SELECT n.*, u.nombre AS creado_por_nombre FROM cliente_notas n LEFT JOIN usuarios u ON u.id = n.creado_por ORDER BY n.creado_en DESC`
+  );
 
-  return clientes.map(cliente => ({
-    ...cliente,
-    vehiculos: vehiculos.filter(v => v.cliente_id === cliente.id)
-  }));
+  return clientes.map(cliente => {
+    const notasCliente = notas.filter(n => n.cliente_id === cliente.id);
+    return {
+      ...cliente,
+      vehiculos: vehiculos.filter(v => v.cliente_id === cliente.id),
+      notas_lista_negra: notasCliente.filter(n => n.tipo === 'lista_negra'),
+      notas_preferencia: notasCliente.filter(n => n.tipo === 'preferencia'),
+      en_lista_negra: notasCliente.some(n => n.tipo === 'lista_negra')
+    };
+  });
 }
 
 async function crearCliente(datos) {
@@ -55,6 +64,26 @@ async function crearVehiculo(datos) {
   return filas[0];
 }
 
+async function actualizarVehiculoCliente(vehiculoId, clienteId) {
+  await pool.query(`UPDATE vehiculos SET cliente_id = ? WHERE id = ?`, [clienteId, vehiculoId]);
+}
+
+async function agregarNota({ clienteId, tipo, texto, creadoPor }) {
+  const [resultado] = await pool.query(
+    `INSERT INTO cliente_notas (cliente_id, tipo, texto, creado_por) VALUES (?, ?, ?, ?)`,
+    [clienteId, tipo, texto, creadoPor]
+  );
+  const [filas] = await pool.query(
+    `SELECT n.*, u.nombre AS creado_por_nombre FROM cliente_notas n LEFT JOIN usuarios u ON u.id = n.creado_por WHERE n.id = ?`,
+    [resultado.insertId]
+  );
+  return filas[0];
+}
+
+async function eliminarNota(id) {
+  await pool.query(`DELETE FROM cliente_notas WHERE id = ?`, [id]);
+}
+
 async function obtenerHistorialPorVehiculo(vehiculoId) {
   const [filas] = await pool.query(
     `SELECT o.id AS orden_id, o.fecha_hora_registro AS fecha, s.nombre AS servicio,
@@ -76,5 +105,8 @@ module.exports = {
   actualizarCliente,
   obtenerVehiculoPorPlaca,
   crearVehiculo,
+  actualizarVehiculoCliente,
+  agregarNota,
+  eliminarNota,
   obtenerHistorialPorVehiculo
 };
