@@ -4,10 +4,10 @@
  */
 const { pool } = require('../config/baseDeDatos');
 
-async function registrarPago({ ordenId, metodoPago, monto }) {
+async function registrarPago({ ordenId, metodoPago, monto, descuento }) {
   const [resultado] = await pool.query(
-    `INSERT INTO pagos (orden_id, metodo_pago, monto, estado) VALUES (?, ?, ?, 'confirmado')`,
-    [ordenId, metodoPago, monto]
+    `INSERT INTO pagos (orden_id, metodo_pago, monto, descuento, estado) VALUES (?, ?, ?, ?, 'confirmado')`,
+    [ordenId, metodoPago, monto, descuento || 0]
   );
   await pool.query(
     `UPDATE ordenes_servicio SET estado = 'entregado', fecha_hora_entrega = NOW() WHERE id = ? AND estado != 'entregado'`,
@@ -15,6 +15,28 @@ async function registrarPago({ ordenId, metodoPago, monto }) {
   );
   const [filas] = await pool.query(`SELECT * FROM pagos WHERE id = ?`, [resultado.insertId]);
   return filas[0];
+}
+
+/**
+ * Cuenta los servicios de la fecha que todavía no están finalizados y
+ * pagados: turnos que siguen en la fila de espera y órdenes que aún no
+ * llegan a "entregado" (ni fueron canceladas). Mientras haya alguno, no
+ * se puede cerrar la caja de ese día.
+ */
+async function contarPendientesPorFecha(fecha) {
+  const [[turnosPendientes]] = await pool.query(
+    `SELECT COUNT(*) AS cantidad FROM turnos WHERE fecha = ? AND estado IN ('en_espera', 'en_proceso')`,
+    [fecha]
+  );
+  const [[ordenesPendientes]] = await pool.query(
+    `SELECT COUNT(*) AS cantidad FROM ordenes_servicio WHERE DATE(fecha_hora_registro) = ? AND estado IN ('recibido', 'en_proceso', 'terminado')`,
+    [fecha]
+  );
+  return {
+    turnos: turnosPendientes.cantidad,
+    ordenes: ordenesPendientes.cantidad,
+    total: turnosPendientes.cantidad + ordenesPendientes.cantidad
+  };
 }
 
 async function obtenerResumenPorFecha(fecha) {
@@ -64,4 +86,4 @@ async function listarHistorialCierres() {
   return filas;
 }
 
-module.exports = { registrarPago, obtenerResumenPorFecha, obtenerCierrePorFecha, crearCierre, listarHistorialCierres };
+module.exports = { registrarPago, obtenerResumenPorFecha, contarPendientesPorFecha, obtenerCierrePorFecha, crearCierre, listarHistorialCierres };

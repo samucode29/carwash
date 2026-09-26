@@ -140,4 +140,21 @@ async function actualizarTurno(req, res) {
   res.json(turno);
 }
 
-module.exports = { listarCitas, crearCita, actualizarCita, listarTurnosDeHoy, crearTurno, actualizarTurno };
+/**
+ * Cancela un vehículo que está en la fila de espera (turno "en_espera").
+ * Se deja registrado con estado "cancelado" (no se borra) para que quede
+ * en el historial/reportes, siempre con valor $0 porque nunca generó
+ * orden ni pago.
+ */
+async function cancelarTurno(req, res) {
+  const id = Number(req.params.id);
+  const turno = await AgendaRepositorio.cancelarTurno(id);
+  if (!turno) {
+    return res.status(400).json({ error: 'El turno no existe o ya no está en espera (puede que ya haya sido atendido o cancelado).' });
+  }
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'cancelar_turno', `Turno #${id} cancelado (${turno.placa_temporal || 'sin placa'})`);
+  res.json(turno);
+}
+
+module.exports = { listarCitas, crearCita, actualizarCita, listarTurnosDeHoy, crearTurno, actualizarTurno, cancelarTurno };

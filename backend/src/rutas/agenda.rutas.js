@@ -13,5 +13,6 @@ router.put('/citas/:id', envolverAsync(AgendaControlador.actualizarCita));
 router.get('/turnos', envolverAsync(AgendaControlador.listarTurnosDeHoy));
 router.post('/turnos', envolverAsync(AgendaControlador.crearTurno));
 router.put('/turnos/:id', envolverAsync(AgendaControlador.actualizarTurno));
+router.post('/turnos/:id/cancelar', envolverAsync(AgendaControlador.cancelarTurno));
 
 module.exports = router;

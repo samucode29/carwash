@@ -302,11 +302,28 @@ async function calcularReporteOperativo(inicio, fin) {
   const porEstadoCitas = {};
   citasPorEstado.forEach(c => { porEstadoCitas[c.estado] = c.cantidad; });
 
+  // Servicios cancelados del período: turnos que nunca se atendieron y
+  // órdenes canceladas en el POS. Se muestran solo como conteo porque su
+  // valor en dinero siempre es $0 (nunca llegaron a generar un pago).
+  const [[turnosCancelados]] = await pool.query(
+    `SELECT COUNT(*) AS cantidad FROM turnos WHERE estado = 'cancelado' AND fecha BETWEEN ? AND ?`,
+    [inicio, fin]
+  );
+  const [[ordenesCanceladas]] = await pool.query(
+    `SELECT COUNT(*) AS cantidad FROM ordenes_servicio WHERE estado = 'cancelado' AND DATE(fecha_hora_registro) BETWEEN ? AND ?`,
+    [inicio, fin]
+  );
+
   return {
     rango: { inicio, fin },
     porEstadoCitas,
     clientesNuevos: clientesNuevos[0].cantidad || 0,
-    clientesRecurrentes: clientesRecurrentes[0].cantidad || 0
+    clientesRecurrentes: clientesRecurrentes[0].cantidad || 0,
+    serviciosCancelados: {
+      turnos: turnosCancelados.cantidad || 0,
+      ordenes: ordenesCanceladas.cantidad || 0,
+      total: (turnosCancelados.cantidad || 0) + (ordenesCanceladas.cantidad || 0)
+    }
   };
 }
 

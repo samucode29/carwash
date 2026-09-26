@@ -686,10 +686,24 @@ const app = {
             <strong>#${t.numero_turno || (idx + 1)} Turno - ${t.placa || 'Sin Placa'} (${t.tipo_vehiculo})</strong>
             <span>${t.servicio_nombre} • Hora: ${t.hora_llegada} • ${this.formatMoney(t.servicio_precio)}</span>
           </div>
-          <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}', ${t.cliente_id || 'null'}, ${t.vehiculo_id || 'null'})">Iniciar</button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}', ${t.cliente_id || 'null'}, ${t.vehiculo_id || 'null'})">Iniciar</button>
+            <button class="btn btn-sm btn-danger" onclick="app.cancelarTurno(${t.id})">Cancelar</button>
+          </div>
         </div>
       `).join('');
     } catch (err) { console.error(err); }
+  },
+
+  async cancelarTurno(turnoId) {
+    if (!confirm('¿Cancelar este turno? El vehículo se retirará de la fila de espera sin generar ningún servicio.')) return;
+    try {
+      await ApiCliente.post(`/api/turnos/${turnoId}/cancelar`, {});
+      this.toast('Turno cancelado.', 'info');
+      this.loadTurnos();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cancelar el turno.', 'error');
+    }
   },
 
   atenderTurno(turnoId, servicioId, placa, tipo, clienteId, vehiculoId) {
@@ -762,6 +776,7 @@ const app = {
   renderOrderCardHtml(o) {
     const lavadoresNombres = (o.lavadores || []).map(l => l.nombre.split(' ')[0]).join(', ') || 'Sin asignar';
     const puedeAgregarServicio = o.estado === 'recibido' || o.estado === 'en_proceso';
+    const puedeCancelar = ['recibido', 'en_proceso', 'terminado'].includes(o.estado);
     let actionButtons = '';
 
     if (o.estado === 'recibido') {
@@ -796,7 +811,19 @@ const app = {
       <div class="order-washers-info">Lavador(es): <strong>${lavadoresNombres}</strong></div>
       <div class="order-actions">${actionButtons}</div>
       ${puedeAgregarServicio ? `<button class="btn btn-sm btn-outline mt-2" style="width: 100%" onclick="app.abrirModalServicioExtra(${o.id})">+ Servicio (mismo vehículo)</button>` : ''}
+      ${puedeCancelar ? `<button class="btn btn-sm btn-danger mt-2" style="width: 100%" onclick="app.cancelarOrden(${o.id})">Cancelar Servicio</button>` : ''}
     `;
+  },
+
+  async cancelarOrden(ordenId) {
+    if (!confirm(`¿Cancelar la orden #${ordenId}? Quedará registrada como cancelada (sin ningún valor) y no se cobrará.`)) return;
+    try {
+      await ApiCliente.put(`/api/ordenes/${ordenId}/estado`, { estado: 'cancelado' });
+      this.toast(`Orden #${ordenId} cancelada.`, 'info');
+      this.loadOrders();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cancelar la orden.', 'error');
+    }
   },
 
   /**
@@ -844,23 +871,42 @@ const app = {
 
   openPayModal(orderId, total) {
     this.payingOrderId = orderId;
+    this.payingOrderTotal = Number(total);
     document.getElementById('payModalOrdenId').textContent = `#${orderId}`;
     document.getElementById('payModalMonto').textContent = this.formatMoney(total);
+    const descuentoInput = document.getElementById('payModalDescuento');
+    if (descuentoInput) descuentoInput.value = '';
+    this.actualizarTotalConDescuento();
     this.openModal('modalPagarOrden');
+  },
+
+  /** Recalcula el total a cobrar restando el descuento (lo asume el negocio; no toca la comisión del lavador, ya fijada al crear la orden). */
+  actualizarTotalConDescuento() {
+    const descuentoInput = document.getElementById('payModalDescuento');
+    const descuento = descuentoInput ? (parseFloat(descuentoInput.value) || 0) : 0;
+    const totalFinal = Math.max(0, (this.payingOrderTotal || 0) - descuento);
+    const elFinal = document.getElementById('payModalTotalFinal');
+    if (elFinal) elFinal.textContent = this.formatMoney(totalFinal);
   },
 
   async confirmarPagoOrden() {
     if (!this.payingOrderId) return;
     const metodo = document.querySelector('input[name="payMetodo"]:checked').value;
+    const descuentoInput = document.getElementById('payModalDescuento');
+    const descuento = descuentoInput ? (parseFloat(descuentoInput.value) || 0) : 0;
+    if (descuento < 0 || descuento >= (this.payingOrderTotal || 0)) {
+      this.toast('El descuento debe ser mayor o igual a $0 y menor al total de la orden.', 'warning');
+      return;
+    }
     try {
-      const data = await ApiCliente.post('/api/caja/pagos', { orden_id: this.payingOrderId, metodo_pago: metodo });
+      const data = await ApiCliente.post('/api/caja/pagos', { orden_id: this.payingOrderId, metodo_pago: metodo, descuento });
       this.toast(`Pago registrado vía ${metodo.toUpperCase()}. Factura ${data.factura.numero_factura}.`, 'success');
       this.closeModal('modalPagarOrden');
       this.payingOrderId = null;
       this.loadOrders();
       this.loadCaja();
     } catch (err) {
-      this.toast('Error al registrar el pago.', 'error');
+      this.toast(err.message || 'Error al registrar el pago.', 'error');
     }
   },
 
@@ -2071,12 +2117,26 @@ const app = {
       document.getElementById('cajaTotalOrdenesCount').textContent = `${data.ordenes_count} órdenes pagadas hoy`;
 
       const btnCerrar = document.getElementById('btnCerrarCaja');
+      const avisoPendientes = document.getElementById('cajaAvisoPendientes');
+      const pendientes = data.pendientes || { total: 0, turnos: 0, ordenes: 0 };
       if (data.esta_cerrada) {
         btnCerrar.disabled = true;
         btnCerrar.textContent = 'Caja de Hoy Ya Cerrada';
+        if (avisoPendientes) avisoPendientes.classList.add('hidden');
+      } else if (pendientes.total > 0) {
+        btnCerrar.disabled = true;
+        btnCerrar.textContent = 'Realizar Cierre de Caja';
+        if (avisoPendientes) {
+          const partes = [];
+          if (pendientes.turnos > 0) partes.push(`${pendientes.turnos} en fila de espera`);
+          if (pendientes.ordenes > 0) partes.push(`${pendientes.ordenes} sin finalizar/cobrar`);
+          avisoPendientes.textContent = `No se puede cerrar caja: hay ${pendientes.total} servicio(s) pendiente(s) (${partes.join(', ')}). Atiéndalos, cóbrelos o cancélelos primero.`;
+          avisoPendientes.classList.remove('hidden');
+        }
       } else {
         btnCerrar.disabled = false;
         btnCerrar.textContent = 'Realizar Cierre de Caja';
+        if (avisoPendientes) avisoPendientes.classList.add('hidden');
       }
       document.getElementById('modalCierreTotalGeneral').textContent = this.formatMoney(data.total_general);
 
@@ -2354,6 +2414,9 @@ const app = {
       const r = await ApiCliente.get(`/api/reportes/operativo?${this.construirQueryPeriodo()}`);
       document.getElementById('opClientesNuevos').textContent = r.clientesNuevos;
       document.getElementById('opClientesRecurrentes').textContent = r.clientesRecurrentes;
+      const cancelados = r.serviciosCancelados || { turnos: 0, ordenes: 0, total: 0 };
+      document.getElementById('opServiciosCancelados').textContent = cancelados.total;
+      document.getElementById('opServiciosCanceladosDetalle').textContent = `${cancelados.turnos} turnos • ${cancelados.ordenes} órdenes`;
       const coloresEstado = { agendada: '#0077b6', reprogramada: '#f59e0b', atendida: '#10b981', cancelada: '#ef4444' };
       this.renderDonutChart('opCitasChart', Object.entries(r.porEstadoCitas).map(([label, value]) => ({ label: label[0].toUpperCase() + label.slice(1), value, color: coloresEstado[label] || '#64748b' })));
     } catch (err) { console.error(err); }

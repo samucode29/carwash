@@ -153,6 +153,20 @@ async function crearTurno(datos) {
   return obtenerTurnoPorId(resultado.insertId);
 }
 
+/**
+ * Cancela un turno que sigue "en_espera" (el cliente se fue sin ser
+ * atendido, cambió de opinión, etc.). Solo se puede cancelar mientras
+ * espera: uno ya iniciado o finalizado no se toca desde aquí.
+ */
+async function cancelarTurno(id) {
+  const [resultado] = await pool.query(
+    `UPDATE turnos SET estado = 'cancelado' WHERE id = ? AND estado = 'en_espera'`,
+    [id]
+  );
+  if (resultado.affectedRows === 0) return null;
+  return obtenerTurnoPorId(id);
+}
+
 async function actualizarTurno(id, cambios) {
   const campos = [];
   const valores = [];
@@ -177,5 +191,6 @@ module.exports = {
   obtenerTurnoPorId,
   existeVehiculoConServicioActivo,
   crearTurno,
-  actualizarTurno
+  actualizarTurno,
+  cancelarTurno
 };

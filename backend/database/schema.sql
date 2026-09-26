@@ -207,7 +207,7 @@ CREATE TABLE turnos (
     servicio_id     INT NOT NULL,
     fecha           DATE NOT NULL,
     hora_llegada    TIME NOT NULL,
-    estado          ENUM('en_espera','en_proceso','finalizado') NOT NULL DEFAULT 'en_espera',
+    estado          ENUM('en_espera','en_proceso','finalizado','cancelado') NOT NULL DEFAULT 'en_espera',
     registrado_por  INT NOT NULL,
     creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_turno_cliente   FOREIGN KEY (cliente_id)     REFERENCES clientes(id)  ON DELETE SET NULL,
@@ -280,6 +280,11 @@ CREATE TABLE pagos (
     orden_id     INT NOT NULL,
     metodo_pago  ENUM('efectivo','tarjeta','transferencia','pse') NOT NULL,
     monto        DECIMAL(12,2) NOT NULL,
+    -- Descuento otorgado al cliente al momento de cobrar: lo asume el
+    -- negocio (reduce el ingreso real), nunca afecta la comisión del
+    -- lavador, que ya quedó calculada sobre el precio de lista del
+    -- servicio desde que se creó la orden (ver orden_lavadores).
+    descuento    DECIMAL(12,2) NOT NULL DEFAULT 0,
     estado       ENUM('confirmado','rechazado','pendiente') NOT NULL DEFAULT 'confirmado',
     fecha_pago   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_pago_orden FOREIGN KEY (orden_id) REFERENCES ordenes_servicio(id)

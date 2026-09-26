@@ -130,6 +130,10 @@ async function actualizarEstadoOrden(req, res) {
   const orden = await OrdenServicioRepositorio.obtenerOrdenPorId(id);
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
 
+  if (estado === 'cancelado' && orden.estado === 'entregado') {
+    return res.status(400).json({ error: 'No se puede cancelar una orden ya entregada y pagada.' });
+  }
+
   if (ESTADOS_QUE_REQUIEREN_LAVADOR.includes(estado)) {
     const lavadoresPorOrden = await OrdenServicioRepositorio.obtenerLavadoresPorOrdenes([id]);
     const tieneLavador = (lavadoresPorOrden[id] || []).length > 0;

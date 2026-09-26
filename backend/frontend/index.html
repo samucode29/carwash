@@ -571,6 +571,8 @@
             </div>
           </div>
 
+          <p id="cajaAvisoPendientes" class="text-sm text-danger hidden mt-2" style="font-weight: 600"></p>
+
           <!-- Cards de Métodos de Pago de Hoy -->
           <div class="kpi-grid mt-3">
             <div class="kpi-card">
@@ -979,6 +981,11 @@
                 <span class="kpi-title">Clientes Recurrentes</span>
                 <span class="kpi-value" id="opClientesRecurrentes">0</span>
               </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Servicios Cancelados</span>
+                <span class="kpi-value text-danger" id="opServiciosCancelados">0</span>
+                <span class="kpi-subtitle" id="opServiciosCanceladosDetalle">0 turnos • 0 órdenes</span>
+              </div>
             </div>
             <div class="chart-card mt-4">
               <h4>Citas por Estado</h4>
@@ -1065,8 +1072,17 @@
       </div>
       <div class="modal-body">
         <div class="pay-summary">
-          <span class="pay-label">Total a Pagar:</span>
+          <span class="pay-label">Total del Servicio:</span>
           <span class="pay-amount" id="payModalMonto">$0</span>
+        </div>
+        <div class="form-group mt-3">
+          <label>Descuento ($):</label>
+          <input type="number" id="payModalDescuento" min="0" step="1000" placeholder="0" oninput="app.actualizarTotalConDescuento()">
+          <p class="text-sm text-muted mt-1">El descuento lo asume el negocio: no afecta la comisión del lavador, ya calculada sobre el precio de lista.</p>
+        </div>
+        <div class="pay-summary mt-2">
+          <span class="pay-label">Total a Cobrar:</span>
+          <span class="pay-amount" id="payModalTotalFinal">$0</span>
         </div>
         <div class="form-group mt-3">
           <label>Método de Pago:</label>
