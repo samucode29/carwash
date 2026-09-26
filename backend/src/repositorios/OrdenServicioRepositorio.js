@@ -124,6 +124,17 @@ async function crearOrdenConAsignacion(datos) {
       await conexion.query(`UPDATE turnos SET estado = 'finalizado' WHERE id = ?`, [datos.turnoId]);
     }
 
+    // Servicios extra que ya traía el turno mientras esperaba en la fila
+    // (ver AgendaRepositorio.agregarServicioExtraTurno) se trasladan a la
+    // orden recién creada; turno_servicios_extra queda solo como historial
+    // de ese turno puntual.
+    for (const extra of datos.serviciosExtra || []) {
+      await conexion.query(
+        `INSERT INTO orden_servicios_extra (orden_id, servicio_id, precio, agregado_por) VALUES (?, ?, ?, ?)`,
+        [ordenId, extra.servicioId, extra.precio, datos.registradoPor]
+      );
+    }
+
     for (const asignacion of datos.lavadoresAsignados) {
       await conexion.query(
         `INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision)

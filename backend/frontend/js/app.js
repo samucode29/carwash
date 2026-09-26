@@ -689,19 +689,29 @@ const app = {
         return;
       }
 
-      list.innerHTML = enEspera.map((t, idx) => `
+      list.innerHTML = enEspera.map((t, idx) => {
+        const extras = t.servicios_extra || [];
+        const totalExtras = extras.reduce((s, e) => s + Number(e.precio), 0);
+        const totalTurno = Number(t.servicio_precio) + totalExtras;
+        const extrasHtml = extras.length > 0
+          ? `<div class="text-sm text-muted">+ ${extras.map(e => `${e.servicio_nombre} (${this.formatMoney(e.precio)})`).join(', ')}</div>`
+          : '';
+        return `
         <div class="queue-item">
           <div class="queue-item-info">
             <strong>#${t.numero_turno || (idx + 1)} Turno - ${t.placa || 'Sin Placa'} (${t.tipo_vehiculo})</strong>
-            <span>${t.servicio_nombre} • Hora: ${t.hora_llegada} • ${this.formatMoney(t.servicio_precio)}</span>
+            <span>${t.servicio_nombre} • Hora: ${t.hora_llegada} • ${this.formatMoney(totalTurno)}</span>
+            ${extrasHtml}
             ${t.observacion ? `<span class="text-sm text-warning">📝 ${escapeHtml(t.observacion)}</span>` : ''}
           </div>
           <div class="d-flex gap-2">
             <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}', ${t.cliente_id || 'null'}, ${t.vehiculo_id || 'null'})">Iniciar</button>
+            <button class="btn btn-sm btn-outline" onclick="app.abrirModalServicioExtra('turno', ${t.id})">+ Servicio</button>
             <button class="btn btn-sm btn-danger" onclick="app.cancelarTurno(${t.id})">Cancelar</button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     } catch (err) { console.error(err); }
   },
 
@@ -827,7 +837,7 @@ const app = {
       <div class="order-meta-info"><span>Cliente: ${o.cliente_nombre}</span> • <span>${this.formatMoney(o.total)}</span></div>
       <div class="order-washers-info">Lavador(es): <strong>${lavadoresNombres}</strong></div>
       <div class="order-actions">${actionButtons}</div>
-      ${puedeAgregarServicio ? `<button class="btn btn-sm btn-outline mt-2" style="width: 100%" onclick="app.abrirModalServicioExtra(${o.id})">+ Servicio (mismo vehículo)</button>` : ''}
+      ${puedeAgregarServicio ? `<button class="btn btn-sm btn-outline mt-2" style="width: 100%" onclick="app.abrirModalServicioExtra('orden', ${o.id})">+ Servicio (mismo vehículo)</button>` : ''}
       ${puedeCancelar ? `<button class="btn btn-sm btn-danger mt-2" style="width: 100%" onclick="app.cancelarOrden(${o.id})">Cancelar Servicio</button>` : ''}
     `;
   },
@@ -845,12 +855,13 @@ const app = {
 
   /**
    * Para cuando al mismo vehículo hay que hacerle otro servicio además del
-   * que ya tiene en curso: en vez de generarle un turno/orden nuevo (que
-   * quedaría duplicado y ya no se permite, ver AgendaControlador), se
-   * agrega como servicio adicional a la MISMA orden.
+   * que ya tiene: en vez de generarle un turno/orden nuevo (que quedaría
+   * duplicado y ya no se permite, ver AgendaControlador), se agrega como
+   * servicio adicional al MISMO turno (si sigue en la fila de espera) o a
+   * la MISMA orden (si ya se inició).
    */
-  abrirModalServicioExtra(ordenId) {
-    this.agregandoServicioExtraOrdenId = ordenId;
+  abrirModalServicioExtra(tipo, id) {
+    this.agregandoServicioExtra = { tipo, id };
     const select = document.getElementById('servicioExtraSelect');
     if (select) {
       select.innerHTML = (this.services || []).map(s => `<option value="${s.id}">${s.nombre} - ${this.formatMoney(s.precio)}</option>`).join('');
@@ -861,12 +872,14 @@ const app = {
   async confirmarServicioExtra() {
     const servicio_id = document.getElementById('servicioExtraSelect').value;
     if (!servicio_id) { this.toast('Seleccione un servicio.', 'warning'); return; }
+    const { tipo, id } = this.agregandoServicioExtra || {};
+    const ruta = tipo === 'turno' ? `/api/turnos/${id}/servicios-extra` : `/api/ordenes/${id}/servicios-extra`;
 
     try {
-      await ApiCliente.post(`/api/ordenes/${this.agregandoServicioExtraOrdenId}/servicios-extra`, { servicio_id });
-      this.toast('Servicio adicional agregado a la orden.', 'success');
+      await ApiCliente.post(ruta, { servicio_id });
+      this.toast('Servicio adicional agregado.', 'success');
       this.closeModal('modalServicioExtra');
-      this.loadOrders();
+      if (tipo === 'turno') this.loadTurnos(); else this.loadOrders();
     } catch (err) {
       this.toast(err.message || 'No se pudo agregar el servicio.', 'error');
     }

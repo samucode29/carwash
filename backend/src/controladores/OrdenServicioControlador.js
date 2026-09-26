@@ -81,26 +81,35 @@ async function crearOrden(req, res) {
   const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
   if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
 
-  const lavadoresAsignados = await calcularAsignacionLavadores(lavadores_ids, Number(servicio.precio));
-
   // Si la orden viene de un turno que a su vez venía de una cita (se agregó a
   // la fila en vez de atenderla de inmediato), heredamos su cita_id para que
   // la cita original también quede marcada como atendida. La observación
   // escrita al agendar la cita o al ponerlo en fila pasa a la orden, para
-  // que el lavador la vea al trabajar el servicio.
+  // que el lavador la vea al trabajar el servicio. Los servicios extra que
+  // ya se le hayan agregado al turno mientras esperaba en la fila también
+  // se trasladan a la orden (y su valor entra en el total/comisión).
   let citaId = cita_id ? parseInt(cita_id, 10) : null;
   let observacion = null;
+  let serviciosExtraTurno = [];
   if (turno_id) {
-    const turno = await AgendaRepositorio.obtenerTurnoPorId(parseInt(turno_id, 10));
+    const turnoIdNum = parseInt(turno_id, 10);
+    const turno = await AgendaRepositorio.obtenerTurnoPorId(turnoIdNum);
     if (turno) {
       if (!citaId && turno.cita_id) citaId = turno.cita_id;
       observacion = turno.observacion || null;
     }
+    const extrasPorTurno = await AgendaRepositorio.obtenerServiciosExtraPorTurnos([turnoIdNum]);
+    serviciosExtraTurno = extrasPorTurno[turnoIdNum] || [];
   }
   if (!observacion && citaId) {
     const cita = await AgendaRepositorio.obtenerCitaPorId(citaId);
     if (cita) observacion = cita.observacion || null;
   }
+
+  const totalExtras = serviciosExtraTurno.reduce((suma, e) => suma + Number(e.precio), 0);
+  const totalOrden = Number(servicio.precio) + totalExtras;
+
+  const lavadoresAsignados = await calcularAsignacionLavadores(lavadores_ids, totalOrden);
 
   const ordenId = await OrdenServicioRepositorio.crearOrdenConAsignacion({
     citaId,
@@ -111,13 +120,14 @@ async function crearOrden(req, res) {
     esVentaAnonima: !!es_venta_anonima,
     placaAnonima: placa_anonima ? placa_anonima.toUpperCase().trim() : null,
     tipoVehiculoAnonimo: tipo_vehiculo_anonimo || null,
-    total: servicio.precio,
+    total: totalOrden,
     observacion,
     registradoPor: req.usuarioAutenticado.id,
-    lavadoresAsignados
+    lavadoresAsignados,
+    serviciosExtra: serviciosExtraTurno.map(e => ({ servicioId: e.servicio_id, precio: Number(e.precio) }))
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_orden_pos', `Creada orden #${ordenId} por $${servicio.precio} (${servicio.nombre})`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_orden_pos', `Creada orden #${ordenId} por $${totalOrden} (${servicio.nombre}${totalExtras > 0 ? ` + ${serviciosExtraTurno.length} servicio(s) extra` : ''})`);
 
   const ordenes = await OrdenServicioRepositorio.listarOrdenes({});
   res.status(201).json(ordenes.find(o => o.id === ordenId));

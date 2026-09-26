@@ -238,6 +238,23 @@ CREATE TABLE turnos (
     CONSTRAINT fk_turno_registro  FOREIGN KEY (registrado_por) REFERENCES usuarios(id)
 ) ENGINE=InnoDB;
 
+-- Servicios adicionales agregados a un turno que TODAVÍA está en la fila de
+-- espera (antes de presionar "Iniciar"): así un vehículo puede pedir más de
+-- un servicio sin tener que esperar a que se convierta en orden. Al iniciar
+-- el turno, estos se trasladan a orden_servicios_extra y su valor se suma
+-- al total de la orden (y por lo tanto a la comisión del lavador).
+CREATE TABLE turno_servicios_extra (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    turno_id      INT NOT NULL,
+    servicio_id   INT NOT NULL,
+    precio        DECIMAL(12,2) NOT NULL,
+    agregado_por  INT NOT NULL,
+    creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_tse_turno      FOREIGN KEY (turno_id)     REFERENCES turnos(id) ON DELETE CASCADE,
+    CONSTRAINT fk_tse_servicio   FOREIGN KEY (servicio_id)  REFERENCES servicios(id),
+    CONSTRAINT fk_tse_agregado   FOREIGN KEY (agregado_por) REFERENCES usuarios(id)
+) ENGINE=InnoDB;
+
 -- ============================================================================
 -- 7. PUNTO DE VENTA (POS): ÓRDENES DE SERVICIO
 -- ============================================================================

@@ -96,13 +96,47 @@ async function listarTurnosDeHoy(hoy) {
     [hoy]
   );
 
+  const turnoIds = filas.map(f => f.id);
+  const serviciosExtraPorTurno = await obtenerServiciosExtraPorTurnos(turnoIds);
+
   let posicion = 0;
   return filas.map(fila => ({
     ...fila,
     numero_turno: fila.estado === 'en_espera' ? ++posicion : null,
     cliente_nombre: fila.cliente_nombre_reg || 'Venta Rápida / Anónima',
-    placa: fila.placa_temporal || fila.placa_vehiculo || 'Sin Placa'
+    placa: fila.placa_temporal || fila.placa_vehiculo || 'Sin Placa',
+    servicios_extra: serviciosExtraPorTurno[fila.id] || []
   }));
+}
+
+async function obtenerServiciosExtraPorTurnos(turnoIds) {
+  if (turnoIds.length === 0) return {};
+  const [filas] = await pool.query(
+    `SELECT tse.turno_id, tse.id, tse.servicio_id, tse.precio, s.nombre AS servicio_nombre
+     FROM turno_servicios_extra tse
+     INNER JOIN servicios s ON s.id = tse.servicio_id
+     WHERE tse.turno_id IN (?)
+     ORDER BY tse.creado_en`,
+    [turnoIds]
+  );
+  const agrupado = {};
+  filas.forEach(f => {
+    if (!agrupado[f.turno_id]) agrupado[f.turno_id] = [];
+    agrupado[f.turno_id].push(f);
+  });
+  return agrupado;
+}
+
+/**
+ * Agrega un servicio adicional a un turno que todavía está en la fila de
+ * espera (antes de "Iniciar"): permite que un mismo vehículo pida varios
+ * servicios sin tener que esperar a convertirse en orden primero.
+ */
+async function agregarServicioExtraTurno(turnoId, { servicioId, precio, agregadoPor }) {
+  await pool.query(
+    `INSERT INTO turno_servicios_extra (turno_id, servicio_id, precio, agregado_por) VALUES (?, ?, ?, ?)`,
+    [turnoId, servicioId, precio, agregadoPor]
+  );
 }
 
 async function obtenerTurnoPorId(id) {
@@ -193,5 +227,7 @@ module.exports = {
   existeVehiculoConServicioActivo,
   crearTurno,
   actualizarTurno,
-  cancelarTurno
+  cancelarTurno,
+  obtenerServiciosExtraPorTurnos,
+  agregarServicioExtraTurno
 };

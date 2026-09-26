@@ -4,6 +4,7 @@
  */
 const AgendaRepositorio = require('../repositorios/AgendaRepositorio');
 const HorarioAtencionRepositorio = require('../repositorios/HorarioAtencionRepositorio');
+const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy, obtenerFechaHoraActual, obtenerHoraActual, obtenerDiaSemana, NOMBRES_DIAS_SEMANA } = require('../utilidades/fechas');
 
@@ -159,4 +160,43 @@ async function cancelarTurno(req, res) {
   res.json(turno);
 }
 
-module.exports = { listarCitas, crearCita, actualizarCita, listarTurnosDeHoy, crearTurno, actualizarTurno, cancelarTurno };
+/**
+ * Agrega un servicio adicional a un vehículo que TODAVÍA está en la fila de
+ * espera (antes de "Iniciar"), para no obligarlo a esperar a que se
+ * convierta en orden para pedir más de un servicio.
+ */
+async function agregarServicioExtraTurno(req, res) {
+  const id = Number(req.params.id);
+  const { servicio_id } = req.body;
+  if (!servicio_id) {
+    return res.status(400).json({ error: 'Debe indicar el servicio a agregar.' });
+  }
+
+  const turno = await AgendaRepositorio.obtenerTurnoPorId(id);
+  if (!turno) return res.status(404).json({ error: 'Turno no encontrado.' });
+  if (turno.estado !== 'en_espera') {
+    return res.status(400).json({ error: 'Solo se pueden agregar servicios a un turno que sigue en la fila de espera.' });
+  }
+
+  const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
+  if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
+
+  await AgendaRepositorio.agregarServicioExtraTurno(id, {
+    servicioId: servicio.id,
+    precio: Number(servicio.precio),
+    agregadoPor: req.usuarioAutenticado.id
+  });
+
+  await AuditoriaRepositorio.registrar(
+    req.usuarioAutenticado.id, 'agregar_servicio_extra_turno',
+    `Turno #${id}: agregado servicio adicional "${servicio.nombre}" ($${servicio.precio})`
+  );
+
+  const turnos = await AgendaRepositorio.listarTurnosDeHoy(obtenerFechaHoy());
+  res.json(turnos.find(t => t.id === id));
+}
+
+module.exports = {
+  listarCitas, crearCita, actualizarCita, listarTurnosDeHoy, crearTurno, actualizarTurno, cancelarTurno,
+  agregarServicioExtraTurno
+};
