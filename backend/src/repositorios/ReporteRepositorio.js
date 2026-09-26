@@ -145,6 +145,34 @@ async function calcularReporteVentas(inicio, fin) {
     [inicio, fin]
   );
 
+  // Propinas del período: NO son ingreso del negocio (van 100% al lavador,
+  // repartidas en partes iguales si atendieron varios), pero se reportan
+  // aparte con el detalle de a qué servicio, cliente y lavador corresponde
+  // cada una — no solo el total agregado.
+  const [propinasFilas] = await pool.query(
+    `SELECT p.fecha_pago, p.propina, o.id AS orden_id, s.nombre AS servicio_nombre,
+            cl.nombre AS cliente_nombre, o.es_venta_anonima, l.nombre AS lavador_nombre,
+            (SELECT COUNT(*) FROM orden_lavadores ol2 WHERE ol2.orden_id = o.id) AS lavadores_count
+     FROM pagos p
+     INNER JOIN ordenes_servicio o ON o.id = p.orden_id
+     LEFT JOIN servicios s ON s.id = o.servicio_id
+     LEFT JOIN clientes cl ON cl.id = o.cliente_id
+     LEFT JOIN orden_lavadores ol ON ol.orden_id = o.id
+     LEFT JOIN lavadores l ON l.id = ol.lavador_id
+     WHERE p.propina > 0 AND DATE(p.fecha_pago) BETWEEN ? AND ?
+     ORDER BY p.fecha_pago DESC`,
+    [inicio, fin]
+  );
+  const detallePropinas = propinasFilas.map(f => ({
+    fecha: f.fecha_pago,
+    ordenId: f.orden_id,
+    servicio: f.servicio_nombre || 'Otros',
+    cliente: f.cliente_nombre || (f.es_venta_anonima ? 'Venta Anónima' : 'Sin registrar'),
+    lavador: f.lavador_nombre || 'Sin asignar',
+    valor: Number((Number(f.propina) / (Number(f.lavadores_count) || 1)).toFixed(2))
+  }));
+  const totalPropinas = detallePropinas.reduce((s, p) => s + p.valor, 0);
+
   return {
     rango: { inicio, fin },
     totalVentas: total,
@@ -152,7 +180,9 @@ async function calcularReporteVentas(inicio, fin) {
     ticketPromedio: pagos.length > 0 ? Math.round(total / pagos.length) : 0,
     porServicio, porMetodoPago, porVehiculo,
     porLavador: porLavadorFilas.map(f => ({ nombre: f.nombre, servicios: f.servicios, comision: Number(f.comision) || 0 })),
-    topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total) }))
+    topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total) })),
+    totalPropinas,
+    detallePropinas
   };
 }
 

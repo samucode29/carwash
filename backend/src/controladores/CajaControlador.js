@@ -12,7 +12,7 @@ const { obtenerFechaHoy } = require('../utilidades/fechas');
 const METODOS_VALIDOS = ['efectivo', 'tarjeta', 'transferencia', 'pse'];
 
 async function registrarPago(req, res) {
-  const { orden_id, metodo_pago, descuento_negocio, descuento_trabajador, observacion } = req.body;
+  const { orden_id, metodo_pago, descuento_negocio, descuento_trabajador, propina, observacion } = req.body;
   const orden = await OrdenServicioRepositorio.obtenerOrdenPorId(parseInt(orden_id, 10));
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
 
@@ -45,12 +45,21 @@ async function registrarPago(req, res) {
   }
   const montoPagado = totalOrden - valorDescNegocio - valorDescTrabajador;
 
+  // La propina es aparte del precio del servicio: es 100% del lavador (o se
+  // reparte en partes iguales si son varios), nunca se descuenta de nada ni
+  // se le resta al negocio, así que no tiene tope contra el total.
+  const valorPropina = parseFloat(propina) || 0;
+  if (valorPropina < 0) {
+    return res.status(400).json({ error: 'La propina no puede ser negativa.' });
+  }
+
   const pago = await CajaRepositorio.registrarPago({
     ordenId: orden.id,
     metodoPago: metodo_pago,
     monto: montoPagado,
     descuentoNegocio: valorDescNegocio,
     descuentoTrabajador: valorDescTrabajador,
+    propina: valorPropina,
     observacion: observacion || null
   });
 
@@ -64,6 +73,7 @@ async function registrarPago(req, res) {
   const detalles = [];
   if (valorDescNegocio > 0) detalles.push(`descuento negocio $${valorDescNegocio}`);
   if (valorDescTrabajador > 0) detalles.push(`descuento trabajador $${valorDescTrabajador}`);
+  if (valorPropina > 0) detalles.push(`propina $${valorPropina}`);
   const detalleDescuento = detalles.length ? ` (${detalles.join(', ')})` : '';
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'procesar_pago', `Pago registrado Orden #${orden.id}: $${pago.monto}${detalleDescuento} vía ${metodo_pago} (Factura ${factura.numero_factura})`);
   res.status(201).json({ ordenId: orden.id, pago, factura });

@@ -605,6 +605,11 @@
               <span class="kpi-value" id="cajaTotalGeneral">$0</span>
               <span class="kpi-subtitle" id="cajaTotalOrdenesCount">0 órdenes pagadas</span>
             </div>
+            <div class="kpi-card">
+              <span class="kpi-title">Propinas de Hoy</span>
+              <span class="kpi-value text-success" id="cajaTotalPropinas">$0</span>
+              <span class="kpi-subtitle">100% de los lavadores, no cuentan como ingreso</span>
+            </div>
           </div>
 
           <!-- Historial de Cierres de Caja -->
@@ -845,6 +850,11 @@
                 <span class="kpi-title">Ticket Promedio</span>
                 <span class="kpi-value" id="ventasTicketProm">$0</span>
               </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Total Propinas</span>
+                <span class="kpi-value text-success" id="ventasTotalPropinas">$0</span>
+                <span class="kpi-subtitle">100% de los lavadores, no es ingreso del negocio</span>
+              </div>
             </div>
             <div class="grid-3-cols mt-4">
               <div class="chart-card">
@@ -871,6 +881,13 @@
               <table class="data-table data-table-sm">
                 <thead><tr><th>Cliente</th><th>Compras</th><th>Total</th></tr></thead>
                 <tbody id="ventasTopClientesBody"></tbody>
+              </table>
+            </div>
+            <div class="card-table-wrapper mt-4">
+              <div class="panel-header"><h4>Detalle de Propinas</h4></div>
+              <table class="data-table data-table-sm">
+                <thead><tr><th>Fecha</th><th>Servicio</th><th>Cliente</th><th>Lavador</th><th>Propina</th></tr></thead>
+                <tbody id="ventasPropinasBody"></tbody>
               </table>
             </div>
           </div>
@@ -1091,6 +1108,11 @@
           </div>
         </div>
         <p class="text-sm text-muted mt-1" id="payModalDescuentoAyuda">El descuento negocio reduce la ganancia del negocio. El descuento trabajador se descuenta de la comisión pendiente del lavador. La suma de los dos no puede superar el total del servicio.</p>
+        <div class="form-group mt-3">
+          <label>Propina ($):</label>
+          <input type="number" id="payModalPropina" min="0" step="1000" placeholder="0" oninput="app.actualizarTotalConDescuento()">
+          <p class="text-sm text-muted mt-1">Es 100% del lavador (se reparte en partes iguales si atendieron varios); no afecta la ganancia del negocio ni tiene tope.</p>
+        </div>
         <div class="pay-summary mt-2">
           <span class="pay-label">Total a Cobrar:</span>
           <span class="pay-amount" id="payModalTotalFinal">$0</span>
@@ -1523,11 +1545,13 @@
             <thead>
               <tr>
                 <th>Fecha</th>
+                <th>Cliente</th>
                 <th>Servicio</th>
                 <th>Valor</th>
                 <th>Comisión</th>
+                <th>Propina</th>
                 <th>Descuento (negocio/trabajador)</th>
-                <th>Comisión Neta</th>
+                <th>Neto a Pagar</th>
                 <th>Observación</th>
               </tr>
             </thead>

@@ -52,12 +52,32 @@ async function resumenComisionesLavadores() {
     });
   });
 
+  // Propinas: son 100% del lavador (nunca del negocio), y si atendieron
+  // varios se reparten en partes IGUALES entre ellos (no según su % de
+  // comisión, como los descuentos): una propina es "para quien atendió",
+  // no proporcional a cuánto gana cada uno. Se suman a lo pendiente por
+  // pagarle, junto con su comisión.
+  const [propinasPorOrden] = await pool.query(`SELECT orden_id, propina AS total FROM pagos WHERE propina > 0`);
+  const propinaPorOrdenMap = {};
+  propinasPorOrden.forEach(p => { propinaPorOrdenMap[p.orden_id] = Number(p.total); });
+
+  const propinaPorLavador = {};
+  Object.entries(comisionPorOrdenAgrupada).forEach(([ordenId, filas]) => {
+    const propinaOrden = propinaPorOrdenMap[ordenId];
+    if (!propinaOrden) return;
+    const parteIgual = propinaOrden / filas.length;
+    filas.forEach(f => {
+      propinaPorLavador[f.lavador_id] = (propinaPorLavador[f.lavador_id] || 0) + parteIgual;
+    });
+  });
+
   return lavadores.map(lavador => {
     const comisionesDeEsteLavador = comisionesPorOrden.filter(c => c.lavador_id === lavador.id);
     const comisionTotalHistorica = comisionesDeEsteLavador.reduce((suma, c) => suma + Number(c.valor_comision), 0);
     const descuentoTrabajadorTotal = Number((descuentoTrabajadorPorLavador[lavador.id] || 0).toFixed(2));
+    const propinaTotal = Number((propinaPorLavador[lavador.id] || 0).toFixed(2));
     const comisionPagada = (liquidacionesPagadas.find(l => l.lavador_id === lavador.id) || {}).total || 0;
-    const comisionPendiente = Math.max(0, comisionTotalHistorica - descuentoTrabajadorTotal - Number(comisionPagada));
+    const comisionPendiente = Math.max(0, comisionTotalHistorica + propinaTotal - descuentoTrabajadorTotal - Number(comisionPagada));
 
     return {
       lavador_id: lavador.id,
@@ -69,6 +89,7 @@ async function resumenComisionesLavadores() {
       servicios_realizados: comisionesDeEsteLavador.length,
       comision_historica_total: comisionTotalHistorica,
       descuento_trabajador_total: descuentoTrabajadorTotal,
+      propina_total: propinaTotal,
       comision_pagada: Number(comisionPagada),
       comision_pendiente: comisionPendiente
     };
@@ -76,21 +97,25 @@ async function resumenComisionesLavadores() {
 }
 
 /**
- * Historial de servicios de un lavador, más reciente primero, con el
- * detalle de descuentos aplicados en el pago (parte negocio / parte
- * trabajador) y la observación escrita al cobrar. Solo incluye órdenes que
- * ya se cobraron (tienen pago): antes de eso no hay nada que liquidar.
+ * Historial de servicios de un lavador, más reciente primero: de qué
+ * cliente es, qué servicio, cuánto valía, su comisión, la propina que le
+ * tocó, el descuento aplicado (parte negocio / parte trabajador) y la
+ * observación escrita al cobrar. Solo incluye órdenes ya cobradas (tienen
+ * pago): antes de eso no hay nada que liquidar.
  */
 async function obtenerServiciosPorLavador(lavadorId) {
   const [filas] = await pool.query(
     `SELECT o.id AS orden_id, o.fecha_hora_registro AS fecha, s.nombre AS servicio_nombre,
-            o.total AS valor_servicio, ol.valor_comision AS comision_bruta,
-            p.descuento_negocio, p.descuento_trabajador, p.observacion,
-            (SELECT SUM(ol2.valor_comision) FROM orden_lavadores ol2 WHERE ol2.orden_id = o.id) AS comision_total_orden
+            o.total AS valor_servicio, o.es_venta_anonima, cl.nombre AS cliente_nombre,
+            ol.valor_comision AS comision_bruta,
+            p.descuento_negocio, p.descuento_trabajador, p.propina, p.observacion,
+            (SELECT SUM(ol2.valor_comision) FROM orden_lavadores ol2 WHERE ol2.orden_id = o.id) AS comision_total_orden,
+            (SELECT COUNT(*) FROM orden_lavadores ol3 WHERE ol3.orden_id = o.id) AS lavadores_count
      FROM orden_lavadores ol
      INNER JOIN ordenes_servicio o ON o.id = ol.orden_id
      INNER JOIN pagos p ON p.orden_id = o.id
      LEFT JOIN servicios s ON s.id = o.servicio_id
+     LEFT JOIN clientes cl ON cl.id = o.cliente_id
      WHERE ol.lavador_id = ?
      ORDER BY o.fecha_hora_registro DESC`,
     [lavadorId]
@@ -102,16 +127,21 @@ async function obtenerServiciosPorLavador(lavadorId) {
     const participacion = comisionTotalOrden > 0 ? comisionBruta / comisionTotalOrden : 1;
     const descuentoNegocioParte = Number(f.descuento_negocio) * participacion;
     const descuentoTrabajadorParte = Number(f.descuento_trabajador) * participacion;
+    // La propina se reparte en partes iguales entre los lavadores de la
+    // orden (no proporcional a la comisión, ver resumenComisionesLavadores).
+    const propinaParte = Number(f.propina) / (Number(f.lavadores_count) || 1);
     return {
       ordenId: f.orden_id,
       fecha: f.fecha,
+      cliente: f.cliente_nombre || (f.es_venta_anonima ? 'Venta Anónima' : 'Sin registrar'),
       servicio: f.servicio_nombre,
       valorServicio: Number(f.valor_servicio),
       comisionBruta,
+      propina: Number(propinaParte.toFixed(2)),
       descuentoNegocio: Number(descuentoNegocioParte.toFixed(2)),
       descuentoTrabajador: Number(descuentoTrabajadorParte.toFixed(2)),
       descuentoTotal: Number((descuentoNegocioParte + descuentoTrabajadorParte).toFixed(2)),
-      comisionNeta: Number((comisionBruta - descuentoTrabajadorParte).toFixed(2)),
+      comisionNeta: Number((comisionBruta - descuentoTrabajadorParte + propinaParte).toFixed(2)),
       observacion: f.observacion || ''
     };
   });

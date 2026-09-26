@@ -909,6 +909,7 @@ const app = {
     const descTrabajador = document.getElementById('payModalDescuentoTrabajador');
     if (descNegocio) descNegocio.value = '';
     if (descTrabajador) descTrabajador.value = '';
+    document.getElementById('payModalPropina').value = '';
     document.getElementById('payModalObservacion').value = '';
     const ayuda = document.getElementById('payModalDescuentoAyuda');
     if (ayuda) ayuda.textContent = `El descuento negocio reduce la ganancia del negocio. El descuento trabajador se descuenta de la comisión pendiente del lavador, hasta un máximo de ${this.formatMoney(this.payingOrderComision)} (lo que gana en este servicio). La suma de los dos no puede superar el total del servicio.`;
@@ -916,11 +917,12 @@ const app = {
     this.openModal('modalPagarOrden');
   },
 
-  /** Recalcula el total a cobrar restando ambos descuentos (negocio + trabajador; ninguno toca la comisión ya fijada al crear la orden, solo lo pendiente por pagar). */
+  /** Recalcula el total a cobrar: se restan los descuentos y se suma la propina (ninguno toca la comisión ya fijada al crear la orden, solo lo pendiente por pagar/cobrar). */
   actualizarTotalConDescuento() {
     const descNegocio = parseFloat(document.getElementById('payModalDescuentoNegocio').value) || 0;
     const descTrabajador = parseFloat(document.getElementById('payModalDescuentoTrabajador').value) || 0;
-    const totalFinal = Math.max(0, (this.payingOrderTotal || 0) - descNegocio - descTrabajador);
+    const propina = parseFloat(document.getElementById('payModalPropina').value) || 0;
+    const totalFinal = Math.max(0, (this.payingOrderTotal || 0) - descNegocio - descTrabajador) + propina;
     const elFinal = document.getElementById('payModalTotalFinal');
     if (elFinal) elFinal.textContent = this.formatMoney(totalFinal);
   },
@@ -930,9 +932,10 @@ const app = {
     const metodo = document.querySelector('input[name="payMetodo"]:checked').value;
     const descuento_negocio = parseFloat(document.getElementById('payModalDescuentoNegocio').value) || 0;
     const descuento_trabajador = parseFloat(document.getElementById('payModalDescuentoTrabajador').value) || 0;
+    const propina = parseFloat(document.getElementById('payModalPropina').value) || 0;
     const observacion = document.getElementById('payModalObservacion').value.trim();
-    if (descuento_negocio < 0 || descuento_trabajador < 0) {
-      this.toast('Los descuentos no pueden ser negativos.', 'warning');
+    if (descuento_negocio < 0 || descuento_trabajador < 0 || propina < 0) {
+      this.toast('Los descuentos y la propina no pueden ser negativos.', 'warning');
       return;
     }
     if (descuento_negocio + descuento_trabajador > (this.payingOrderTotal || 0)) {
@@ -941,7 +944,7 @@ const app = {
     }
     try {
       const data = await ApiCliente.post('/api/caja/pagos', {
-        orden_id: this.payingOrderId, metodo_pago: metodo, descuento_negocio, descuento_trabajador, observacion
+        orden_id: this.payingOrderId, metodo_pago: metodo, descuento_negocio, descuento_trabajador, propina, observacion
       });
       this.toast(`Pago registrado vía ${metodo.toUpperCase()}. Factura ${data.factura.numero_factura}.`, 'success');
       this.closeModal('modalPagarOrden');
@@ -1771,6 +1774,7 @@ const app = {
                 </div>
                 <div class="text-sm text-muted text-right">${w.servicios_realizados} lavados<br>Total Ganado: ${this.formatMoney(w.comision_historica_total)}</div>
               </div>
+              ${w.propina_total > 0 ? `<div class="text-sm text-success mt-1">Propinas (100% suyas): +${this.formatMoney(w.propina_total)}</div>` : ''}
               ${w.descuento_trabajador_total > 0 ? `<div class="text-sm text-danger mt-1">Descuentos asumidos: -${this.formatMoney(w.descuento_trabajador_total)}</div>` : ''}
               <div class="d-flex gap-2 mt-2">
                 <button class="btn btn-sm btn-primary admin-only" style="flex: 1" onclick="app.abrirModalLiquidar(${w.lavador_id}, '${w.nombre}', ${w.comision_pendiente})">Liquidar Comisión</button>
@@ -1910,24 +1914,26 @@ const app = {
     this.openModal('modalLiquidarLavador');
   },
 
-  /** Historial de servicios de un lavador: valor, descuento negocio/trabajador y observación de cada pago, más reciente primero. */
+  /** Historial de servicios de un lavador: cliente, valor, comisión, propina, descuento negocio/trabajador y observación de cada pago, más reciente primero. */
   async abrirModalServiciosLavador(lavadorId, nombre) {
     document.getElementById('serviciosLavadorNombre').textContent = nombre;
     const tbody = document.getElementById('serviciosLavadorTableBody');
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Cargando...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">Cargando...</td></tr>`;
     this.openModal('modalServiciosLavador');
     try {
       const servicios = await ApiCliente.get(`/api/nomina/lavadores/${lavadorId}/servicios`);
       if (servicios.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Este lavador todavía no tiene servicios cobrados.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">Este lavador todavía no tiene servicios cobrados.</td></tr>`;
         return;
       }
       tbody.innerHTML = servicios.map(s => `
         <tr>
           <td>${String(s.fecha).substring(0, 10)}</td>
+          <td>${escapeHtml(s.cliente)}</td>
           <td>#${s.ordenId} ${s.servicio || ''}</td>
           <td>${this.formatMoney(s.valorServicio)}</td>
           <td>${this.formatMoney(s.comisionBruta)}</td>
+          <td class="${s.propina > 0 ? 'text-success' : ''}">${s.propina > 0 ? `+${this.formatMoney(s.propina)}` : '--'}</td>
           <td class="${s.descuentoTotal > 0 ? 'text-danger' : ''}">${s.descuentoTotal > 0 ? `-${this.formatMoney(s.descuentoTotal)} (negocio ${this.formatMoney(s.descuentoNegocio)} / trabajador ${this.formatMoney(s.descuentoTrabajador)})` : '--'}</td>
           <td><strong>${this.formatMoney(s.comisionNeta)}</strong></td>
           <td class="text-sm text-muted">${s.observacion ? escapeHtml(s.observacion) : '--'}</td>
@@ -2192,6 +2198,7 @@ const app = {
       document.getElementById('cajaTotalPse').textContent = this.formatMoney(data.total_pse);
       document.getElementById('cajaTotalGeneral').textContent = this.formatMoney(data.total_general);
       document.getElementById('cajaTotalOrdenesCount').textContent = `${data.ordenes_count} órdenes pagadas hoy`;
+      document.getElementById('cajaTotalPropinas').textContent = this.formatMoney(data.total_propinas);
 
       const btnCerrar = document.getElementById('btnCerrarCaja');
       const avisoPendientes = document.getElementById('cajaAvisoPendientes');
@@ -2385,6 +2392,7 @@ const app = {
       document.getElementById('ventasTotal').textContent = this.formatMoney(r.totalVentas);
       document.getElementById('ventasCantidad').textContent = r.cantidadVentas;
       document.getElementById('ventasTicketProm').textContent = this.formatMoney(r.ticketPromedio);
+      document.getElementById('ventasTotalPropinas').textContent = this.formatMoney(r.totalPropinas);
 
       this.renderBarChart('ventasPorServicioChart', Object.entries(r.porServicio).map(([label, value]) => ({ label, value })), { color: '#0077b6' });
       this.renderDonutChart('ventasPorMetodoChart', Object.entries(r.porMetodoPago).map(([label, value], i) => ({ label: label.toUpperCase(), value, color: ['#0077b6', '#00b4d8', '#10b981', '#f59e0b'][i % 4] })));
@@ -2405,6 +2413,16 @@ const app = {
       document.getElementById('ventasTopClientesBody').innerHTML = r.topClientes.map(c => `
         <tr><td>${c.nombre}</td><td>${c.cantidad}</td><td><strong>${this.formatMoney(c.total)}</strong></td></tr>
       `).join('') || `<tr><td colspan="3" class="text-center text-muted text-sm py-3">Sin clientes registrados con compras en el período.</td></tr>`;
+
+      document.getElementById('ventasPropinasBody').innerHTML = (r.detallePropinas || []).map(p => `
+        <tr>
+          <td>${String(p.fecha).substring(0, 10)}</td>
+          <td>#${p.ordenId} ${escapeHtml(p.servicio)}</td>
+          <td>${escapeHtml(p.cliente)}</td>
+          <td>${escapeHtml(p.lavador)}</td>
+          <td class="text-success"><strong>${this.formatMoney(p.valor)}</strong></td>
+        </tr>
+      `).join('') || `<tr><td colspan="5" class="text-center text-muted text-sm py-3">Sin propinas registradas en el período.</td></tr>`;
     } catch (err) { console.error(err); }
   },
 

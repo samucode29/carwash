@@ -4,11 +4,11 @@
  */
 const { pool } = require('../config/baseDeDatos');
 
-async function registrarPago({ ordenId, metodoPago, monto, descuentoNegocio, descuentoTrabajador, observacion }) {
+async function registrarPago({ ordenId, metodoPago, monto, descuentoNegocio, descuentoTrabajador, propina, observacion }) {
   const [resultado] = await pool.query(
-    `INSERT INTO pagos (orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, observacion, estado)
-     VALUES (?, ?, ?, ?, ?, ?, 'confirmado')`,
-    [ordenId, metodoPago, monto, descuentoNegocio || 0, descuentoTrabajador || 0, observacion || null]
+    `INSERT INTO pagos (orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmado')`,
+    [ordenId, metodoPago, monto, descuentoNegocio || 0, descuentoTrabajador || 0, propina || 0, observacion || null]
   );
   await pool.query(
     `UPDATE ordenes_servicio SET estado = 'entregado', fecha_hora_entrega = NOW() WHERE id = ? AND estado != 'entregado'`,
@@ -42,20 +42,23 @@ async function contarPendientesPorFecha(fecha) {
 
 async function obtenerResumenPorFecha(fecha) {
   const [filas] = await pool.query(
-    `SELECT p.metodo_pago, SUM(p.monto) AS total, COUNT(*) AS cantidad
+    `SELECT p.metodo_pago, SUM(p.monto) AS total, SUM(p.propina) AS propinas, COUNT(*) AS cantidad
      FROM pagos p
      WHERE DATE(p.fecha_pago) = ?
      GROUP BY p.metodo_pago`,
     [fecha]
   );
 
-  const resumen = { total_efectivo: 0, total_tarjeta: 0, total_transferencia: 0, total_pse: 0, ordenes_count: 0 };
+  const resumen = { total_efectivo: 0, total_tarjeta: 0, total_transferencia: 0, total_pse: 0, ordenes_count: 0, total_propinas: 0 };
   const mapaColumnas = { efectivo: 'total_efectivo', tarjeta: 'total_tarjeta', transferencia: 'total_transferencia', pse: 'total_pse' };
 
+  // Las propinas NO son ingreso del negocio (van 100% al lavador): se
+  // reportan aparte, no dentro de total_general, para no inflar la ganancia.
   filas.forEach(fila => {
     const columna = mapaColumnas[fila.metodo_pago];
     if (columna) resumen[columna] = Number(fila.total);
     resumen.ordenes_count += fila.cantidad;
+    resumen.total_propinas += Number(fila.propinas) || 0;
   });
   resumen.total_general = resumen.total_efectivo + resumen.total_tarjeta + resumen.total_transferencia + resumen.total_pse;
   return resumen;

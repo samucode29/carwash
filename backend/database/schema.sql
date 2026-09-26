@@ -333,6 +333,12 @@ CREATE TABLE pagos (
     --                         su culpa.
     descuento_negocio    DECIMAL(12,2) NOT NULL DEFAULT 0,
     descuento_trabajador DECIMAL(12,2) NOT NULL DEFAULT 0,
+    -- Propina del cliente: es 100% del lavador (o se reparte en partes
+    -- iguales si atendieron varios), nunca del negocio. No se suma a
+    -- `monto` ni a `facturas.total` porque no es ingreso del negocio, pero
+    -- sí se cuenta en el resumen de caja del día (efectivo/tarjeta físico
+    -- que sí entra por esa vía) y en lo que se le debe pagar al lavador.
+    propina      DECIMAL(12,2) NOT NULL DEFAULT 0,
     -- Nota libre al cobrar (ej. "cliente se negó a pagar, es amigo del
     -- lavador, él respondió por el servicio").
     observacion  VARCHAR(500),
