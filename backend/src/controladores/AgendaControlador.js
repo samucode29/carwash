@@ -110,7 +110,7 @@ async function crearTurno(req, res) {
   });
   if (yaTieneServicioActivo) {
     return res.status(400).json({
-      error: 'Este vehículo ya tiene un turno o servicio en curso. Si necesita otro servicio, agréguelo a la orden activa con el botón "+ Servicio" en vez de generar un turno nuevo.'
+      error: 'Este vehículo ya tiene un turno o servicio en curso. Si necesita otro servicio, agréguelo con el botón "+ Servicio" de su turno o de su orden activa, en vez de generar un turno nuevo.'
     });
   }
 

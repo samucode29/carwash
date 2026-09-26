@@ -1090,14 +1090,14 @@
             <input type="number" id="payModalDescuentoTrabajador" min="0" step="1000" placeholder="0" oninput="app.actualizarTotalConDescuento()">
           </div>
         </div>
-        <p class="text-sm text-muted mt-1" id="payModalDescuentoAyuda">El descuento negocio lo asume el negocio (ganancia). El descuento trabajador se le resta de su comisión pendiente — úselo, por ejemplo, cuando el cliente no pagó por culpa del lavador. Entre los dos no pueden superar el total del servicio.</p>
+        <p class="text-sm text-muted mt-1" id="payModalDescuentoAyuda">El descuento negocio reduce la ganancia del negocio. El descuento trabajador se descuenta de la comisión pendiente del lavador. La suma de los dos no puede superar el total del servicio.</p>
         <div class="pay-summary mt-2">
           <span class="pay-label">Total a Cobrar:</span>
           <span class="pay-amount" id="payModalTotalFinal">$0</span>
         </div>
         <div class="form-group mt-3">
           <label>Observación (opcional):</label>
-          <textarea id="payModalObservacion" rows="2" placeholder="Ej: cliente se negó a pagar, es amigo del lavador, él respondió por el servicio."></textarea>
+          <textarea id="payModalObservacion" rows="2" placeholder="Ej: motivo del descuento u otra novedad de este pago"></textarea>
         </div>
         <div class="form-group mt-3">
           <label>Método de Pago:</label>
@@ -1387,7 +1387,7 @@
         <button class="close-btn" onclick="app.closeModal('modalServicioExtra')">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="text-sm text-muted mb-2">Se suma al total de esta misma orden (no genera un turno nuevo para el vehículo).</p>
+        <p class="text-sm text-muted mb-2">Se suma al total de este mismo vehículo (no genera un turno nuevo).</p>
         <div class="form-group">
           <label>Servicio a agregar:</label>
           <select id="servicioExtraSelect"></select>

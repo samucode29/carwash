@@ -911,7 +911,7 @@ const app = {
     if (descTrabajador) descTrabajador.value = '';
     document.getElementById('payModalObservacion').value = '';
     const ayuda = document.getElementById('payModalDescuentoAyuda');
-    if (ayuda) ayuda.textContent = `El descuento negocio lo asume el negocio (ganancia). El descuento trabajador se le resta de su comisión pendiente (máximo ${this.formatMoney(this.payingOrderComision)}, lo que ganaría en este servicio) — úselo, por ejemplo, cuando el cliente no pagó por culpa del lavador. Entre los dos no pueden superar el total del servicio.`;
+    if (ayuda) ayuda.textContent = `El descuento negocio reduce la ganancia del negocio. El descuento trabajador se descuenta de la comisión pendiente del lavador, hasta un máximo de ${this.formatMoney(this.payingOrderComision)} (lo que gana en este servicio). La suma de los dos no puede superar el total del servicio.`;
     this.actualizarTotalConDescuento();
     this.openModal('modalPagarOrden');
   },
