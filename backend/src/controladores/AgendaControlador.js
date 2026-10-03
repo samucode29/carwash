@@ -5,8 +5,30 @@
 const AgendaRepositorio = require('../repositorios/AgendaRepositorio');
 const HorarioAtencionRepositorio = require('../repositorios/HorarioAtencionRepositorio');
 const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
+const ClienteRepositorio = require('../repositorios/ClienteRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy, obtenerFechaHoraActual, obtenerHoraActual, obtenerDiaSemana, NOMBRES_DIAS_SEMANA } = require('../utilidades/fechas');
+const { exigirServicioParaVehiculo } = require('../utilidades/vehiculos');
+
+/** Una cita no puede quedar en una fecha ni en una hora que ya pasó (CU04 / RF04). */
+function validarNoEsPasado(fecha, hora) {
+  const hoy = obtenerFechaHoy();
+  if (fecha < hoy) {
+    throw Object.assign(new Error('No se puede agendar una cita en una fecha que ya pasó. Elija hoy o una fecha futura.'), { codigoHttp: 400 });
+  }
+  if (fecha === hoy && String(hora).substring(0, 5) < obtenerHoraActual()) {
+    throw Object.assign(new Error('No se puede agendar una cita en una hora que ya pasó. Elija una hora posterior a la actual.'), { codigoHttp: 400 });
+  }
+}
+
+/** Tipo de vehículo de una solicitud: el del vehículo registrado si lo hay; si no, el que indique el formulario. */
+async function resolverTipoVehiculo(vehiculoId, tipoIndicado) {
+  if (vehiculoId) {
+    const vehiculo = await ClienteRepositorio.obtenerVehiculoPorId(vehiculoId);
+    if (vehiculo) return vehiculo.tipo;
+  }
+  return tipoIndicado || null;
+}
 
 /**
  * Una cita no se puede agendar/reprogramar fuera del horario de atención
@@ -38,12 +60,18 @@ async function listarCitas(req, res) {
 }
 
 async function crearCita(req, res) {
-  const { cliente_id, vehiculo_id, servicio_id, fecha, hora, cliente_nombre, cliente_telefono, placa, observacion } = req.body;
+  const { cliente_id, vehiculo_id, servicio_id, fecha, hora, cliente_nombre, cliente_telefono, placa, observacion, tipo_vehiculo } = req.body;
   if (!servicio_id || !fecha || !hora) {
     return res.status(400).json({ error: 'Servicio, fecha y hora son obligatorios.' });
   }
 
+  validarNoEsPasado(fecha, hora);
   await validarDentroDeHorarioAtencion(fecha, hora);
+
+  const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
+  if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
+  const tipoVehiculo = await resolverTipoVehiculo(vehiculo_id ? parseInt(vehiculo_id, 10) : null, tipo_vehiculo);
+  exigirServicioParaVehiculo(servicio, tipoVehiculo);
 
   const ocupada = await AgendaRepositorio.existeCitaEnHorario(fecha, hora);
   if (ocupada) {
@@ -59,6 +87,7 @@ async function crearCita(req, res) {
     clienteNombreTemp: cliente_nombre,
     clienteTelefonoTemp: cliente_telefono,
     placaTemp: placa ? placa.toUpperCase().trim() : '',
+    tipoVehiculo: vehiculo_id ? null : tipoVehiculo,
     observacion: observacion || null,
     registradoPor: req.usuarioAutenticado.id
   });
@@ -74,6 +103,7 @@ async function actualizarCita(req, res) {
   if (fecha || hora) {
     const actual = await AgendaRepositorio.obtenerCitaPorId(id);
     if (!actual) return res.status(404).json({ error: 'Cita no encontrada.' });
+    validarNoEsPasado(fecha || actual.fecha, hora || actual.hora);
     await validarDentroDeHorarioAtencion(fecha || actual.fecha, hora || actual.hora);
   }
 
@@ -103,6 +133,25 @@ async function crearTurno(req, res) {
     return res.status(400).json({ error: 'El servicio es obligatorio para generar un turno.' });
   }
 
+  // Una cita solo se puede pasar a la fila el mismo día para el que se agendó.
+  if (cita_id) {
+    const cita = await AgendaRepositorio.obtenerCitaPorId(parseInt(cita_id, 10));
+    if (!cita) return res.status(404).json({ error: 'Cita no encontrada.' });
+    if (!['agendada', 'reprogramada'].includes(cita.estado)) {
+      return res.status(400).json({ error: `Esta cita está ${cita.estado}; ya no se puede atender.` });
+    }
+    if (cita.fecha !== obtenerFechaHoy()) {
+      return res.status(400).json({ error: `Esta cita es del ${cita.fecha}; solo se puede atender el mismo día para el que fue agendada.` });
+    }
+  }
+
+  // El servicio debe ser del tipo de vehículo: el del vehículo registrado,
+  // o el indicado en la venta rápida/anónima.
+  const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
+  if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
+  const tipoVehiculoTurno = (await resolverTipoVehiculo(vehiculo_id ? parseInt(vehiculo_id, 10) : null, tipo_vehiculo)) || 'carro';
+  exigirServicioParaVehiculo(servicio, tipoVehiculoTurno);
+
   const placaLimpia = placa_temporal ? placa_temporal.toUpperCase().trim() : null;
   const yaTieneServicioActivo = await AgendaRepositorio.existeVehiculoConServicioActivo({
     vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
@@ -124,7 +173,7 @@ async function crearTurno(req, res) {
     vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
     citaId: cita_id ? parseInt(cita_id, 10) : null,
     placaTemporal: placaLimpia || '',
-    tipoVehiculo: tipo_vehiculo || 'carro',
+    tipoVehiculo: tipoVehiculoTurno,
     servicioId: parseInt(servicio_id, 10),
     fecha: hoy,
     horaLlegada: obtenerHoraActual(),
@@ -180,6 +229,7 @@ async function agregarServicioExtraTurno(req, res) {
 
   const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
   if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
+  exigirServicioParaVehiculo(servicio, turno.tipo_vehiculo);
 
   await AgendaRepositorio.agregarServicioExtraTurno(id, {
     servicioId: servicio.id,

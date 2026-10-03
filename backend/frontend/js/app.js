@@ -25,6 +25,18 @@ function fechaLocalHaceDias(n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Primer nombre + primer apellido de un nombre completo: con 2 palabras se
+ * deja igual; con 3 ("Nombre Apellido Apellido") se toman las dos primeras;
+ * con 4 o más ("Nombre Nombre Apellido Apellido") la primera y la tercera.
+ */
+function nombreCorto(nombre) {
+  const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (partes.length <= 2) return partes.join(' ');
+  if (partes.length === 3) return `${partes[0]} ${partes[1]}`;
+  return `${partes[0]} ${partes[2]}`;
+}
+
 /** Escapa texto libre (observaciones, notas de cliente) antes de insertarlo con innerHTML. */
 function escapeHtml(texto) {
   const div = document.createElement('div');
@@ -343,13 +355,16 @@ const app = {
       const activos = this.tiposVehiculo.filter(t => t.estado === 'activo');
       const opciones = activos.map(t => `<option value="${t.nombre}">${t.nombre[0].toUpperCase() + t.nombre.slice(1)}</option>`).join('');
 
+      // Cada servicio es para UN tipo de vehículo: no hay opción "todos".
       const elServ = document.getElementById('servTipoVehiculo');
-      if (elServ) elServ.innerHTML = `<option value="">Todos los tipos</option>${opciones}`;
+      if (elServ) elServ.innerHTML = `<option value="">-- Seleccione el tipo de vehículo --</option>${opciones}`;
 
-      ['posAnonTipo', 'newClientTipo', 'turnoTipo'].forEach(id => {
+      ['posAnonTipo', 'newClientTipo', 'turnoTipo', 'editClienteNuevoTipo', 'citaAnonTipo'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = opciones;
       });
+      this.refrescarSelectsServicios();
+      this.renderPosServices();
 
       const elPills = document.getElementById('tiposVehiculoPillList');
       if (elPills) {
@@ -498,16 +513,51 @@ const app = {
     try {
       this.services = await ApiCliente.get('/api/servicios?activos=true');
       this.renderPosServices();
-
-      ['citaServicioSelect', 'turnoServicioSelect'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.innerHTML = this.services.map(s => `
-            <option value="${s.id}">${s.nombre} (${s.tipo_vehiculo || 'Todos'}) - ${this.formatMoney(s.precio)}</option>
-          `).join('');
-        }
-      });
+      this.refrescarSelectsServicios();
     } catch (err) { console.error(err); }
+  },
+
+  /** Servicios activos que se ofrecen para un tipo de vehículo (cada servicio es de un solo tipo). */
+  serviciosParaTipo(tipoVehiculo) {
+    const tipo = String(tipoVehiculo || '').trim().toLowerCase();
+    if (!tipo) return [];
+    return (this.services || []).filter(s => s.activo && String(s.tipo_vehiculo || '').trim().toLowerCase() === tipo);
+  },
+
+  /** Llena un <select> de servicios solo con los del tipo de vehículo indicado. */
+  llenarSelectServicios(selectId, tipoVehiculo) {
+    const el = document.getElementById(selectId);
+    if (!el) return;
+    const lista = this.serviciosParaTipo(tipoVehiculo);
+    el.innerHTML = lista.length > 0
+      ? lista.map(s => `<option value="${s.id}">${s.nombre} - ${this.formatMoney(s.precio)}</option>`).join('')
+      : '<option value="">No hay servicios para este tipo de vehículo</option>';
+  },
+
+  refrescarSelectsServicios() {
+    this.refrescarServiciosTurno();
+    this.refrescarServiciosCita();
+  },
+
+  refrescarServiciosTurno() {
+    const tipo = document.getElementById('turnoTipo');
+    this.llenarSelectServicios('turnoServicioSelect', tipo ? tipo.value : '');
+  },
+
+  /** Tipo de vehículo de la cita que se está agendando: el del vehículo registrado o el elegido para una cita anónima. */
+  tipoVehiculoCita() {
+    const cliente = document.getElementById('citaClienteSelect');
+    if (cliente && cliente.value) {
+      const veh = document.getElementById('citaVehiculoSelect');
+      const opcion = veh && veh.selectedOptions[0];
+      return opcion && opcion.dataset.tipo ? opcion.dataset.tipo : '';
+    }
+    const anon = document.getElementById('citaAnonTipo');
+    return anon ? anon.value : '';
+  },
+
+  refrescarServiciosCita() {
+    this.llenarSelectServicios('citaServicioSelect', this.tipoVehiculoCita());
   },
 
   renderPosServices() {
@@ -515,16 +565,37 @@ const app = {
     if (!grid) return;
 
     const isAnon = document.querySelector('input[name="posClientType"]:checked').value === 'anonimo';
-    const anonTipo = document.getElementById('posAnonTipo') ? document.getElementById('posAnonTipo').value : 'carro';
 
-    let filtrados = (this.services || []).filter(s => s.activo);
+    // Solo se ofrecen los servicios del tipo del vehículo: el que se eligió
+    // en Venta Rápida/Anónima, o el del vehículo registrado seleccionado.
+    let tipoVehiculo = '';
     if (isAnon) {
-      filtrados = filtrados.filter(s => !s.tipo_vehiculo || s.tipo_vehiculo === anonTipo);
+      const anon = document.getElementById('posAnonTipo');
+      tipoVehiculo = anon ? anon.value : '';
+    } else {
+      const veh = document.getElementById('posVehiculoSelect');
+      const opcion = veh && veh.selectedOptions[0];
+      tipoVehiculo = opcion && opcion.dataset.tipo ? opcion.dataset.tipo : '';
+    }
+
+    if (!tipoVehiculo) {
+      grid.innerHTML = `<p class="text-muted text-sm">Seleccione el cliente y su vehículo para ver los servicios que se ofrecen para ese tipo de vehículo.</p>`;
+      this.selectedServiceId = null;
+      this.updatePosTotal();
+      return;
+    }
+
+    const filtrados = this.serviciosParaTipo(tipoVehiculo);
+    if (filtrados.length === 0) {
+      grid.innerHTML = `<p class="text-muted text-sm">No hay servicios activos para el tipo de vehículo "${tipoVehiculo}". Créelos en la pestaña Servicios.</p>`;
+      this.selectedServiceId = null;
+      this.updatePosTotal();
+      return;
     }
 
     grid.innerHTML = filtrados.map(s => `
       <div class="service-card ${this.selectedServiceId === s.id ? 'selected' : ''}" onclick="app.selectService(${s.id})">
-        <span class="service-card-tag">${s.tipo_vehiculo || 'Todos'}</span>
+        <span class="service-card-tag">${s.tipo_vehiculo}</span>
         <div class="service-card-name">${s.nombre}</div>
         <div class="service-card-desc">${s.descripcion || 'Sin descripción'}</div>
         <div class="service-card-footer">
@@ -586,11 +657,13 @@ const app = {
     const cid = parseInt(document.getElementById('posClienteSelect').value);
     const vSelect = document.getElementById('posVehiculoSelect');
     vSelect.innerHTML = '<option value="">-- Seleccione el vehículo --</option>';
-    if (!cid) return;
-    const c = this.clients.find(item => item.id === cid);
-    if (c && c.vehiculos) {
-      vSelect.innerHTML = c.vehiculos.map(v => `<option value="${v.id}" data-tipo="${v.tipo}">${v.placa} - ${v.marca} (${v.color})</option>`).join('');
+    if (cid) {
+      const c = this.clients.find(item => item.id === cid);
+      if (c && c.vehiculos) {
+        vSelect.innerHTML = c.vehiculos.map(v => `<option value="${v.id}" data-tipo="${v.tipo}">${v.placa} - ${v.marca} (${v.color})</option>`).join('');
+      }
     }
+    this.renderPosServices(); // los servicios mostrados dependen del tipo del vehículo elegido
   },
 
   async buscarPorPlaca() {
@@ -614,7 +687,7 @@ const app = {
           this.toggleClientMode();
           document.getElementById('posClienteSelect').value = data.cliente.id;
           this.onPosClienteChange();
-          setTimeout(() => { document.getElementById('posVehiculoSelect').value = data.vehiculo.id; }, 100);
+          setTimeout(() => { document.getElementById('posVehiculoSelect').value = data.vehiculo.id; this.renderPosServices(); }, 100);
         }
       } else {
         banner.innerHTML = `
@@ -706,7 +779,7 @@ const app = {
           </div>
           <div class="d-flex gap-2">
             <button class="btn btn-sm btn-primary" onclick="app.atenderTurno(${t.id}, ${t.servicio_id}, '${t.placa}', '${t.tipo_vehiculo}', ${t.cliente_id || 'null'}, ${t.vehiculo_id || 'null'})">Iniciar</button>
-            <button class="btn btn-sm btn-outline" onclick="app.abrirModalServicioExtra('turno', ${t.id})">+ Servicio</button>
+            <button class="btn btn-sm btn-outline" onclick="app.abrirModalServicioExtra('turno', ${t.id}, '${t.tipo_vehiculo}')">+ Servicio</button>
             <button class="btn btn-sm btn-danger" onclick="app.cancelarTurno(${t.id})">Cancelar</button>
           </div>
         </div>
@@ -738,8 +811,10 @@ const app = {
 
   abrirModalNuevoTurno() {
     document.getElementById('turnoPlaca').value = '';
-    document.getElementById('turnoTipo').value = 'carro';
+    const selTipo = document.getElementById('turnoTipo');
+    if (selTipo.options.length > 0) selTipo.selectedIndex = 0;
     document.getElementById('turnoObservacion').value = '';
+    this.refrescarServiciosTurno();
     this.openModal('modalNuevoTurno');
   },
 
@@ -748,6 +823,7 @@ const app = {
     const tipo = document.getElementById('turnoTipo').value;
     const servicio_id = document.getElementById('turnoServicioSelect').value;
     const observacion = document.getElementById('turnoObservacion').value.trim();
+    if (!servicio_id) { this.toast('Seleccione un servicio del tipo de vehículo elegido.', 'warning'); return; }
     try {
       await ApiCliente.post('/api/turnos', { placa_temporal: placa, tipo_vehiculo: tipo, servicio_id, observacion });
       this.toast('Turno registrado con éxito.', 'success');
@@ -778,7 +854,11 @@ const app = {
       const counts = { recibido: 0, en_proceso: 0, terminado: 0, entregado: 0 };
       Object.values(cols).forEach(el => el.innerHTML = '');
 
+      // La columna "Entregado y Cobrado" solo muestra lo entregado HOY: el
+      // historial completo vive en Reportes y Facturas, no en el tablero.
+      const hoy = fechaLocalHoy();
       orders.forEach(o => {
+        if (o.estado === 'entregado' && String(o.fecha_hora_entrega || o.fecha_hora_registro).substring(0, 10) !== hoy) return;
         if (cols[o.estado]) {
           counts[o.estado]++;
           const card = document.createElement('div');
@@ -796,9 +876,10 @@ const app = {
   },
 
   renderOrderCardHtml(o) {
-    const lavadoresNombres = (o.lavadores || []).map(l => l.nombre.split(' ')[0]).join(', ') || 'Sin asignar';
+    const lavadoresNombres = (o.lavadores || []).map(l => nombreCorto(l.nombre)).join(', ') || 'Sin asignar';
     const puedeAgregarServicio = o.estado === 'recibido' || o.estado === 'en_proceso';
-    const puedeCancelar = ['recibido', 'en_proceso', 'terminado'].includes(o.estado);
+    // Un servicio que ya terminó (listo para cobrar) ya no se puede cancelar: se cobra.
+    const puedeCancelar = ['recibido', 'en_proceso'].includes(o.estado);
     let actionButtons = '';
 
     if (o.estado === 'recibido') {
@@ -837,7 +918,7 @@ const app = {
       <div class="order-meta-info"><span>Cliente: ${o.cliente_nombre}</span> • <span>${this.formatMoney(o.total)}</span></div>
       <div class="order-washers-info">Lavador(es): <strong>${lavadoresNombres}</strong></div>
       <div class="order-actions">${actionButtons}</div>
-      ${puedeAgregarServicio ? `<button class="btn btn-sm btn-outline mt-2" style="width: 100%" onclick="app.abrirModalServicioExtra('orden', ${o.id})">+ Servicio (mismo vehículo)</button>` : ''}
+      ${puedeAgregarServicio ? `<button class="btn btn-sm btn-outline mt-2" style="width: 100%" onclick="app.abrirModalServicioExtra('orden', ${o.id}, '${o.tipo_vehiculo}')">+ Servicio (mismo vehículo)</button>` : ''}
       ${puedeCancelar ? `<button class="btn btn-sm btn-danger mt-2" style="width: 100%" onclick="app.cancelarOrden(${o.id})">Cancelar Servicio</button>` : ''}
     `;
   },
@@ -860,12 +941,13 @@ const app = {
    * servicio adicional al MISMO turno (si sigue en la fila de espera) o a
    * la MISMA orden (si ya se inició).
    */
-  abrirModalServicioExtra(tipo, id) {
+  abrirModalServicioExtra(tipo, id, tipoVehiculo) {
     this.agregandoServicioExtra = { tipo, id };
-    const select = document.getElementById('servicioExtraSelect');
-    if (select) {
-      select.innerHTML = (this.services || []).map(s => `<option value="${s.id}">${s.nombre} - ${this.formatMoney(s.precio)}</option>`).join('');
-    }
+    // Solo servicios del mismo tipo de vehículo (no se le puede poner un
+    // lavado de moto a un carro).
+    this.llenarSelectServicios('servicioExtraSelect', tipoVehiculo);
+    const nota = document.getElementById('servicioExtraNota');
+    if (nota) nota.textContent = `Se suma al total de este mismo vehículo (no genera un turno nuevo). Solo se muestran servicios para ${tipoVehiculo || 'su tipo de vehículo'}.`;
     this.openModal('modalServicioExtra');
   },
 
@@ -971,23 +1053,38 @@ const app = {
         return;
       }
 
-      tbody.innerHTML = citas.map(c => `
+      // Una cita solo se puede atender el MISMO día para el que se agendó:
+      // las de días anteriores quedan "vencidas" y las futuras todavía no se
+      // pueden atender (en ambos casos solo se pueden cancelar).
+      const hoy = fechaLocalHoy();
+      tbody.innerHTML = citas.map(c => {
+        const pendiente = c.estado === 'agendada' || c.estado === 'reprogramada';
+        const esHoy = c.fecha === hoy;
+        const vencida = pendiente && c.fecha < hoy;
+        const colorEstado = vencida ? '#f59e0b' : (c.estado === 'agendada' ? '#0077b6' : (c.estado === 'atendida' ? '#10b981' : (c.estado === 'reprogramada' ? '#f59e0b' : '#ef4444')));
+        const etiquetaEstado = vencida ? 'VENCIDA' : c.estado.toUpperCase();
+        let acciones = '<span class="text-muted text-sm">--</span>';
+        if (pendiente && esHoy) {
+          acciones = `
+            <button class="btn btn-sm btn-primary" onclick="app.iniciarCita(${c.id}, ${c.servicio_id}, ${c.cliente_id}, ${c.vehiculo_id})">Atender</button>
+            <button class="btn btn-sm btn-outline" onclick="app.agregarCitaAFila(${c.id}, ${c.servicio_id}, ${c.cliente_id}, ${c.vehiculo_id}, '${(c.placa || '').replace(/'/g, "\\'")}', '${c.tipo_vehiculo}')">Agregar a la Fila</button>
+            <button class="btn btn-sm btn-danger" onclick="app.cancelarCita(${c.id})">Cancelar</button>`;
+        } else if (pendiente) {
+          acciones = `
+            <span class="text-sm text-muted">${vencida ? 'Fecha ya pasó: no se puede atender' : `Se atiende el ${c.fecha}`}</span>
+            <button class="btn btn-sm btn-danger" onclick="app.cancelarCita(${c.id})">Cancelar</button>`;
+        }
+        return `
         <tr>
           <td><strong>${c.hora}</strong></td>
           <td><span class="order-plate-tag">${c.placa}</span> (${c.tipo_vehiculo})</td>
           <td>${c.cliente_nombre}<br><span class="text-sm text-muted">${c.cliente_telefono}</span></td>
-          <td>${c.servicio_nombre}</td>
+          <td>${c.servicio_nombre}${c.observacion ? `<br><span class="text-sm text-warning">📝 ${escapeHtml(c.observacion)}</span>` : ''}</td>
           <td><strong>${this.formatMoney(c.servicio_precio)}</strong></td>
-          <td><span class="role-badge" style="background: ${c.estado === 'agendada' ? '#0077b6' : (c.estado === 'atendida' ? '#10b981' : '#ef4444')}">${c.estado.toUpperCase()}</span></td>
-          <td>
-            ${c.estado === 'agendada' ? `
-              <button class="btn btn-sm btn-primary" onclick="app.iniciarCita(${c.id}, ${c.servicio_id}, ${c.cliente_id}, ${c.vehiculo_id})">Atender</button>
-              <button class="btn btn-sm btn-outline" onclick="app.agregarCitaAFila(${c.id}, ${c.servicio_id}, ${c.cliente_id}, ${c.vehiculo_id}, '${(c.placa || '').replace(/'/g, "\\'")}', '${c.tipo_vehiculo}')">Agregar a la Fila</button>
-              <button class="btn btn-sm btn-danger" onclick="app.cancelarCita(${c.id})">Cancelar</button>
-            ` : '<span class="text-muted text-sm">--</span>'}
-          </td>
-        </tr>
-      `).join('');
+          <td><span class="role-badge" style="background: ${colorEstado}">${etiquetaEstado}</span></td>
+          <td>${acciones}</td>
+        </tr>`;
+      }).join('');
     } catch (err) { console.error(err); }
   },
 
@@ -1000,20 +1097,25 @@ const app = {
 
     const vSelect = document.getElementById('citaVehiculoSelect');
     vSelect.innerHTML = '<option value="">-- Seleccione el vehículo --</option>';
-    if (!cid) return;
-    const c = (this.clients || []).find(item => item.id === cid);
-    if (c && c.vehiculos) {
-      vSelect.innerHTML = c.vehiculos.map(v => `<option value="${v.id}">${v.placa} - ${v.marca} (${v.color})</option>`).join('');
+    if (cid) {
+      const c = (this.clients || []).find(item => item.id === cid);
+      if (c && c.vehiculos) {
+        vSelect.innerHTML = c.vehiculos.map(v => `<option value="${v.id}" data-tipo="${v.tipo}">${v.placa} - ${v.marca} (${v.color})</option>`).join('');
+      }
     }
+    this.refrescarServiciosCita(); // los servicios dependen del tipo de vehículo
   },
 
   abrirModalNuevaCita() {
     document.getElementById('citaClienteSelect').value = '';
     document.getElementById('citaAnonNombre').value = '';
     document.getElementById('citaAnonPlaca').value = '';
-    document.getElementById('citaServicioSelect').value = '';
+    const anonTipo = document.getElementById('citaAnonTipo');
+    if (anonTipo.options.length > 0) anonTipo.selectedIndex = 0;
     document.getElementById('citaFechaInput').value = '';
     document.getElementById('citaHoraInput').value = '';
+    // No se pueden agendar citas en fechas pasadas.
+    document.getElementById('citaFechaInput').min = fechaLocalHoy();
     document.getElementById('citaHorarioInfo').textContent = '';
     document.getElementById('citaObservacion').value = '';
     this.onCitaClienteChange();
@@ -1025,6 +1127,7 @@ const app = {
     const vehiculo_id = cliente_id ? (document.getElementById('citaVehiculoSelect').value || null) : null;
     const cliente_nombre = document.getElementById('citaAnonNombre').value;
     const placa = document.getElementById('citaAnonPlaca').value;
+    const tipo_vehiculo = this.tipoVehiculoCita();
     const servicio_id = document.getElementById('citaServicioSelect').value;
     const fecha = document.getElementById('citaFechaInput').value;
     const hora = document.getElementById('citaHoraInput').value;
@@ -1032,8 +1135,14 @@ const app = {
 
     if (!servicio_id || !fecha || !hora) { this.toast('Complete el servicio, la fecha y la hora.', 'warning'); return; }
 
+    // No se agendan citas en el pasado (fecha anterior a hoy, ni una hora que ya pasó hoy).
+    const ahora = new Date();
+    const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+    if (fecha < fechaLocalHoy()) { this.toast('No se puede agendar una cita en una fecha que ya pasó.', 'warning'); return; }
+    if (fecha === fechaLocalHoy() && hora < horaActual) { this.toast('No se puede agendar una cita en una hora que ya pasó.', 'warning'); return; }
+
     try {
-      await ApiCliente.post('/api/citas', { cliente_id, vehiculo_id, cliente_nombre, placa, servicio_id, fecha, hora, observacion });
+      await ApiCliente.post('/api/citas', { cliente_id, vehiculo_id, cliente_nombre, placa, tipo_vehiculo, servicio_id, fecha, hora, observacion });
       this.toast('Cita agendada correctamente.', 'success');
       this.closeModal('modalNuevaCita');
       this.loadCitas();
@@ -1078,7 +1187,7 @@ const app = {
       this.toast('Cita cancelada.', 'info');
       this.loadCitas();
     } catch (err) {
-      this.toast('Error al cancelar cita.', 'error');
+      this.toast(err.message || 'Error al cancelar cita.', 'error');
     }
   },
 
@@ -1265,22 +1374,31 @@ const app = {
     const ETIQUETA_MOTIVO = { finalizado: 'jornada finalizada', inasistencia: 'inasistencia hoy', sin_asistencia: 'sin entrada hoy' };
     list.innerHTML = (this.washers || []).map(w => {
       const selected = this.selectedWashersAsignacion.includes(w.id);
-      const disponible = !!w.disponible_hoy;
-      const motivo = ETIQUETA_MOTIVO[w.estado_asistencia_hoy] || 'sin entrada hoy';
+      // Un lavador solo puede atender un servicio a la vez: si ya tiene uno
+      // "en proceso" no se puede asignar hasta que lo termine.
+      const presente = !!w.disponible_hoy;
+      const ocupado = presente && !!w.ocupado;
+      const disponible = presente && !ocupado;
+      const motivo = ocupado ? 'ocupado en otro servicio' : (ETIQUETA_MOTIVO[w.estado_asistencia_hoy] || 'sin entrada hoy');
       const clases = ['washer-pill'];
       if (selected) clases.push('selected');
       if (!disponible) clases.push('disabled');
       return `
-        <div class="${clases.join(' ')}" onclick="app.toggleAsignLavSelection(${w.id}, ${disponible})" title="${disponible ? '' : motivo}">
+        <div class="${clases.join(' ')}" onclick="app.toggleAsignLavSelection(${w.id}, ${disponible}, '${motivo}')" title="${disponible ? '' : motivo}">
           <span class="washer-status-dot"></span>
-          <span>${w.nombre.split(' ')[0]} (${w.porcentaje_comision}%)${disponible ? '' : ` — ${motivo}`}</span>
+          <span>${nombreCorto(w.nombre)} (${w.porcentaje_comision}%)${disponible ? '' : ` — ${motivo}`}</span>
         </div>
       `;
     }).join('');
   },
 
-  toggleAsignLavSelection(id, disponible) {
-    if (!disponible) { this.toast('Este lavador no ha registrado entrada hoy y no puede ser asignado.', 'warning'); return; }
+  toggleAsignLavSelection(id, disponible, motivo) {
+    if (!disponible) {
+      this.toast(motivo === 'ocupado en otro servicio'
+        ? 'Este lavador ya está atendiendo otro servicio; podrá asignarse cuando lo termine.'
+        : 'Este lavador no ha registrado entrada hoy y no puede ser asignado.', 'warning');
+      return;
+    }
     if (this.selectedWashersAsignacion.includes(id)) {
       this.selectedWashersAsignacion = this.selectedWashersAsignacion.filter(wid => wid !== id);
     } else {
@@ -1671,7 +1789,7 @@ const app = {
       tbody.innerHTML = this.servicios.map(s => `
         <tr>
           <td><strong>${s.nombre}</strong>${s.descripcion ? `<br><span class="text-sm text-muted">${s.descripcion}</span>` : ''}</td>
-          <td>${s.tipo_vehiculo || 'Todos'}</td>
+          <td>${s.tipo_vehiculo ? s.tipo_vehiculo[0].toUpperCase() + s.tipo_vehiculo.slice(1) : '--'}</td>
           <td>${this.formatMoney(s.precio)}</td>
           <td>${s.duracion_estimada_min} min</td>
           <td><span class="role-badge" style="background: ${s.activo ? '#10b981' : '#ef4444'}">${s.activo ? 'ACTIVO' : 'INACTIVO'}</span></td>
@@ -1716,6 +1834,7 @@ const app = {
     const descripcion = document.getElementById('servDescripcion').value;
 
     if (!nombre || !precio) { this.toast('Nombre y precio son obligatorios.', 'warning'); return; }
+    if (!tipo_vehiculo) { this.toast('Elija el tipo de vehículo al que aplica el servicio.', 'warning'); return; }
 
     try {
       if (this.editingServiceId) {
@@ -1854,15 +1973,40 @@ const app = {
         }
       } else if (this.activeSubTabNomina === 'asistencia') {
         await this.cargarPersonalParaAsistencia();
-        const asist = await ApiCliente.get('/api/nomina/asistencia');
+
+        // El historial no se pierde: se puede consultar cualquier día
+        // (por defecto hoy). Marcar entrada/salida solo aplica al día de hoy.
+        const hoy = fechaLocalHoy();
+        const filtro = document.getElementById('asistFechaFiltro');
+        if (filtro && !filtro.value) filtro.value = hoy;
+        const fechaVista = (filtro && filtro.value) || hoy;
+        const esHoy = fechaVista === hoy;
+        const titulo = document.getElementById('asistenciaTitulo');
+        if (titulo) titulo.textContent = esHoy ? 'Asistencia del Personal (Hoy)' : `Asistencia del Personal (${fechaVista})`;
+
+        const asist = await ApiCliente.get(`/api/nomina/asistencia?fecha=${fechaVista}`);
+        if (esHoy) this.asistenciaHoy = asist; // lo usa el modal para saber si ya se registró el descanso del día
+
         const tbAsist = document.getElementById('asistenciaTableBody');
         if (tbAsist) {
-          tbAsist.innerHTML = asist.map(a => `
+          tbAsist.innerHTML = asist.length === 0
+            ? `<tr><td colspan="7" class="text-center text-muted py-3">No hay registros de asistencia para este día.</td></tr>`
+            : asist.map(a => {
+              const sesiones = (a.sesiones || []).length > 0
+                ? a.sesiones.map(s => `${String(s.hora_entrada).substring(0, 5)} a ${s.hora_salida ? String(s.hora_salida).substring(0, 5) : '...'}`).join('<br>')
+                : '--:--';
+              const presente = !a.hora_salida && !a.inasistencia;
+              let acciones = '<span class="text-sm text-muted">--</span>';
+              if (esHoy && presente) {
+                acciones = `<button class="btn btn-sm btn-secondary" onclick="app.abrirModalMarcarSalida('${a.persona_tipo}', ${a.persona_id})">Marcar Salida</button>`;
+              } else if (esHoy && a.hora_salida) {
+                acciones = `<button class="btn btn-sm btn-outline" onclick="app.abrirModalMarcarEntrada('${a.persona_tipo}', ${a.persona_id})">Volver a Marcar Entrada</button>`;
+              }
+              return `
             <tr>
               <td><strong>${a.usuario_nombre}</strong></td>
               <td>${a.usuario_rol}</td>
-              <td>${a.hora_entrada || '--:--'}</td>
-              <td>${a.hora_salida || '--:--'}</td>
+              <td>${sesiones}</td>
               <td>${a.horas_descanso > 0 ? `${a.horas_descanso} hrs` : '--'}</td>
               <td>${a.horas_trabajadas} hrs</td>
               <td>${a.inasistencia
@@ -1870,9 +2014,9 @@ const app = {
                 : a.hora_salida
                   ? '<span class="role-badge" style="background: #64748b">FINALIZADO</span>'
                   : '<span class="role-badge" style="background: #10b981">PRESENTE</span>'}</td>
-              <td>${!a.hora_salida && !a.inasistencia ? `<button class="btn btn-sm btn-secondary" onclick="app.abrirModalMarcarSalida('${a.persona_tipo}', ${a.persona_id})">Marcar Salida</button>` : '<span class="text-sm text-muted">Jornada finalizada</span>'}</td>
-            </tr>
-          `).join('');
+              <td>${acciones}</td>
+            </tr>`;
+            }).join('');
         }
       }
     } catch (err) { console.error(err); }
@@ -2080,8 +2224,16 @@ const app = {
     }
   },
 
+  /** Trae la asistencia de HOY para saber, al marcar salida, si ya se registró el descanso/almuerzo del día. */
+  async refrescarAsistenciaHoy() {
+    try {
+      this.asistenciaHoy = await ApiCliente.get('/api/nomina/asistencia');
+    } catch (err) { this.asistenciaHoy = this.asistenciaHoy || []; }
+  },
+
   async abrirModalAsistencia() {
     await this.cargarPersonalParaAsistencia();
+    await this.refrescarAsistenciaHoy();
     document.getElementById('asistTipoSelect').value = 'entrada';
     document.getElementById('asistHorasDescanso').value = 0;
     this.actualizarVisibilidadDescanso();
@@ -2090,6 +2242,7 @@ const app = {
 
   async abrirModalMarcarSalida(personaTipo, personaId) {
     await this.cargarPersonalParaAsistencia();
+    await this.refrescarAsistenciaHoy();
     document.getElementById('asistPersonalSelect').value = `${personaTipo}:${personaId}`;
     document.getElementById('asistTipoSelect').value = 'salida';
     document.getElementById('asistHorasDescanso').value = 0;
@@ -2097,9 +2250,33 @@ const app = {
     this.openModal('modalAsistencia');
   },
 
+  /** Para quien ya marcó salida y regresa (ej. después del almuerzo): abre una sesión nueva sin borrar lo ya registrado. */
+  async abrirModalMarcarEntrada(personaTipo, personaId) {
+    await this.cargarPersonalParaAsistencia();
+    await this.refrescarAsistenciaHoy();
+    document.getElementById('asistPersonalSelect').value = `${personaTipo}:${personaId}`;
+    document.getElementById('asistTipoSelect').value = 'entrada';
+    document.getElementById('asistHorasDescanso').value = 0;
+    this.actualizarVisibilidadDescanso();
+    this.openModal('modalAsistencia');
+  },
+
+  /** Registro de hoy de la persona elegida en el modal de asistencia (o null si todavía no tiene). */
+  registroAsistenciaHoyDeSeleccion() {
+    const [tipo, id] = (document.getElementById('asistPersonalSelect').value || ':').split(':');
+    return (this.asistenciaHoy || []).find(a => a.persona_tipo === tipo && String(a.persona_id) === String(id)) || null;
+  },
+
+  /** El descanso/almuerzo solo se pide en la primera salida del día; si ya se registró, el campo se oculta. */
   actualizarVisibilidadDescanso() {
     const esSalida = document.getElementById('asistTipoSelect').value === 'salida';
-    document.getElementById('asistDescansoWrapper').style.display = esSalida ? '' : 'none';
+    const registro = this.registroAsistenciaHoyDeSeleccion();
+    const yaRegistrado = !!registro && Number(registro.horas_descanso) > 0;
+    document.getElementById('asistDescansoWrapper').style.display = esSalida && !yaRegistrado ? '' : 'none';
+    const aviso = document.getElementById('asistDescansoYaRegistrado');
+    aviso.style.display = esSalida && yaRegistrado ? '' : 'none';
+    aviso.textContent = yaRegistrado ? `El descanso/almuerzo de hoy ya quedó registrado (${registro.horas_descanso} hrs); solo se pide una vez al día.` : '';
+    if (yaRegistrado) document.getElementById('asistHorasDescanso').value = 0;
   },
 
   async guardarAsistencia() {
@@ -2223,6 +2400,7 @@ const app = {
         if (avisoPendientes) avisoPendientes.classList.add('hidden');
       }
       document.getElementById('modalCierreTotalGeneral').textContent = this.formatMoney(data.total_general);
+      this.citasPendientesCierre = data.citas_pendientes || 0;
 
       const tb = document.getElementById('cierresCajaTableBody');
       if (tb) {
@@ -2244,17 +2422,36 @@ const app = {
 
   abrirModalCerrarCaja() {
     document.getElementById('cierreObservaciones').value = '';
+    const aviso = document.getElementById('cierreAvisoCitas');
+    if (aviso) {
+      const n = this.citasPendientesCierre || 0;
+      aviso.textContent = n > 0
+        ? `Atención: hay ${n} cita(s) agendada(s) sin atender (de hoy o días anteriores). Al cerrar la caja se le avisará y, si confirma, se darán por canceladas.`
+        : '';
+      aviso.classList.toggle('hidden', n === 0);
+    }
     this.openModal('modalCerrarCaja');
   },
 
-  async confirmarCierreCaja() {
+  /**
+   * Al cerrar caja, si quedaron citas sin atender el backend responde 409 con
+   * la lista: primero se avisa por si fue un error (ej. se olvidó atenderla);
+   * si el usuario confirma, se reenvía y esas citas se dan por canceladas.
+   */
+  async confirmarCierreCaja(confirmarCitas = false) {
     const observaciones = document.getElementById('cierreObservaciones').value;
     try {
-      const data = await ApiCliente.post('/api/caja/cerrar', { observaciones });
+      const data = await ApiCliente.post('/api/caja/cerrar', { observaciones, confirmar_citas: confirmarCitas });
       this.toast(`Cierre de caja completado por ${this.formatMoney(data.total_general)}.`, 'success');
       this.closeModal('modalCerrarCaja');
       this.loadCaja();
     } catch (err) {
+      if (err.datos && err.datos.codigo === 'CITAS_PENDIENTES') {
+        const lista = err.datos.citas.map(c => `• ${c.fecha} ${String(c.hora).substring(0, 5)} — ${c.cliente_nombre} (${c.placa}) — ${c.servicio_nombre}`).join('\n');
+        const seguir = confirm(`${err.datos.error}\n\n${lista}\n\n¿Fue un error? Cancele este aviso y atienda esas citas primero.\n\nAceptar = cerrar la caja y dar esas citas por canceladas.\nCancelar = volver sin cerrar.`);
+        if (seguir) await this.confirmarCierreCaja(true);
+        return;
+      }
       this.toast(err.message || 'Error al cerrar caja.', 'error');
     }
   },
@@ -2365,7 +2562,7 @@ const app = {
   },
 
   /** Dona SVG simple. data = [{label, value, color}] */
-  renderDonutChart(elId, data) {
+  renderDonutChart(elId, data, { money = false } = {}) {
     const el = document.getElementById(elId);
     if (!el) return;
     const total = data.reduce((s, d) => s + d.value, 0);
@@ -2382,7 +2579,7 @@ const app = {
       acumulado += largo;
       return circle;
     }).join('');
-    const leyenda = data.map(d => `<div class="donut-legend-item"><span class="donut-dot" style="background:${d.color}"></span>${d.label}: ${d.value} (${Math.round((d.value / total) * 100)}%)</div>`).join('');
+    const leyenda = data.map(d => `<div class="donut-legend-item"><span class="donut-dot" style="background:${d.color}"></span>${d.label}: ${money ? this.formatMoney(d.value) : d.value} (${Math.round((d.value / total) * 100)}%)</div>`).join('');
     el.innerHTML = `<div class="donut-chart-wrapper"><svg width="120" height="120" viewBox="0 0 120 120">${circulos}</svg><div class="donut-legend">${leyenda}</div></div>`;
   },
 
@@ -2395,18 +2592,18 @@ const app = {
       document.getElementById('ventasTotalPropinas').textContent = this.formatMoney(r.totalPropinas);
 
       this.renderBarChart('ventasPorServicioChart', Object.entries(r.porServicio).map(([label, value]) => ({ label, value })), { color: '#0077b6' });
-      this.renderDonutChart('ventasPorMetodoChart', Object.entries(r.porMetodoPago).map(([label, value], i) => ({ label: label.toUpperCase(), value, color: ['#0077b6', '#00b4d8', '#10b981', '#f59e0b'][i % 4] })));
+      this.renderDonutChart('ventasPorMetodoChart', Object.entries(r.porMetodoPago).map(([label, value], i) => ({ label: label.toUpperCase(), value, color: ['#0077b6', '#00b4d8', '#10b981', '#f59e0b'][i % 4] })), { money: true });
       const coloresVeh = ['#0077b6', '#00b4d8', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
       this.renderDonutChart('ventasPorVehiculoChart', Object.entries(r.porVehiculo).map(([tipo, value], i) => ({
-        label: tipo[0].toUpperCase() + tipo.slice(1), value, color: coloresVeh[i % coloresVeh.length]
-      })));
+        label: `${tipo[0].toUpperCase() + tipo.slice(1)} (${(r.cantidadPorVehiculo || {})[tipo] || 0} servicios)`, value, color: coloresVeh[i % coloresVeh.length]
+      })), { money: true });
 
       const elPorLav = document.getElementById('ventasPorLavadorChart');
       if (elPorLav) {
         elPorLav.innerHTML = (r.porLavador && r.porLavador.length)
           ? '' : '<p class="text-sm text-muted">Sin servicios atendidos por lavadores en el período.</p>';
         if (r.porLavador && r.porLavador.length) {
-          this.renderBarChart('ventasPorLavadorChart', r.porLavador.map(l => ({ label: `${l.nombre} (${l.servicios})`, value: l.comision })), { color: '#10b981' });
+          this.renderBarChart('ventasPorLavadorChart', r.porLavador.map(l => ({ label: `${nombreCorto(l.nombre)} (${l.servicios})${l.propinas > 0 ? ` +${this.formatMoney(l.propinas)} propinas` : ''}`, value: l.comision })), { color: '#10b981' });
         }
       }
 
@@ -2452,6 +2649,8 @@ const app = {
       document.getElementById('nominaComisiones').textContent = this.formatMoney(r.comisionesPagadas);
       document.getElementById('nominaPendiente').textContent = this.formatMoney(r.liquidacionesPendientesTotal);
       document.getElementById('nominaHoras').textContent = `${r.horasTrabajadasTotal} hrs`;
+      document.getElementById('nominaPropinas').textContent = this.formatMoney(r.propinasPeriodo);
+      document.getElementById('nominaDescuentos').textContent = this.formatMoney(r.descuentosTrabajadorPeriodo);
       this.renderDonutChart('nominaAsistenciaChart', [
         { label: 'Presentes', value: r.asistenciasPresentes, color: '#10b981' },
         { label: 'Inasistencias', value: r.inasistencias, color: '#ef4444' }
@@ -2538,8 +2737,8 @@ const app = {
         <tr>
           <td>${d.fecha}</td>
           <td>${d.nombre}</td>
-          <td>${d.horaEntrada || '-'}</td>
-          <td>${d.horaSalida || '-'}</td>
+          <td>${d.sesiones || `${d.horaEntrada || '-'} a ${d.horaSalida || '-'}`}</td>
+          <td>${d.horasDescanso > 0 ? `${d.horasDescanso} hrs` : '-'}</td>
           <td>${d.horasTrabajadas} hrs</td>
           <td>${d.inasistencia ? '<span class="text-danger">Sí</span>' : 'No'}</td>
         </tr>
@@ -2603,6 +2802,11 @@ const app = {
       document.getElementById('dashGastos').textContent = this.formatMoney(data.totalGastos);
       document.getElementById('dashGananciaNeta').textContent = this.formatMoney(data.gananciaNeta);
       document.getElementById('dashMargenNeto').textContent = `Margen Rentabilidad: ${data.margenPorcentaje}%`;
+      document.getElementById('dashDescNegocio').textContent = this.formatMoney(data.totalDescuentoNegocio);
+      document.getElementById('dashDescTrabajador').textContent = this.formatMoney(data.totalDescuentoTrabajador);
+      document.getElementById('dashPropinas').textContent = this.formatMoney(data.totalPropinas);
+      const canc = data.serviciosCancelados || { turnos: 0, ordenes: 0, total: 0 };
+      document.getElementById('dashCancelados').textContent = `${canc.total} (${canc.turnos} turnos • ${canc.ordenes} órdenes)`;
 
       const coloresVehiculo = ['#0077b6', '#00b4d8', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
       const entradasVeh = Object.entries(data.distribucionVehiculos || {});
@@ -2613,7 +2817,7 @@ const app = {
           <div class="ratio-item ${i > 0 ? 'mt-3' : ''}">
             <div class="d-flex justify-between text-sm mb-1">
               <span>${tipo[0].toUpperCase() + tipo.slice(1)}</span>
-              <span>${count} (${Math.round((count / totVeh) * 100)}%)</span>
+              <span>${count} servicios (${Math.round((count / totVeh) * 100)}%) • ${this.formatMoney(((data.porTipoVehiculo || {})[tipo] || {}).ingresos || 0)}</span>
             </div>
             <div class="progress-track"><div class="progress-fill" style="width: ${(count / totVeh) * 100}%; background: ${coloresVehiculo[i % coloresVehiculo.length]}"></div></div>
           </div>
@@ -2625,7 +2829,7 @@ const app = {
       `).join('') || '<p class="text-sm text-muted">Sin servicios en el período</p>';
 
       document.getElementById('dashLavadoresList').innerHTML = Object.entries(data.lavadoresStats || {}).map(([nombre, stat]) => `
-        <div class="stats-row"><span>${nombre}</span><strong>${stat.servicios} lavados • ${this.formatMoney(stat.comision)}</strong></div>
+        <div class="stats-row"><span>${nombre}</span><strong>${stat.servicios} lavados • ${this.formatMoney(stat.comision)}${stat.propinas > 0 ? ` • propinas ${this.formatMoney(stat.propinas)}` : ''}</strong></div>
       `).join('') || '<p class="text-sm text-muted">Sin actividad en el período</p>';
 
       const tbGastos = document.getElementById('gastosTableBody');
@@ -2723,10 +2927,10 @@ const app = {
       await this.loadClients();
       document.getElementById('posClienteSelect').value = data.cliente.id;
       this.onPosClienteChange();
-      setTimeout(() => { if (data.vehiculo) document.getElementById('posVehiculoSelect').value = data.vehiculo.id; }, 100);
+      setTimeout(() => { if (data.vehiculo) { document.getElementById('posVehiculoSelect').value = data.vehiculo.id; this.renderPosServices(); } }, 100);
       if (this.activeTab === 'clientes') this.loadClientesAdmin();
     } catch (err) {
-      this.toast('Error al registrar cliente.', 'error');
+      this.toast(err.message || 'Error al registrar cliente.', 'error');
     }
   },
 

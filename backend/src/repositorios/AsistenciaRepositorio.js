@@ -13,6 +13,9 @@ async function listarPorFecha(fecha) {
 
   const [usuarios] = idsUsuarios.length ? await pool.query(`SELECT id, nombre, rol, jornada_horas_dia FROM usuarios WHERE id IN (?)`, [idsUsuarios]) : [[]];
   const [lavadores] = idsLavadores.length ? await pool.query(`SELECT id, nombre FROM lavadores WHERE id IN (?)`, [idsLavadores]) : [[]];
+  const [sesiones] = filas.length
+    ? await pool.query(`SELECT * FROM asistencia_sesiones WHERE asistencia_id IN (?) ORDER BY hora_entrada, id`, [filas.map(f => f.id)])
+    : [[]];
 
   return filas.map(fila => {
     const persona = fila.persona_tipo === 'usuario'
@@ -21,6 +24,7 @@ async function listarPorFecha(fecha) {
 
     return {
       ...fila,
+      sesiones: sesiones.filter(s => s.asistencia_id === fila.id),
       usuario_id: fila.persona_id, // alias de compatibilidad para el frontend
       usuario_nombre: persona ? persona.nombre : 'Personal',
       usuario_rol: fila.persona_tipo === 'usuario' ? persona?.rol : 'lavador',
@@ -45,31 +49,68 @@ async function crearRegistro({ personaTipo, personaId, fecha, horaEntrada, inasi
      VALUES (?, ?, ?, ?, ?)`,
     [personaTipo, personaId, fecha, inasistencia ? null : horaEntrada, !!inasistencia]
   );
+  if (!inasistencia) {
+    await pool.query(`INSERT INTO asistencia_sesiones (asistencia_id, hora_entrada) VALUES (?, ?)`, [resultado.insertId, horaEntrada]);
+  }
   const [filas] = await pool.query(`SELECT * FROM asistencia WHERE id = ?`, [resultado.insertId]);
   return filas[0];
 }
 
-// horasTrabajadas ya viene neta (sin las horas de descanso/almuerzo); se
-// guarda también horasDescanso para que quede visible en el reporte.
-async function marcarSalida(id, horaSalida, horasTrabajadas, horasDescanso) {
+function horasEntre(horaInicio, horaFin) {
+  const [h1, m1] = String(horaInicio).split(':').map(Number);
+  const [h2, m2] = String(horaFin).split(':').map(Number);
+  return Math.max(0, parseFloat(((h2 + m2 / 60) - (h1 + m1 / 60)).toFixed(2)));
+}
+
+/**
+ * Cierra la sesión abierta del día y la SUMA a lo ya acumulado (nunca
+ * reemplaza): si la persona sale al almuerzo y vuelve a entrar, las horas de
+ * la mañana siguen contando. El descanso/almuerzo se descuenta una sola vez
+ * por día (la primera vez que se registra); después se ignora.
+ */
+async function marcarSalida(id, horaSalida, horasDescanso) {
+  const [regs] = await pool.query(`SELECT * FROM asistencia WHERE id = ?`, [id]);
+  const registro = regs[0];
+  const [abiertas] = await pool.query(
+    `SELECT * FROM asistencia_sesiones WHERE asistencia_id = ? AND hora_salida IS NULL ORDER BY id DESC LIMIT 1`,
+    [id]
+  );
+
+  let horasSesion = 0;
+  if (abiertas[0]) {
+    horasSesion = horasEntre(abiertas[0].hora_entrada, horaSalida);
+    await pool.query(`UPDATE asistencia_sesiones SET hora_salida = ?, horas = ? WHERE id = ?`, [horaSalida, horasSesion, abiertas[0].id]);
+  }
+
+  const descansoAplicado = Number(registro.horas_descanso) > 0 ? 0 : (horasDescanso || 0);
+  const horasNetas = Math.max(0, parseFloat((horasSesion - descansoAplicado).toFixed(2)));
   await pool.query(
-    `UPDATE asistencia SET hora_salida = ?, horas_trabajadas = ?, horas_descanso = ? WHERE id = ?`,
-    [horaSalida, horasTrabajadas, horasDescanso || 0, id]
+    `UPDATE asistencia
+     SET hora_salida = ?, horas_trabajadas = horas_trabajadas + ?, horas_descanso = horas_descanso + ?
+     WHERE id = ?`,
+    [horaSalida, horasNetas, descansoAplicado, id]
   );
   const [filas] = await pool.query(`SELECT * FROM asistencia WHERE id = ?`, [id]);
   return filas[0];
 }
 
-// Al volver a marcar entrada (ej. re-registrar el día) hay que limpiar una
-// salida/horas anteriores del mismo día; si no, la persona queda marcada
-// como "Finalizado" aunque acabe de registrar su entrada de nuevo.
+// Volver a marcar entrada el mismo día abre una sesión nueva y deja la
+// persona como "presente" otra vez, pero conserva la primera hora de
+// entrada, las horas ya acumuladas y el descanso ya registrado.
 async function marcarEntrada(id, horaEntrada) {
   await pool.query(
-    `UPDATE asistencia SET hora_entrada = ?, hora_salida = NULL, horas_trabajadas = 0, horas_descanso = 0, inasistencia = FALSE WHERE id = ?`,
+    `UPDATE asistencia SET hora_entrada = COALESCE(hora_entrada, ?), hora_salida = NULL, inasistencia = FALSE WHERE id = ?`,
     [horaEntrada, id]
   );
+  await pool.query(`INSERT INTO asistencia_sesiones (asistencia_id, hora_entrada) VALUES (?, ?)`, [id, horaEntrada]);
   const [filas] = await pool.query(`SELECT * FROM asistencia WHERE id = ?`, [id]);
   return filas[0];
+}
+
+/** ¿Tiene la persona una sesión abierta (entró y todavía no ha salido)? */
+async function tieneSesionAbierta(id) {
+  const [filas] = await pool.query(`SELECT id FROM asistencia_sesiones WHERE asistencia_id = ? AND hora_salida IS NULL LIMIT 1`, [id]);
+  return filas.length > 0;
 }
 
 async function marcarInasistencia(id, inasistencia) {
@@ -121,6 +162,7 @@ module.exports = {
   crearRegistro,
   marcarSalida,
   marcarEntrada,
+  tieneSesionAbierta,
   marcarInasistencia,
   listarIdsPresentesHoy,
   listarEstadoAsistenciaHoy

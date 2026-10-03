@@ -53,12 +53,13 @@ async function actualizar(id, cambios) {
  * "en_proceso" (se usan para el algoritmo de asignación automática, que
  * prioriza lavadores libres).
  */
-async function obtenerIdsOcupados() {
+async function obtenerIdsOcupados(ordenIdExcluir = null) {
   const [filas] = await pool.query(
     `SELECT DISTINCT ol.lavador_id
      FROM orden_lavadores ol
      INNER JOIN ordenes_servicio o ON o.id = ol.orden_id
-     WHERE o.estado = 'en_proceso'`
+     WHERE o.estado = 'en_proceso' ${ordenIdExcluir ? 'AND o.id <> ?' : ''}`,
+    ordenIdExcluir ? [ordenIdExcluir] : []
   );
   return filas.map(f => f.lavador_id);
 }

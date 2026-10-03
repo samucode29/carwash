@@ -40,6 +40,37 @@ async function contarPendientesPorFecha(fecha) {
   };
 }
 
+/**
+ * Citas que quedaron sin atender al cerrar el día: las de la fecha de cierre
+ * (o de días anteriores que nunca se atendieron ni cancelaron) que siguen
+ * "agendada"/"reprogramada". Al cerrar caja se avisa y, si se confirma, se
+ * dan por canceladas.
+ */
+async function listarCitasPendientes(fecha) {
+  const [filas] = await pool.query(
+    `SELECT c.id, c.fecha, c.hora, c.estado,
+            COALESCE(cl.nombre, NULLIF(c.cliente_nombre_temp, ''), 'Anónimo') AS cliente_nombre,
+            COALESCE(v.placa, NULLIF(c.placa_temp, ''), 'N/A') AS placa,
+            s.nombre AS servicio_nombre
+     FROM citas c
+     LEFT JOIN clientes cl ON cl.id = c.cliente_id
+     LEFT JOIN vehiculos v ON v.id = c.vehiculo_id
+     LEFT JOIN servicios s ON s.id = c.servicio_id
+     WHERE c.fecha <= ? AND c.estado IN ('agendada', 'reprogramada')
+     ORDER BY c.fecha, c.hora`,
+    [fecha]
+  );
+  return filas;
+}
+
+async function cancelarCitasPendientes(fecha) {
+  const [resultado] = await pool.query(
+    `UPDATE citas SET estado = 'cancelada' WHERE fecha <= ? AND estado IN ('agendada', 'reprogramada')`,
+    [fecha]
+  );
+  return resultado.affectedRows;
+}
+
 async function obtenerResumenPorFecha(fecha) {
   const [filas] = await pool.query(
     `SELECT p.metodo_pago, SUM(p.monto) AS total, SUM(p.propina) AS propinas, COUNT(*) AS cantidad
@@ -90,4 +121,7 @@ async function listarHistorialCierres() {
   return filas;
 }
 
-module.exports = { registrarPago, obtenerResumenPorFecha, contarPendientesPorFecha, obtenerCierrePorFecha, crearCierre, listarHistorialCierres };
+module.exports = {
+  registrarPago, obtenerResumenPorFecha, contarPendientesPorFecha, listarCitasPendientes, cancelarCitasPendientes,
+  obtenerCierrePorFecha, crearCierre, listarHistorialCierres
+};

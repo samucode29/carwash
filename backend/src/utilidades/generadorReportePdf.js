@@ -40,11 +40,15 @@ function generarPdfReporte(res, reporte, opciones = {}) {
   const filasResumen = [
     ['Ingresos Totales', formatearMoneda(reporte.totalIngresos)],
     ['Costo de Insumos', formatearMoneda(reporte.costoInsumos)],
-    ['Comisiones de Lavadores', formatearMoneda(reporte.totalComisionesLavadores)],
+    ['Comisiones de Lavadores (netas)', formatearMoneda(reporte.totalComisionesLavadores)],
     ['Gastos Operativos', formatearMoneda(reporte.totalGastos)],
     ['Ganancia Neta', formatearMoneda(reporte.gananciaNeta)],
     ['Margen Neto', `${reporte.margenPorcentaje}%`],
-    ['Órdenes Atendidas', String(reporte.serviciosAtendidos)]
+    ['Órdenes Atendidas', String(reporte.serviciosAtendidos)],
+    ['Descuentos asumidos por el negocio', formatearMoneda(reporte.totalDescuentoNegocio)],
+    ['Descuentos asumidos por los lavadores', formatearMoneda(reporte.totalDescuentoTrabajador)],
+    ['Propinas (100% de los lavadores, no son ingreso)', formatearMoneda(reporte.totalPropinas)],
+    ['Servicios cancelados (valor $0)', String(reporte.serviciosCancelados ? reporte.serviciosCancelados.total : 0)]
   ];
   filasResumen.forEach(([etiqueta, valor]) => {
     doc.fontSize(11).fillColor('#333').text(etiqueta, 50, doc.y, { continued: true, width: 300 });
@@ -53,17 +57,23 @@ function generarPdfReporte(res, reporte, opciones = {}) {
 
   doc.moveDown(1.2);
 
-  // Distribución por vehículo
-  doc.fontSize(13).fillColor('#111').text('Vehículos Atendidos', { underline: true });
+  // Distribución por tipo de vehículo (todos los tipos que se atendieron)
+  doc.fontSize(13).fillColor('#111').text('Vehículos Atendidos por Tipo', { underline: true });
   doc.moveDown(0.4);
-  doc.fontSize(11).fillColor('#333').text(`Carros: ${reporte.distribucionVehiculos.carro}   |   Motos: ${reporte.distribucionVehiculos.moto}`);
+  const tiposVehiculo = Object.entries(reporte.porTipoVehiculo || {});
+  tiposVehiculo.forEach(([tipo, stat]) => {
+    doc.fontSize(11).fillColor('#333').text(`${tipo[0].toUpperCase() + tipo.slice(1)}: ${stat.servicios} servicios - ${formatearMoneda(stat.ingresos)}`);
+  });
+  if (tiposVehiculo.length === 0) {
+    doc.fontSize(10).fillColor('#888').text('Sin vehículos atendidos en el período.');
+  }
   doc.moveDown(1);
 
   // Servicios más solicitados
   doc.fontSize(13).fillColor('#111').text('Ventas por Servicio', { underline: true });
   doc.moveDown(0.4);
   Object.entries(reporte.serviciosStats).forEach(([nombre, stat]) => {
-    doc.fontSize(10).fillColor('#333').text(`${nombre}: ${stat.count} atendidos - ${formatearMoneda(stat.total)}`);
+    doc.fontSize(10).fillColor('#333').text(`${nombre} (${stat.tipoVehiculo || '-'}): ${stat.count} atendidos - ${formatearMoneda(stat.total)}`);
   });
   if (Object.keys(reporte.serviciosStats).length === 0) {
     doc.fontSize(10).fillColor('#888').text('Sin servicios registrados en el período.');
@@ -75,7 +85,7 @@ function generarPdfReporte(res, reporte, opciones = {}) {
   doc.fontSize(13).fillColor('#111').text('Productividad por Lavador', { underline: true });
   doc.moveDown(0.4);
   Object.entries(reporte.lavadoresStats).forEach(([nombre, stat]) => {
-    doc.fontSize(10).fillColor('#333').text(`${nombre}: ${stat.servicios} lavados - Comisión ${formatearMoneda(stat.comision)}`);
+    doc.fontSize(10).fillColor('#333').text(`${nombre}: ${stat.servicios} lavados - Comisión ${formatearMoneda(stat.comision)} - Propinas ${formatearMoneda(stat.propinas)}`);
   });
   if (Object.keys(reporte.lavadoresStats).length === 0) {
     doc.fontSize(10).fillColor('#888').text('Sin actividad de lavadores en el período.');

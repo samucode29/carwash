@@ -55,6 +55,11 @@ async function obtenerVehiculoPorPlaca(placa) {
   return filas[0] || null;
 }
 
+async function obtenerVehiculoPorId(id) {
+  const [filas] = await pool.query(`SELECT * FROM vehiculos WHERE id = ?`, [id]);
+  return filas[0] || null;
+}
+
 async function crearVehiculo(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO vehiculos (cliente_id, placa, tipo, marca, color) VALUES (?, ?, ?, ?, ?)`,
@@ -104,6 +109,7 @@ module.exports = {
   obtenerClientePorId,
   actualizarCliente,
   obtenerVehiculoPorPlaca,
+  obtenerVehiculoPorId,
   crearVehiculo,
   actualizarVehiculoCliente,
   agregarNota,

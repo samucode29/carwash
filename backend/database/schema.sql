@@ -129,7 +129,11 @@ CREATE TABLE cliente_notas (
 CREATE TABLE servicios (
     id                      INT AUTO_INCREMENT PRIMARY KEY,
     nombre                  VARCHAR(100) NOT NULL,
-    tipo_vehiculo           VARCHAR(30) NULL, -- NULL = aplica a todos los tipos (reemplaza al antiguo valor fijo 'ambos')
+    -- Cada servicio es para UN tipo de vehículo del catálogo `tipos_vehiculo`
+    -- (carro, moto, camioneta...): ya no existe "todos los tipos". Un servicio
+    -- que aplica a varios tipos se registra una vez por cada tipo, así los
+    -- turnos, citas, órdenes y reportes siempre se pueden discriminar por tipo.
+    tipo_vehiculo           VARCHAR(30) NOT NULL,
     descripcion             VARCHAR(255),
     precio                  DECIMAL(12,2) NOT NULL,
     duracion_estimada_min   INT NOT NULL,
@@ -203,6 +207,9 @@ CREATE TABLE citas (
     cliente_nombre_temp    VARCHAR(150),
     cliente_telefono_temp  VARCHAR(20),
     placa_temp             VARCHAR(15),
+    -- Tipo de vehículo de una cita anónima (sin vehículo registrado), para
+    -- poder validar que el servicio elegido sea de ese tipo.
+    tipo_vehiculo          VARCHAR(30),
     -- Nota libre al agendar (ej. "recién pintado, no polichar"): se pasa a
     -- la orden cuando la cita se atiende, para que el lavador la vea.
     observacion     VARCHAR(500),
@@ -448,6 +455,19 @@ CREATE TABLE asistencia (
     horas_descanso    DECIMAL(4,2) NOT NULL DEFAULT 0, -- almuerzo/descanso; no cuenta en horas_trabajadas
     inasistencia      BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE KEY uq_asistencia_persona_fecha (persona_tipo, persona_id, fecha)
+) ENGINE=InnoDB;
+
+-- Cada vez que una persona marca entrada y luego salida en el mismo día queda
+-- una sesión aquí, así volver a entrar (ej. después del almuerzo) NUNCA borra
+-- lo ya registrado: `asistencia.horas_trabajadas` acumula todas las sesiones
+-- del día y el descanso/almuerzo se registra una sola vez por día.
+CREATE TABLE asistencia_sesiones (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    asistencia_id  INT NOT NULL,
+    hora_entrada   TIME NOT NULL,
+    hora_salida    TIME NULL,
+    horas          DECIMAL(5,2) NOT NULL DEFAULT 0, -- horas brutas de esta sesión
+    CONSTRAINT fk_asesion_asistencia FOREIGN KEY (asistencia_id) REFERENCES asistencia(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- ============================================================================

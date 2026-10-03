@@ -134,7 +134,7 @@
                 <div class="form-row">
                   <div class="form-group flex-1">
                     <label>Vehículo Asociado:</label>
-                    <select id="posVehiculoSelect">
+                    <select id="posVehiculoSelect" onchange="app.renderPosServices()">
                       <option value="">-- Seleccione el vehículo --</option>
                     </select>
                   </div>
@@ -150,10 +150,7 @@
                   </div>
                   <div class="form-group flex-1">
                     <label>Tipo de Vehículo:</label>
-                    <select id="posAnonTipo" onchange="app.filterServicesByVehicleType()">
-                      <option value="carro">Carro / Camioneta</option>
-                      <option value="moto">Moto</option>
-                    </select>
+                    <select id="posAnonTipo" onchange="app.filterServicesByVehicleType()"></select>
                   </div>
                 </div>
               </div>
@@ -540,16 +537,19 @@
           <div id="subtab-asistencia" class="subtab-content mt-3">
             <div class="card-table-wrapper">
               <div class="panel-header">
-                <h4>Asistencia del Personal (Hoy)</h4>
-                <span class="text-sm text-muted">Control de horas de entrada, salida y cálculo proporcional para nómina</span>
+                <h4 id="asistenciaTitulo">Asistencia del Personal (Hoy)</h4>
+                <div class="d-flex gap-2" style="align-items: center">
+                  <label class="text-sm text-muted" for="asistFechaFiltro">Ver día:</label>
+                  <input type="date" id="asistFechaFiltro" class="date-input" onchange="app.loadNomina()">
+                </div>
               </div>
+              <p class="text-sm text-muted" style="padding: 0 16px">Cada entrada y salida queda guardada: si alguien sale y vuelve a entrar el mismo día, las horas anteriores se conservan y se suman. El descanso/almuerzo se registra una sola vez al día. Cambia el día para consultar el historial.</p>
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>Personal</th>
                     <th>Rol</th>
-                    <th>Entrada</th>
-                    <th>Salida</th>
+                    <th>Entradas y Salidas</th>
                     <th>Descanso</th>
                     <th>Horas Laboradas</th>
                     <th>Estado</th>
@@ -776,11 +776,35 @@
             </div>
           </div>
 
+          <!-- Descuentos, propinas y cancelados del período (no alteran la fórmula de arriba) -->
+          <div class="kpi-grid mt-3">
+            <div class="kpi-card">
+              <span class="kpi-title">Descuentos del Negocio</span>
+              <span class="kpi-value text-danger" id="dashDescNegocio">$0</span>
+              <span class="kpi-subtitle">Ya restados de los ingresos</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-title">Descuentos a Lavadores</span>
+              <span class="kpi-value text-warning" id="dashDescTrabajador">$0</span>
+              <span class="kpi-subtitle">Ya restados de sus comisiones</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-title">Propinas</span>
+              <span class="kpi-value text-success" id="dashPropinas">$0</span>
+              <span class="kpi-subtitle">100% de los lavadores, no son ingreso</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-title">Servicios Cancelados</span>
+              <span class="kpi-value" id="dashCancelados">0</span>
+              <span class="kpi-subtitle">Valen $0, no cuentan como ingreso</span>
+            </div>
+          </div>
+
           <!-- Gráficos y Distribución -->
           <div class="grid-3-cols mt-4">
-            <!-- 1. Distribución Carros vs Motos -->
+            <!-- 1. Servicios e ingresos por tipo de vehículo -->
             <div class="chart-card">
-              <h4>Vehículos Atendidos</h4>
+              <h4>Vehículos Atendidos por Tipo</h4>
               <div class="vehicle-ratio-bars mt-3" id="dashVehiculosRatioBars"></div>
             </div>
 
@@ -954,6 +978,16 @@
                 <span class="kpi-title">Horas Trabajadas</span>
                 <span class="kpi-value" id="nominaHoras">0 hrs</span>
               </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Propinas a Lavadores</span>
+                <span class="kpi-value text-success" id="nominaPropinas">$0</span>
+                <span class="kpi-subtitle">Recibidas en el período</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-title">Descuentos a Lavadores</span>
+                <span class="kpi-value text-warning" id="nominaDescuentos">$0</span>
+                <span class="kpi-subtitle">Asumidos por los lavadores</span>
+              </div>
             </div>
             <div class="grid-3-cols mt-4">
               <div class="chart-card">
@@ -1041,7 +1075,7 @@
             <div class="card-table-wrapper mt-4">
               <div class="panel-header"><h4>Detalle Día a Día</h4></div>
               <table class="data-table data-table-sm">
-                <thead><tr><th>Fecha</th><th>Trabajador</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Inasistencia</th></tr></thead>
+                <thead><tr><th>Fecha</th><th>Trabajador</th><th>Entradas y Salidas</th><th>Descanso</th><th>Horas</th><th>Inasistencia</th></tr></thead>
                 <tbody id="asistDetalleBody"></tbody>
               </table>
             </div>
@@ -1181,10 +1215,7 @@
           </div>
           <div class="form-group flex-1">
             <label>Tipo: *</label>
-            <select id="newClientTipo">
-              <option value="carro">Carro / Camioneta</option>
-              <option value="moto">Moto</option>
-            </select>
+            <select id="newClientTipo"></select>
           </div>
         </div>
         <div class="form-row">
@@ -1238,10 +1269,7 @@
           </div>
           <div class="form-group flex-1">
             <label>Tipo:</label>
-            <select id="editClienteNuevoTipo">
-              <option value="carro">Carro / Camioneta</option>
-              <option value="moto">Moto</option>
-            </select>
+            <select id="editClienteNuevoTipo"></select>
           </div>
           <div class="form-group flex-1">
             <label>Marca:</label>
@@ -1300,7 +1328,7 @@
         </div>
         <div id="citaCampoVehiculo" class="form-group hidden">
           <label>Vehículo:</label>
-          <select id="citaVehiculoSelect"></select>
+          <select id="citaVehiculoSelect" onchange="app.refrescarServiciosCita()"></select>
         </div>
         <div id="citaCamposAnonimos" class="form-row">
           <div class="form-group flex-1">
@@ -1311,10 +1339,15 @@
             <label>Placa / Vehículo:</label>
             <input type="text" id="citaAnonPlaca" placeholder="ABC-123" oninput="this.value = this.value.toUpperCase()">
           </div>
+          <div class="form-group flex-1">
+            <label>Tipo de Vehículo:</label>
+            <select id="citaAnonTipo" onchange="app.refrescarServiciosCita()"></select>
+          </div>
         </div>
         <div class="form-group">
           <label>Servicio Solicitado:</label>
           <select id="citaServicioSelect"></select>
+          <p class="text-sm text-muted mt-1">Solo se muestran los servicios del tipo de vehículo elegido.</p>
         </div>
         <div class="form-row">
           <div class="form-group flex-1">
@@ -1353,14 +1386,12 @@
         </div>
         <div class="form-group">
           <label>Tipo de Vehículo:</label>
-          <select id="turnoTipo">
-            <option value="carro">Carro</option>
-            <option value="moto">Moto</option>
-          </select>
+          <select id="turnoTipo" onchange="app.refrescarServiciosTurno()"></select>
         </div>
         <div class="form-group">
           <label>Servicio:</label>
           <select id="turnoServicioSelect"></select>
+          <p class="text-sm text-muted mt-1">Solo se muestran los servicios del tipo de vehículo elegido.</p>
         </div>
         <div class="form-group">
           <label>Observación (opcional):</label>
@@ -1409,7 +1440,7 @@
         <button class="close-btn" onclick="app.closeModal('modalServicioExtra')">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="text-sm text-muted mb-2">Se suma al total de este mismo vehículo (no genera un turno nuevo).</p>
+        <p class="text-sm text-muted mb-2" id="servicioExtraNota">Se suma al total de este mismo vehículo (no genera un turno nuevo). Solo se muestran servicios de su tipo de vehículo.</p>
         <div class="form-group">
           <label>Servicio a agregar:</label>
           <select id="servicioExtraSelect"></select>
@@ -1748,6 +1779,7 @@
       </div>
       <div class="modal-body">
         <p class="text-sm text-muted mb-3">Se consolidarán las ventas del día por cada método de pago. Una vez cerrada, queda registrada en auditoría.</p>
+        <p class="text-sm text-danger mb-3 hidden" id="cierreAvisoCitas" style="font-weight: 600"></p>
         <div class="pay-summary">
           <span class="pay-label">Total en Caja Hoy:</span>
           <span class="pay-amount" id="modalCierreTotalGeneral">$0</span>
@@ -1852,7 +1884,7 @@
       <div class="modal-body">
         <div class="form-group">
           <label>Seleccionar Trabajador:</label>
-          <select id="asistPersonalSelect"></select>
+          <select id="asistPersonalSelect" onchange="app.actualizarVisibilidadDescanso()"></select>
         </div>
         <div class="form-group">
           <label>Tipo de Registro:</label>
@@ -1865,8 +1897,9 @@
         <div class="form-group" id="asistDescansoWrapper" style="display:none">
           <label>Horas de Descanso/Almuerzo (no cuentan para el pago):</label>
           <input type="number" id="asistHorasDescanso" min="0" step="0.5" value="0">
-          <p class="text-sm text-muted">Déjalo en 0 si no hubo descanso. Si hubo, debe ser de mínimo 1 hora (puede poner más, ej. 1.5, 2, 3...).</p>
+          <p class="text-sm text-muted">Déjalo en 0 si no hubo descanso. Si hubo, debe ser de mínimo 1 hora (puede poner más, ej. 1.5, 2, 3...). Solo se pide una vez al día.</p>
         </div>
+        <p class="text-sm text-success" id="asistDescansoYaRegistrado" style="display:none"></p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalAsistencia')">Cancelar</button>
@@ -2163,10 +2196,9 @@
         </div>
         <div class="form-row">
           <div class="form-group flex-1">
-            <label>Tipo de Vehículo:</label>
-            <select id="servTipoVehiculo">
-              <option value="">Todos los tipos</option>
-            </select>
+            <label>Tipo de Vehículo: *</label>
+            <select id="servTipoVehiculo"></select>
+            <p class="text-sm text-muted mt-1">El servicio solo se ofrece para este tipo de vehículo. Si aplica a varios tipos, créelo una vez por cada tipo.</p>
           </div>
           <div class="form-group flex-1">
             <label>Duración Estimada (min): *</label>

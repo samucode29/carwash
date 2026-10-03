@@ -20,7 +20,7 @@ function mapearCita(fila) {
     cliente_nombre: fila.cliente_nombre_reg || fila.cliente_nombre_temp || 'Anónimo',
     cliente_telefono: fila.cliente_telefono_reg || fila.cliente_telefono_temp || '',
     placa: fila.placa_reg || fila.placa_temp || 'N/A',
-    tipo_vehiculo: fila.tipo_vehiculo_reg || 'carro'
+    tipo_vehiculo: fila.tipo_vehiculo_reg || fila.tipo_vehiculo || 'carro'
   };
 }
 
@@ -48,12 +48,12 @@ async function crearCita(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO citas
       (cliente_id, vehiculo_id, servicio_id, fecha, hora, estado,
-       cliente_nombre_temp, cliente_telefono_temp, placa_temp, observacion, registrado_por)
-     VALUES (?, ?, ?, ?, ?, 'agendada', ?, ?, ?, ?, ?)`,
+       cliente_nombre_temp, cliente_telefono_temp, placa_temp, tipo_vehiculo, observacion, registrado_por)
+     VALUES (?, ?, ?, ?, ?, 'agendada', ?, ?, ?, ?, ?, ?)`,
     [
       datos.clienteId || null, datos.vehiculoId || null, datos.servicioId, datos.fecha, datos.hora,
       datos.clienteNombreTemp || '', datos.clienteTelefonoTemp || '', datos.placaTemp || '',
-      datos.observacion || null, datos.registradoPor
+      datos.tipoVehiculo || null, datos.observacion || null, datos.registradoPor
     ]
   );
   return obtenerCitaPorId(resultado.insertId);

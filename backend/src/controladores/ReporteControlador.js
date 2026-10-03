@@ -56,18 +56,26 @@ async function descargarReporteVentasPdf(req, res) {
       { titulo: 'Resumen', filas: [
         ['Total Vendido', formatearMoneda(r.totalVentas)],
         ['Cantidad de Ventas', String(r.cantidadVentas)],
-        ['Ticket Promedio', formatearMoneda(r.ticketPromedio)]
+        ['Ticket Promedio', formatearMoneda(r.ticketPromedio)],
+        ['Propinas (100% de los lavadores, no son ingreso)', formatearMoneda(r.totalPropinas)]
       ] },
       { titulo: 'Por Servicio', filas: Object.entries(r.porServicio).map(([k, v]) => [k, formatearMoneda(v)]) },
       { titulo: 'Por Método de Pago', filas: Object.entries(r.porMetodoPago).map(([k, v]) => [k.toUpperCase(), formatearMoneda(v)]) },
-      { titulo: 'Por Tipo de Vehículo', filas: [['Carros', formatearMoneda(r.porVehiculo.carro)], ['Motos', formatearMoneda(r.porVehiculo.moto)]] },
+      { titulo: 'Por Tipo de Vehículo', filas: [], tabla: {
+        encabezados: ['Tipo de Vehículo', 'Servicios', 'Total Vendido'],
+        filas: Object.entries(r.porVehiculo).map(([tipo, v]) => [tipo[0].toUpperCase() + tipo.slice(1), String(r.cantidadPorVehiculo[tipo] || 0), formatearMoneda(v)])
+      } },
       { titulo: 'Por Lavador', filas: [], tabla: {
-        encabezados: ['Lavador', 'Servicios Atendidos', 'Comisión Generada'],
-        filas: r.porLavador.map(l => [l.nombre, String(l.servicios), formatearMoneda(l.comision)])
+        encabezados: ['Lavador', 'Servicios Atendidos', 'Comisión (neta)', 'Propinas'],
+        filas: r.porLavador.map(l => [l.nombre, String(l.servicios), formatearMoneda(l.comision), formatearMoneda(l.propinas)])
       } },
       { titulo: 'Top 5 Clientes', tabla: {
         encabezados: ['Cliente', 'Compras', 'Total'],
         filas: r.topClientes.map(c => [c.nombre, String(c.cantidad), formatearMoneda(c.total)])
+      } },
+      { titulo: 'Detalle de Propinas', filas: [], tabla: {
+        encabezados: ['Fecha', 'Servicio', 'Cliente', 'Lavador', 'Propina'],
+        filas: r.detallePropinas.map(p => [String(p.fecha).substring(0, 10), `#${p.ordenId} ${p.servicio}`, p.cliente, p.lavador, formatearMoneda(p.valor)])
       } }
     ]
   });
@@ -147,6 +155,10 @@ async function descargarReporteNominaPdf(req, res) {
         ['Liquidaciones Pendientes', formatearMoneda(r.liquidacionesPendientesTotal)],
         ['Cantidad Pendiente', String(r.liquidacionesPendientesCantidad)]
       ] },
+      { titulo: 'Propinas y Descuentos a Lavadores (período)', filas: [
+        ['Propinas recibidas por los lavadores', formatearMoneda(r.propinasPeriodo)],
+        ['Descuentos asumidos por los lavadores', formatearMoneda(r.descuentosTrabajadorPeriodo)]
+      ] },
       { titulo: 'Asistencia', filas: [
         ['Días Presentes Registrados', String(r.asistenciasPresentes)],
         ['Inasistencias', String(r.inasistencias)],
@@ -218,6 +230,11 @@ async function descargarReporteOperativoPdf(req, res) {
       { titulo: 'Clientes', filas: [
         ['Clientes Nuevos', String(r.clientesNuevos)],
         ['Clientes Recurrentes', String(r.clientesRecurrentes)]
+      ] },
+      { titulo: 'Servicios Cancelados (valor $0)', filas: [
+        ['Turnos cancelados', String(r.serviciosCancelados.turnos)],
+        ['Órdenes canceladas', String(r.serviciosCancelados.ordenes)],
+        ['Total cancelados', String(r.serviciosCancelados.total)]
       ] }
     ]
   });
@@ -249,8 +266,8 @@ async function descargarReporteAsistenciaPdf(req, res) {
         filas: r.porTrabajador.map(t => [t.nombre, t.rol, String(t.presentes), String(t.inasistencias), `${t.horasTrabajadas} hrs`])
       } },
       { titulo: 'Detalle Día a Día', filas: [], tabla: {
-        encabezados: ['Fecha', 'Trabajador', 'Entrada', 'Salida', 'Horas', 'Inasistencia'],
-        filas: r.detalle.map(d => [d.fecha, d.nombre, d.horaEntrada || '-', d.horaSalida || '-', String(d.horasTrabajadas), d.inasistencia ? 'Sí' : 'No'])
+        encabezados: ['Fecha', 'Trabajador', 'Entradas y salidas', 'Descanso', 'Horas', 'Inasistencia'],
+        filas: r.detalle.map(d => [d.fecha, d.nombre, d.sesiones || `${d.horaEntrada || '-'} a ${d.horaSalida || '-'}`, d.horasDescanso > 0 ? `${d.horasDescanso} hrs` : '-', String(d.horasTrabajadas), d.inasistencia ? 'Sí' : 'No'])
       } }
     ]
   });

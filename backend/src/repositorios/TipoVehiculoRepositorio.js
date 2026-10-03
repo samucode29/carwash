@@ -17,6 +17,11 @@ async function obtenerPorNombre(nombre) {
   return filas[0] || null;
 }
 
+async function obtenerActivoPorNombre(nombre) {
+  const [filas] = await pool.query(`SELECT * FROM tipos_vehiculo WHERE nombre = ? AND estado = 'activo'`, [nombre]);
+  return filas[0] || null;
+}
+
 async function crear(nombre) {
   const [resultado] = await pool.query(
     `INSERT INTO tipos_vehiculo (nombre) VALUES (?)`,
@@ -32,4 +37,4 @@ async function actualizarEstado(id, estado) {
   return filas[0] || null;
 }
 
-module.exports = { listar, obtenerPorNombre, crear, actualizarEstado };
+module.exports = { listar, obtenerPorNombre, obtenerActivoPorNombre, crear, actualizarEstado };

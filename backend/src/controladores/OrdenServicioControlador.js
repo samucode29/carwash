@@ -10,8 +10,10 @@ const ServicioRepositorio = require('../repositorios/ServicioRepositorio');
 const LavadorRepositorio = require('../repositorios/LavadorRepositorio');
 const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
 const AgendaRepositorio = require('../repositorios/AgendaRepositorio');
+const ClienteRepositorio = require('../repositorios/ClienteRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
+const { exigirServicioParaVehiculo } = require('../utilidades/vehiculos');
 
 async function listarOrdenes(req, res) {
   const { estado, fecha } = req.query;
@@ -35,22 +37,34 @@ const MAX_LAVADORES_POR_ORDEN = 3;
  * atienden varios lavadores el mismo servicio, la comisión total es un
  * 60% plano del precio del servicio, dividido en partes iguales entre
  * todos — no se suman los porcentajes individuales de cada uno.
+ *
+ * Un lavador solo puede atender UN servicio a la vez: si ya tiene una orden
+ * "en_proceso" (distinta de `ordenIdExcluir`, la que se está reasignando), no
+ * se le puede asignar otra hasta que la termine, ni manual ni automáticamente.
  */
-async function calcularAsignacionLavadores(lavadoresIds, precioServicio) {
+async function calcularAsignacionLavadores(lavadoresIds, precioServicio, ordenIdExcluir = null) {
   if (Array.isArray(lavadoresIds) && lavadoresIds.length > MAX_LAVADORES_POR_ORDEN) {
     throw Object.assign(new Error(`Un servicio admite máximo ${MAX_LAVADORES_POR_ORDEN} lavadores.`), { codigoHttp: 400 });
   }
 
   const presentesIds = new Set(await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy()));
+  const idsOcupados = new Set(await LavadorRepositorio.obtenerIdsOcupados(ordenIdExcluir));
   let lavadoresElegidos = [];
 
   if (Array.isArray(lavadoresIds) && lavadoresIds.length > 0) {
     const noDisponibles = [];
+    const ocupados = [];
+    const yaElegidos = new Set();
     for (const idCrudo of lavadoresIds) {
       const lavador = await LavadorRepositorio.obtenerActivoPorId(parseInt(idCrudo, 10));
-      if (!lavador) continue;
+      if (!lavador || yaElegidos.has(lavador.id)) continue;
+      yaElegidos.add(lavador.id);
       if (!presentesIds.has(lavador.id)) {
         noDisponibles.push(lavador.nombre);
+        continue;
+      }
+      if (idsOcupados.has(lavador.id)) {
+        ocupados.push(lavador.nombre);
         continue;
       }
       lavadoresElegidos.push({ lavador, automatica: false });
@@ -59,8 +73,11 @@ async function calcularAsignacionLavadores(lavadoresIds, precioServicio) {
       const verbo = noDisponibles.length > 1 ? 'no han registrado entrada hoy' : 'no ha registrado entrada hoy';
       throw Object.assign(new Error(`${noDisponibles.join(', ')} ${verbo} y no puede ser asignado a un servicio.`), { codigoHttp: 400 });
     }
+    if (ocupados.length > 0) {
+      const frase = ocupados.length > 1 ? 'ya están atendiendo otro servicio' : 'ya está atendiendo otro servicio';
+      throw Object.assign(new Error(`${ocupados.join(', ')} ${frase} y no se puede asignar hasta que lo termine.`), { codigoHttp: 400 });
+    }
   } else {
-    const idsOcupados = new Set(await LavadorRepositorio.obtenerIdsOcupados());
     const activos = await LavadorRepositorio.listar({ soloActivos: true });
     const libre = activos.find(l => presentesIds.has(l.id) && !idsOcupados.has(l.id));
     if (libre) lavadoresElegidos.push({ lavador: libre, automatica: true });
@@ -91,9 +108,10 @@ async function crearOrden(req, res) {
   let citaId = cita_id ? parseInt(cita_id, 10) : null;
   let observacion = null;
   let serviciosExtraTurno = [];
+  let turno = null;
   if (turno_id) {
     const turnoIdNum = parseInt(turno_id, 10);
-    const turno = await AgendaRepositorio.obtenerTurnoPorId(turnoIdNum);
+    turno = await AgendaRepositorio.obtenerTurnoPorId(turnoIdNum);
     if (turno) {
       if (!citaId && turno.cita_id) citaId = turno.cita_id;
       observacion = turno.observacion || null;
@@ -101,10 +119,47 @@ async function crearOrden(req, res) {
     const extrasPorTurno = await AgendaRepositorio.obtenerServiciosExtraPorTurnos([turnoIdNum]);
     serviciosExtraTurno = extrasPorTurno[turnoIdNum] || [];
   }
-  if (!observacion && citaId) {
-    const cita = await AgendaRepositorio.obtenerCitaPorId(citaId);
-    if (cita) observacion = cita.observacion || null;
+
+  // Una cita solo se atiende el mismo día para el que fue agendada y mientras
+  // siga pendiente: una cita de otro día (o ya cancelada/atendida) no se puede
+  // convertir en servicio.
+  let cita = null;
+  if (citaId) {
+    cita = await AgendaRepositorio.obtenerCitaPorId(citaId);
+    if (!cita) return res.status(404).json({ error: 'Cita no encontrada.' });
+    if (!['agendada', 'reprogramada'].includes(cita.estado)) {
+      return res.status(400).json({ error: `Esta cita está ${cita.estado}; ya no se puede atender.` });
+    }
+    if (cita.fecha !== obtenerFechaHoy()) {
+      return res.status(400).json({ error: `Esta cita es del ${cita.fecha}; solo se puede atender el mismo día para el que fue agendada.` });
+    }
+    if (!observacion) observacion = cita.observacion || null;
   }
+
+  const clienteId = cliente_id ? parseInt(cliente_id, 10) : null;
+  const vehiculoId = vehiculo_id ? parseInt(vehiculo_id, 10) : null;
+  let esVentaAnonima = !!es_venta_anonima;
+  let placaAnonima = placa_anonima ? placa_anonima.toUpperCase().trim() : null;
+  let tipoVehiculoAnonimo = tipo_vehiculo_anonimo || null;
+  // Una cita anónima (sin cliente ni vehículo registrado) se atiende como
+  // venta anónima con la placa y el tipo de vehículo con que se agendó.
+  if (cita && !clienteId && !vehiculoId && !esVentaAnonima) {
+    esVentaAnonima = true;
+    placaAnonima = cita.placa_temp ? cita.placa_temp.toUpperCase().trim() : null;
+    tipoVehiculoAnonimo = cita.tipo_vehiculo || null;
+  }
+
+  // El servicio tiene que ser del tipo de vehículo que se va a atender.
+  let tipoVehiculo = null;
+  if (vehiculoId) {
+    const vehiculo = await ClienteRepositorio.obtenerVehiculoPorId(vehiculoId);
+    tipoVehiculo = vehiculo ? vehiculo.tipo : null;
+  } else if (esVentaAnonima && tipoVehiculoAnonimo) {
+    tipoVehiculo = tipoVehiculoAnonimo;
+  } else if (turno) {
+    tipoVehiculo = turno.tipo_vehiculo;
+  }
+  exigirServicioParaVehiculo(servicio, tipoVehiculo);
 
   const totalExtras = serviciosExtraTurno.reduce((suma, e) => suma + Number(e.precio), 0);
   const totalOrden = Number(servicio.precio) + totalExtras;
@@ -114,12 +169,12 @@ async function crearOrden(req, res) {
   const ordenId = await OrdenServicioRepositorio.crearOrdenConAsignacion({
     citaId,
     turnoId: turno_id ? parseInt(turno_id, 10) : null,
-    clienteId: cliente_id ? parseInt(cliente_id, 10) : null,
-    vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null,
+    clienteId,
+    vehiculoId,
     servicioId: servicio.id,
-    esVentaAnonima: !!es_venta_anonima,
-    placaAnonima: placa_anonima ? placa_anonima.toUpperCase().trim() : null,
-    tipoVehiculoAnonimo: tipo_vehiculo_anonimo || null,
+    esVentaAnonima,
+    placaAnonima,
+    tipoVehiculoAnonimo,
     total: totalOrden,
     observacion,
     registradoPor: req.usuarioAutenticado.id,
@@ -151,8 +206,14 @@ async function actualizarEstadoOrden(req, res) {
   const orden = await OrdenServicioRepositorio.obtenerOrdenPorId(id);
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
 
-  if (estado === 'cancelado' && orden.estado === 'entregado') {
-    return res.status(400).json({ error: 'No se puede cancelar una orden ya entregada y pagada.' });
+  // Un servicio que ya terminó (listo para cobrar) o ya fue entregado no se
+  // puede cancelar: el trabajo está hecho y solo falta cobrarlo (o ya se cobró).
+  if (estado === 'cancelado' && ['terminado', 'entregado'].includes(orden.estado)) {
+    return res.status(400).json({
+      error: orden.estado === 'entregado'
+        ? 'No se puede cancelar una orden ya entregada y pagada.'
+        : 'No se puede cancelar un servicio que ya está listo para cobrar. Cóbrelo (puede aplicar un descuento si corresponde).'
+    });
   }
 
   if (ESTADOS_QUE_REQUIEREN_LAVADOR.includes(estado)) {
@@ -193,6 +254,14 @@ async function agregarServicioExtra(req, res) {
   const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
   if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
 
+  // El servicio adicional debe ser del mismo tipo de vehículo de la orden.
+  let tipoVehiculo = orden.tipo_vehiculo_anonimo || null;
+  if (orden.vehiculo_id) {
+    const vehiculo = await ClienteRepositorio.obtenerVehiculoPorId(orden.vehiculo_id);
+    if (vehiculo) tipoVehiculo = vehiculo.tipo;
+  }
+  exigirServicioParaVehiculo(servicio, tipoVehiculo);
+
   await OrdenServicioRepositorio.agregarServicioExtra(id, {
     servicioId: servicio.id,
     precio: Number(servicio.precio),
@@ -218,7 +287,11 @@ async function asignarLavadores(req, res) {
   const orden = await OrdenServicioRepositorio.obtenerOrdenPorId(id);
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada.' });
 
-  const lavadoresAsignados = await calcularAsignacionLavadores(lavadores_ids, Number(orden.total));
+  if (!['recibido', 'en_proceso'].includes(orden.estado)) {
+    return res.status(400).json({ error: 'Solo se pueden asignar lavadores a una orden recibida o en proceso.' });
+  }
+
+  const lavadoresAsignados = await calcularAsignacionLavadores(lavadores_ids, Number(orden.total), id);
   if (lavadoresAsignados.length === 0) {
     return res.status(400).json({ error: 'No hay lavadores disponibles para asignar en este momento (deben haber registrado entrada hoy y estar libres). La orden permanece en "Recibido".' });
   }

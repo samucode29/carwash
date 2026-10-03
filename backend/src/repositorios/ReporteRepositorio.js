@@ -27,7 +27,8 @@ function calcularRangoAnterior(inicio, fin) {
 /** Resumen general (Ingresos - Compras de insumos - Gastos - Comisiones = Ganancia neta). */
 async function calcularReporte(inicio, fin) {
   const [ordenesPagadas] = await pool.query(
-    `SELECT o.id, o.total, p.monto AS pago_monto, s.nombre AS servicio_nombre,
+    `SELECT o.id, o.total, p.monto AS pago_monto, p.descuento_negocio, p.descuento_trabajador, p.propina,
+            s.nombre AS servicio_nombre,
             COALESCE(v.tipo, o.tipo_vehiculo_anonimo, 'carro') AS tipo_vehiculo
      FROM pagos p
      INNER JOIN ordenes_servicio o ON o.id = p.orden_id
@@ -37,24 +38,51 @@ async function calcularReporte(inicio, fin) {
     [inicio, fin]
   );
 
-  const totalIngresos = ordenesPagadas.reduce((suma, o) => suma + Number(o.pago_monto || o.total), 0);
+  // OJO: un pago puede ser $0 (descuento total); por eso no se usa `||`, que
+  // trataría ese 0 como "sin pago" y contaría el precio completo del servicio.
+  const montoDe = (o) => (o.pago_monto !== null && o.pago_monto !== undefined ? Number(o.pago_monto) : Number(o.total));
+  const totalIngresos = ordenesPagadas.reduce((suma, o) => suma + montoDe(o), 0);
   const ordenIds = ordenesPagadas.map(o => o.id);
 
+  // Descuentos y propinas del período. Las propinas NO son ingreso del
+  // negocio (van 100% a los lavadores) y por eso no entran en la ganancia.
+  const totalDescuentoNegocio = ordenesPagadas.reduce((s, o) => s + Number(o.descuento_negocio || 0), 0);
+  const totalDescuentoTrabajador = ordenesPagadas.reduce((s, o) => s + Number(o.descuento_trabajador || 0), 0);
+  const totalPropinas = ordenesPagadas.reduce((s, o) => s + Number(o.propina || 0), 0);
+  const pagoPorOrden = {};
+  ordenesPagadas.forEach(o => { pagoPorOrden[o.id] = o; });
+
+  // Comisión REAL a pagar: la comisión del servicio menos la parte del
+  // descuento que asumió el lavador (repartida según su parte de la
+  // comisión). Lo que asume el lavador no lo paga el negocio.
   let totalComisionesLavadores = 0;
   const lavadoresStats = {};
   if (ordenIds.length > 0) {
     const [comisiones] = await pool.query(
-      `SELECT ol.valor_comision, l.nombre
+      `SELECT ol.orden_id, ol.valor_comision, l.nombre
        FROM orden_lavadores ol
        INNER JOIN lavadores l ON l.id = ol.lavador_id
        WHERE ol.orden_id IN (?)`,
       [ordenIds]
     );
+    const comisionTotalPorOrden = {};
+    const lavadoresPorOrdenCount = {};
     comisiones.forEach(c => {
-      totalComisionesLavadores += Number(c.valor_comision);
-      if (!lavadoresStats[c.nombre]) lavadoresStats[c.nombre] = { servicios: 0, comision: 0 };
+      comisionTotalPorOrden[c.orden_id] = (comisionTotalPorOrden[c.orden_id] || 0) + Number(c.valor_comision);
+      lavadoresPorOrdenCount[c.orden_id] = (lavadoresPorOrdenCount[c.orden_id] || 0) + 1;
+    });
+    comisiones.forEach(c => {
+      const pago = pagoPorOrden[c.orden_id] || {};
+      const bruta = Number(c.valor_comision);
+      const totalOrden = comisionTotalPorOrden[c.orden_id] || 0;
+      const parteDescuento = totalOrden > 0 ? Number(pago.descuento_trabajador || 0) * (bruta / totalOrden) : 0;
+      const neta = bruta - parteDescuento;
+      const propina = Number(pago.propina || 0) / (lavadoresPorOrdenCount[c.orden_id] || 1);
+      totalComisionesLavadores += neta;
+      if (!lavadoresStats[c.nombre]) lavadoresStats[c.nombre] = { servicios: 0, comision: 0, propinas: 0 };
       lavadoresStats[c.nombre].servicios += 1;
-      lavadoresStats[c.nombre].comision += Number(c.valor_comision);
+      lavadoresStats[c.nombre].comision += neta;
+      lavadoresStats[c.nombre].propinas += propina;
     });
   }
 
@@ -72,17 +100,32 @@ async function calcularReporte(inicio, fin) {
   const gananciaNeta = totalIngresos - (costoInsumos + totalGastos + totalComisionesLavadores);
   const margenPorcentaje = totalIngresos > 0 ? Number(((gananciaNeta / totalIngresos) * 100).toFixed(1)) : 0;
 
+  // Todo se discrimina por tipo de vehículo: cantidad de servicios e ingresos
+  // de cada tipo, y por servicio (cada servicio ya es de un solo tipo).
   const distribucionVehiculos = {};
+  const porTipoVehiculo = {};
   const serviciosStats = {};
   ordenesPagadas.forEach(o => {
     const tipo = o.tipo_vehiculo || 'carro';
     distribucionVehiculos[tipo] = (distribucionVehiculos[tipo] || 0) + 1;
+    if (!porTipoVehiculo[tipo]) porTipoVehiculo[tipo] = { servicios: 0, ingresos: 0 };
+    porTipoVehiculo[tipo].servicios += 1;
+    porTipoVehiculo[tipo].ingresos += montoDe(o);
 
     const nombreServicio = o.servicio_nombre || 'Otros';
-    if (!serviciosStats[nombreServicio]) serviciosStats[nombreServicio] = { count: 0, total: 0 };
+    if (!serviciosStats[nombreServicio]) serviciosStats[nombreServicio] = { count: 0, total: 0, tipoVehiculo: tipo };
     serviciosStats[nombreServicio].count += 1;
-    serviciosStats[nombreServicio].total += Number(o.pago_monto || o.total);
+    serviciosStats[nombreServicio].total += montoDe(o);
   });
+
+  // Servicios cancelados del período (turnos y órdenes): valen $0 y no entran
+  // en los ingresos, pero se muestran para que se vea cuántos se cayeron.
+  const [[turnosCancelados]] = await pool.query(
+    `SELECT COUNT(*) AS cantidad FROM turnos WHERE estado = 'cancelado' AND fecha BETWEEN ? AND ?`, [inicio, fin]
+  );
+  const [[ordenesCanceladas]] = await pool.query(
+    `SELECT COUNT(*) AS cantidad FROM ordenes_servicio WHERE estado = 'cancelado' AND DATE(fecha_hora_registro) BETWEEN ? AND ?`, [inicio, fin]
+  );
 
   const alertasStock = await InsumoRepositorio.listarAlertasStockBajo();
   const auditoriaReciente = await AuditoriaRepositorio.obtenerRecientes(8);
@@ -90,8 +133,14 @@ async function calcularReporte(inicio, fin) {
   return {
     rango: { inicio, fin },
     totalIngresos, totalComisionesLavadores, costoInsumos, totalGastos, gananciaNeta, margenPorcentaje,
+    totalDescuentoNegocio, totalDescuentoTrabajador, totalPropinas,
     serviciosAtendidos: ordenesPagadas.length,
-    distribucionVehiculos, serviciosStats, lavadoresStats,
+    serviciosCancelados: {
+      turnos: turnosCancelados.cantidad || 0,
+      ordenes: ordenesCanceladas.cantidad || 0,
+      total: (turnosCancelados.cantidad || 0) + (ordenesCanceladas.cantidad || 0)
+    },
+    distribucionVehiculos, porTipoVehiculo, serviciosStats, lavadoresStats,
     alertasStockCount: alertasStock.length, auditoriaReciente
   };
 }
@@ -112,6 +161,7 @@ async function calcularReporteVentas(inicio, fin) {
   const porServicio = {};
   const porMetodoPago = {};
   const porVehiculo = {};
+  const cantidadPorVehiculo = {};
   let total = 0;
   pagos.forEach(p => {
     const monto = Number(p.monto);
@@ -121,6 +171,7 @@ async function calcularReporteVentas(inicio, fin) {
     porServicio[servicio] = (porServicio[servicio] || 0) + monto;
     porMetodoPago[p.metodo_pago] = (porMetodoPago[p.metodo_pago] || 0) + monto;
     porVehiculo[tipoVeh] = (porVehiculo[tipoVeh] || 0) + monto;
+    cantidadPorVehiculo[tipoVeh] = (cantidadPorVehiculo[tipoVeh] || 0) + 1;
   });
 
   const [topClientes] = await pool.query(
@@ -133,17 +184,32 @@ async function calcularReporteVentas(inicio, fin) {
     [inicio, fin]
   );
 
-  // Ventas atendidas por cada lavador (cuántas órdenes pagadas trabajó y
-  // cuánta comisión generó en el período), no solo el total del negocio.
-  const [porLavadorFilas] = await pool.query(
-    `SELECT l.nombre, COUNT(DISTINCT ol.orden_id) AS servicios, SUM(ol.valor_comision) AS comision
+  // Ventas atendidas por cada lavador (cuántas órdenes pagadas trabajó, la
+  // comisión que le quedó después del descuento que asumió y las propinas
+  // que recibió), no solo el total del negocio.
+  const [lavadorOrdenFilas] = await pool.query(
+    `SELECT ol.orden_id, ol.lavador_id, l.nombre, ol.valor_comision, p.descuento_trabajador, p.propina,
+            (SELECT COUNT(*) FROM orden_lavadores x WHERE x.orden_id = ol.orden_id) AS lavadores_count,
+            (SELECT SUM(x.valor_comision) FROM orden_lavadores x WHERE x.orden_id = ol.orden_id) AS comision_total_orden
      FROM orden_lavadores ol
      INNER JOIN lavadores l ON l.id = ol.lavador_id
      INNER JOIN pagos p ON p.orden_id = ol.orden_id
-     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?
-     GROUP BY l.id, l.nombre ORDER BY comision DESC`,
+     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?`,
     [inicio, fin]
   );
+  const porLavadorMapa = {};
+  lavadorOrdenFilas.forEach(f => {
+    const bruta = Number(f.valor_comision);
+    const totalOrden = Number(f.comision_total_orden) || 0;
+    const parteDescuento = totalOrden > 0 ? Number(f.descuento_trabajador || 0) * (bruta / totalOrden) : 0;
+    if (!porLavadorMapa[f.lavador_id]) porLavadorMapa[f.lavador_id] = { nombre: f.nombre, servicios: 0, comision: 0, propinas: 0 };
+    porLavadorMapa[f.lavador_id].servicios += 1;
+    porLavadorMapa[f.lavador_id].comision += bruta - parteDescuento;
+    porLavadorMapa[f.lavador_id].propinas += Number(f.propina || 0) / (Number(f.lavadores_count) || 1);
+  });
+  const porLavador = Object.values(porLavadorMapa)
+    .map(l => ({ ...l, comision: Number(l.comision.toFixed(2)), propinas: Number(l.propinas.toFixed(2)) }))
+    .sort((a, b) => b.comision - a.comision);
 
   // Propinas del período: NO son ingreso del negocio (van 100% al lavador,
   // repartidas en partes iguales si atendieron varios), pero se reportan
@@ -178,8 +244,8 @@ async function calcularReporteVentas(inicio, fin) {
     totalVentas: total,
     cantidadVentas: pagos.length,
     ticketPromedio: pagos.length > 0 ? Math.round(total / pagos.length) : 0,
-    porServicio, porMetodoPago, porVehiculo,
-    porLavador: porLavadorFilas.map(f => ({ nombre: f.nombre, servicios: f.servicios, comision: Number(f.comision) || 0 })),
+    porServicio, porMetodoPago, porVehiculo, cantidadPorVehiculo,
+    porLavador,
     topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total) })),
     totalPropinas,
     detallePropinas
@@ -275,8 +341,17 @@ async function calcularReporteNomina(inicio, fin) {
     [inicio, fin]
   );
 
+  // Propinas recibidas y descuentos que asumieron los lavadores en el período.
+  const [propinasYDescuentos] = await pool.query(
+    `SELECT SUM(propina) AS propinas, SUM(descuento_trabajador) AS descuentos
+     FROM pagos WHERE DATE(fecha_pago) BETWEEN ? AND ?`,
+    [inicio, fin]
+  );
+
   return {
     rango: { inicio, fin },
+    propinasPeriodo: Number(propinasYDescuentos[0].propinas) || 0,
+    descuentosTrabajadorPeriodo: Number(propinasYDescuentos[0].descuentos) || 0,
     salariosPagados: Number(salarios[0].total) || 0,
     salariosCantidad: salarios[0].cantidad || 0,
     comisionesPagadas: Number(comisionesPagadas[0].total) || 0,
@@ -285,7 +360,7 @@ async function calcularReporteNomina(inicio, fin) {
     liquidacionesPendientesCantidad: liquidacionesPendientes[0].cantidad || 0,
     asistenciasPresentes: Number(asistencia[0].presentes) || 0,
     inasistencias: Number(asistencia[0].inasistencias) || 0,
-    horasTrabajadasTotal: Number(asistencia[0].horasTotales) || 0,
+    horasTrabajadasTotal: Number((Number(asistencia[0].horasTotales) || 0).toFixed(2)),
     porEmpleado: porEmpleado.map(e => ({ id: e.id, nombre: e.nombre, rol: e.rol, total: Number(e.total) || 0, cantidad: e.cantidad })),
     porLavador: porLavador.map(l => ({ id: l.id, nombre: l.nombre, total: Number(l.total) || 0, cantidad: l.cantidad }))
   };
@@ -380,8 +455,10 @@ async function calcularReporteAsistencia(inicio, fin) {
   );
 
   const [detalleFilas] = await pool.query(
-    `SELECT a.fecha, a.persona_tipo, a.hora_entrada, a.hora_salida, a.horas_trabajadas, a.inasistencia,
-            COALESCE(u.nombre, l.nombre) AS nombre
+    `SELECT a.fecha, a.persona_tipo, a.hora_entrada, a.hora_salida, a.horas_trabajadas, a.horas_descanso, a.inasistencia,
+            COALESCE(u.nombre, l.nombre) AS nombre,
+            (SELECT GROUP_CONCAT(CONCAT(LEFT(s.hora_entrada, 5), ' a ', IFNULL(LEFT(s.hora_salida, 5), '...')) ORDER BY s.id SEPARATOR ', ')
+             FROM asistencia_sesiones s WHERE s.asistencia_id = a.id) AS sesiones
      FROM asistencia a
      LEFT JOIN usuarios u ON a.persona_tipo = 'usuario' AND u.id = a.persona_id
      LEFT JOIN lavadores l ON a.persona_tipo = 'lavador' AND l.id = a.persona_id
@@ -395,19 +472,20 @@ async function calcularReporteAsistencia(inicio, fin) {
     rol: f.rol,
     presentes: Number(f.presentes) || 0,
     inasistencias: Number(f.inasistencias) || 0,
-    horasTrabajadas: Number(f.horasTrabajadas) || 0
+    horasTrabajadas: Number((Number(f.horasTrabajadas) || 0).toFixed(2))
   }));
 
   return {
     rango: { inicio, fin },
     totalPresentes: porTrabajador.reduce((s, t) => s + t.presentes, 0),
     totalInasistencias: porTrabajador.reduce((s, t) => s + t.inasistencias, 0),
-    totalHorasTrabajadas: porTrabajador.reduce((s, t) => s + t.horasTrabajadas, 0),
+    totalHorasTrabajadas: Number(porTrabajador.reduce((s, t) => s + t.horasTrabajadas, 0).toFixed(2)),
     porTrabajador,
     detalle: detalleFilas.map(f => ({
       fecha: f.fecha, nombre: f.nombre, tipo: f.persona_tipo,
-      horaEntrada: f.hora_entrada, horaSalida: f.hora_salida,
-      horasTrabajadas: Number(f.horas_trabajadas) || 0, inasistencia: !!f.inasistencia
+      horaEntrada: f.hora_entrada, horaSalida: f.hora_salida, sesiones: f.sesiones || '',
+      horasTrabajadas: Number(f.horas_trabajadas) || 0, horasDescanso: Number(f.horas_descanso) || 0,
+      inasistencia: !!f.inasistencia
     }))
   };
 }

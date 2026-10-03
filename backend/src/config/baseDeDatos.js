@@ -25,6 +25,17 @@ const pool = mysql.createPool({
   ...(usarSsl ? { ssl: { rejectUnauthorized: false } } : {})
 });
 
+// Node corre en hora de Colombia (server.js fija TZ=America/Bogota) pero el
+// servidor MySQL de Railway guarda CURRENT_TIMESTAMP/NOW() en UTC. Sin esto,
+// todo lo registrado después de las 7:00 p.m. (hora Colombia) quedaba con la
+// fecha del día siguiente y se salía del resumen de caja y de los reportes
+// "de hoy". Colombia no tiene horario de verano, así que un desfase fijo basta.
+pool.on('connection', (conexion) => {
+  conexion.query("SET time_zone = '-05:00'", (err) => {
+    if (err) console.error('❌ No se pudo fijar la zona horaria de la conexión MySQL:', err.message);
+  });
+});
+
 // Sin este listener, un error de conexión a nivel de pool (no solo el de
 // una query puntual) es un evento 'error' sin manejar y Node mata todo el
 // proceso — tumbando el servidor entero por un problema de una sola

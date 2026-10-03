@@ -225,10 +225,12 @@ async function listarLavadores(req, res) {
   const soloActivos = req.query.activos === 'true';
   const lavadores = await LavadorRepositorio.listar({ soloActivos });
   const estados = await AsistenciaRepositorio.listarEstadoAsistenciaHoy('lavador', obtenerFechaHoy());
+  const idsOcupados = new Set(await LavadorRepositorio.obtenerIdsOcupados());
   res.json(lavadores.map(l => ({
     ...l,
     disponible_hoy: estados[l.id] === 'presente',
-    estado_asistencia_hoy: estados[l.id] || 'sin_asistencia'
+    estado_asistencia_hoy: estados[l.id] || 'sin_asistencia',
+    ocupado: idsOcupados.has(l.id) // ya atiende un servicio "en proceso"
   })));
 }
 

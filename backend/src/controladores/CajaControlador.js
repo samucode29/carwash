@@ -84,8 +84,12 @@ async function obtenerResumenCaja(req, res) {
   const resumen = await CajaRepositorio.obtenerResumenPorFecha(fecha);
   const cierreExistente = await CajaRepositorio.obtenerCierrePorFecha(fecha);
   const pendientes = await CajaRepositorio.contarPendientesPorFecha(fecha);
+  const citasPendientes = await CajaRepositorio.listarCitasPendientes(fecha);
 
-  res.json({ fecha, ...resumen, esta_cerrada: !!cierreExistente, cierre_detalle: cierreExistente, pendientes });
+  res.json({
+    fecha, ...resumen, esta_cerrada: !!cierreExistente, cierre_detalle: cierreExistente, pendientes,
+    citas_pendientes: citasPendientes.length
+  });
 }
 
 async function cerrarCaja(req, res) {
@@ -108,6 +112,21 @@ async function cerrarCaja(req, res) {
     return res.status(400).json({
       error: `No se puede cerrar caja: hay ${pendientes.total} servicio(s) pendiente(s) (${partes.join(', ')}). Atienda, cobre o cancele esos servicios primero.`
     });
+  }
+
+  // Citas sin atender: primero se avisa por si fue un error (ej. se olvidó
+  // atenderla); si el usuario confirma, se dan por canceladas y se cierra.
+  const citasPendientes = await CajaRepositorio.listarCitasPendientes(fechaCierre);
+  if (citasPendientes.length > 0) {
+    if (!req.body.confirmar_citas) {
+      return res.status(409).json({
+        codigo: 'CITAS_PENDIENTES',
+        error: `Hay ${citasPendientes.length} cita(s) agendada(s) sin atender. Si cierra la caja se darán por canceladas.`,
+        citas: citasPendientes
+      });
+    }
+    const canceladas = await CajaRepositorio.cancelarCitasPendientes(fechaCierre);
+    await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'cancelar_citas_cierre', `Al cerrar caja de ${fechaCierre} se cancelaron ${canceladas} cita(s) sin atender`);
   }
 
   const resumen = await CajaRepositorio.obtenerResumenPorFecha(fechaCierre);

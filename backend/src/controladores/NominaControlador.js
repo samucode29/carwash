@@ -165,21 +165,24 @@ async function registrarAsistencia(req, res) {
   let registro = await AsistenciaRepositorio.obtenerRegistroDelDia(persona_tipo, persona_id, hoy);
 
   if (!registro) {
+    if (tipo === 'salida') {
+      return res.status(400).json({ error: 'Esta persona no tiene una entrada registrada hoy; marque primero su entrada.' });
+    }
     registro = await AsistenciaRepositorio.crearRegistro({ personaTipo: persona_tipo, personaId: persona_id, fecha: hoy, horaEntrada: horaActual, inasistencia });
   } else if (tipo === 'salida') {
     const horasDescanso = parseFloat(req.body.horas_descanso) || 0;
     if (horasDescanso > 0 && horasDescanso < 1) {
       return res.status(400).json({ error: 'Si registra horas de descanso/almuerzo, deben ser de mínimo 1 hora.' });
     }
-
-    let horasTrabajadas = 0;
-    if (registro.hora_entrada) {
-      const [h1, m1] = registro.hora_entrada.split(':').map(Number);
-      const [h2, m2] = horaActual.split(':').map(Number);
-      const horasBrutas = Math.max(0, parseFloat(((h2 + m2 / 60) - (h1 + m1 / 60)).toFixed(2)));
-      horasTrabajadas = Math.max(0, parseFloat((horasBrutas - horasDescanso).toFixed(2)));
+    // El almuerzo se registra una sola vez al día: las salidas siguientes
+    // (ej. después de volver a entrar) ya no lo vuelven a pedir.
+    if (horasDescanso > 0 && Number(registro.horas_descanso) > 0) {
+      return res.status(400).json({ error: `El descanso/almuerzo de hoy ya fue registrado (${registro.horas_descanso} hrs); solo se registra una vez al día.` });
     }
-    registro = await AsistenciaRepositorio.marcarSalida(registro.id, horaActual, horasTrabajadas, horasDescanso);
+    if (!(await AsistenciaRepositorio.tieneSesionAbierta(registro.id))) {
+      return res.status(400).json({ error: 'Esta persona no tiene una entrada abierta; marque su entrada antes de registrar la salida.' });
+    }
+    registro = await AsistenciaRepositorio.marcarSalida(registro.id, horaActual, horasDescanso);
   } else if (tipo === 'entrada') {
     const yaPresente = registro.hora_entrada && !registro.hora_salida && !registro.inasistencia;
     if (yaPresente) {
