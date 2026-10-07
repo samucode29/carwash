@@ -127,7 +127,7 @@ function generarPdfComprobanteNomina(res, datos) {
   dibujarFirma(doc, izquierda, yFirma, 230, 'Firma de quien recibe', datos.persona.nombre, datos.persona.documento);
   dibujarFirma(doc, izquierda + 282, yFirma, 230, 'Firma de quien paga (CarWash Pro)', '', '');
 
-  doc.fontSize(8).fillColor('#999').text(`Generado: ${new Date().toLocaleString('es-CO')}`, izquierda, 745, { width: ancho, align: 'center' });
+  doc.fontSize(8).fillColor('#999').text(`Generado: ${new Date().toLocaleString('es-CO')}`, izquierda, 725, { width: ancho, align: 'center' });
 
   doc.end();
 }
