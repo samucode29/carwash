@@ -7,8 +7,7 @@ const { pool } = require('../config/baseDeDatos');
 
 const COLUMNAS_PUBLICAS = `
   id, nombre, nombres, apellidos, documento, telefono, correo, username, rol, es_admin_principal, estado,
-  fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana,
-  cuenta_adicional, vinculado_tipo, vinculado_id, creado_en
+  fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, creado_en
 `;
 
 async function buscarPorUsernameOCorreo(identificador) {
@@ -52,34 +51,15 @@ async function listar(rol) {
 async function crear(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO usuarios
-      (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, cuenta_adicional, vinculado_tipo, vinculado_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?, ?, ?, ?)`,
+      (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?)`,
     [
       datos.nombre, datos.nombres, datos.apellidos, datos.documento, datos.telefono || '', datos.correo, datos.username,
       datos.passwordHash, datos.rol, datos.salarioFijo || null, datos.periodicidadPago || 'quincenal',
-      datos.jornadaHorasDia || 8, datos.diasDescansoSemana ?? 1,
-      datos.cuentaAdicional ? 1 : 0, datos.vinculadoTipo || null, datos.vinculadoId || null
+      datos.jornadaHorasDia || 8, datos.diasDescansoSemana ?? 1
     ]
   );
   return obtenerPorId(resultado.insertId);
-}
-
-/** Cuenta de administrador adicional que ya tiene un empleado ('empleado') o un lavador ('lavador'), si la tiene. */
-async function obtenerCuentaAdicional(tipo, id) {
-  const [filas] = await pool.query(
-    `SELECT id, username, estado FROM usuarios WHERE cuenta_adicional = 1 AND vinculado_tipo = ? AND vinculado_id = ? LIMIT 1`,
-    [tipo, id]
-  );
-  return filas[0] || null;
-}
-
-/** Si la persona se inactiva, también se inactiva su cuenta de administrador adicional (no queda un acceso abierto). */
-async function inactivarCuentasVinculadas(tipo, id) {
-  const [resultado] = await pool.query(
-    `UPDATE usuarios SET estado = 'inactivo' WHERE cuenta_adicional = 1 AND vinculado_tipo = ? AND vinculado_id = ? AND estado = 'activo'`,
-    [tipo, id]
-  );
-  return resultado.affectedRows;
 }
 
 async function actualizar(id, cambios) {
@@ -103,8 +83,6 @@ module.exports = {
   obtenerConHashPorId,
   obtenerPorDocumento,
   obtenerPorUsername,
-  obtenerCuentaAdicional,
-  inactivarCuentasVinculadas,
   listar,
   crear,
   actualizar

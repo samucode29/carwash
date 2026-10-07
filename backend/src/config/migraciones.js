@@ -15,33 +15,6 @@ async function existeColumna(tabla, columna) {
   return filas.length > 0;
 }
 
-async function existeIndice(tabla, indice) {
-  const [filas] = await pool.query(
-    `SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1`,
-    [tabla, indice]
-  );
-  return filas.length > 0;
-}
-
-/**
- * Cuentas de administrador adicionales (ver schema.sql, tabla usuarios): una
- * persona ya registrada puede tener además una cuenta de administrador, con
- * el mismo documento, así que el documento deja de ser único por sí solo.
- */
-async function permitirCuentasAdicionales() {
-  if (!(await existeColumna('usuarios', 'cuenta_adicional'))) {
-    await pool.query(`ALTER TABLE usuarios
-      ADD COLUMN cuenta_adicional TINYINT(1) NOT NULL DEFAULT 0,
-      ADD COLUMN vinculado_tipo ENUM('lavador','empleado') NULL,
-      ADD COLUMN vinculado_id INT NULL`);
-    console.log('🛠  Migración aplicada: usuarios.cuenta_adicional');
-  }
-  if (await existeIndice('usuarios', 'documento')) {
-    await pool.query(`ALTER TABLE usuarios DROP INDEX documento, ADD UNIQUE KEY uq_usuario_documento (documento, cuenta_adicional)`);
-    console.log('🛠  Migración aplicada: documento único por (documento, cuenta_adicional)');
-  }
-}
-
 async function aplicarMigraciones() {
   // Clientes que se pueden inactivar (sin borrarlos ni perder su historial).
   if (!(await existeColumna('clientes', 'estado'))) {
@@ -49,7 +22,6 @@ async function aplicarMigraciones() {
     console.log('🛠  Migración aplicada: clientes.estado');
   }
   await separarNombresYApellidos();
-  await permitirCuentasAdicionales();
 }
 
 /**

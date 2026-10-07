@@ -1953,16 +1953,16 @@ const app = {
         if (tbEmp) {
           tbEmp.innerHTML = empleados.map(e => `
             <tr>
-              <td><strong>${escapeHtml(e.nombre)}</strong>${e.cuenta_adicional ? `<br><span class="text-sm text-muted">Cuenta de administrador adicional de ${escapeHtml(e.vinculado_nombre || 'una persona registrada')} (${e.vinculado_tipo === 'lavador' ? 'lavador' : 'empleado'}); ${escapeHtml(e.username || '')}</span>` : ''}</td>
+              <td><strong>${e.nombre}</strong></td>
               <td>${e.documento}</td>
               <td><span class="role-badge">${e.rol.toUpperCase()}</span></td>
-              <td>${e.cuenta_adicional ? '<span class="text-muted">--</span>' : `<strong>${this.formatMoney(e.salario_fijo)}</strong>`}</td>
-              <td>${e.cuenta_adicional ? '--' : (e.periodicidad_pago || '').toUpperCase()}</td>
+              <td><strong>${this.formatMoney(e.salario_fijo)}</strong></td>
+              <td>${(e.periodicidad_pago || '').toUpperCase()}</td>
               <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
-              <td>${e.cuenta_adicional ? '--' : (e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados')}</td>
+              <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
               <td>
-                ${e.cuenta_adicional ? '' : `<button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${e.periodicidad_pago || 'quincenal'}')">Pagar Salario</button>
-                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id})">Editar</button>`}
+                <button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${e.periodicidad_pago || 'quincenal'}')">Pagar Salario</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id})">Editar</button>
                 <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">Reiniciar Contraseña</button>
                 ${(e.empleado_id === this.currentUser.id || e.es_admin_principal)
                   ? ''
@@ -2054,7 +2054,7 @@ const app = {
     if (this.currentUser.rol === 'administrador') {
       try {
         const usuarios = await ApiCliente.get('/api/personal/usuarios');
-        usuarios.filter(u => !u.cuenta_adicional).forEach(u => opciones.push({ tipo: 'usuario', id: u.id, etiqueta: `${u.nombre} (${u.rol})` }));
+        usuarios.forEach(u => opciones.push({ tipo: 'usuario', id: u.id, etiqueta: `${u.nombre} (${u.rol})` }));
       } catch (err) { /* si falla, seguimos solo con lavadores + el propio usuario */ }
     } else {
       opciones.push({ tipo: 'usuario', id: this.currentUser.id, etiqueta: `${this.currentUser.nombre} (yo)` });
@@ -3088,8 +3088,7 @@ const app = {
 
   // Crear Personal (usuario con login o lavador sin login). Usuario y
   // contraseña siempre se asignan automáticamente (ver modal).
-  async abrirModalNuevoUsuario() {
-    ['usrAdminUsername', 'usrAdminPassword', 'usrAdminPassword2'].forEach(id => { document.getElementById(id).value = ''; });
+  abrirModalNuevoUsuario() {
     document.getElementById('usrNombres').value = '';
     document.getElementById('usrApellidos').value = '';
     document.getElementById('usrDocumento').value = '';
@@ -3102,50 +3101,12 @@ const app = {
     document.getElementById('usrDiasDescanso').value = 1;
     this.onUsrRolChange();
     this.openModal('modalNuevoUsuario');
-    if (this.currentUser.esAdminPrincipal) await this.cargarOpcionesAsignarAdmin();
-  },
-
-  /**
-   * Arma la lista de personas a las que se les puede asignar una cuenta de
-   * administrador: empleados y lavadores activos que todavía no tienen una.
-   */
-  async cargarOpcionesAsignarAdmin() {
-    const select = document.getElementById('usrAdminAsignarA');
-    try {
-      const [usuarios, lavadores] = await Promise.all([
-        ApiCliente.get('/api/personal/usuarios'),
-        ApiCliente.get('/api/personal/lavadores?activos=true')
-      ]);
-      const conAdmin = new Set(usuarios.filter(u => u.cuenta_adicional && u.vinculado_tipo).map(u => `${u.vinculado_tipo}:${u.vinculado_id}`));
-      const empleados = usuarios.filter(u => u.rol === 'empleado' && u.estado === 'activo' && !u.cuenta_adicional && !conAdmin.has(`empleado:${u.id}`));
-      const lavs = lavadores.filter(l => !conAdmin.has(`lavador:${l.id}`));
-      const opciones = ['<option value="">Cuenta aparte (sin asignarla a nadie)</option>'];
-      if (empleados.length) opciones.push(`<optgroup label="Empleados">${empleados.map(u => `<option value="empleado:${u.id}">${escapeHtml(u.nombre)}</option>`).join('')}</optgroup>`);
-      if (lavs.length) opciones.push(`<optgroup label="Lavadores">${lavs.map(l => `<option value="lavador:${l.id}">${escapeHtml(l.nombre)}</option>`).join('')}</optgroup>`);
-      select.innerHTML = opciones.join('');
-    } catch (err) {
-      select.innerHTML = '<option value="">Cuenta aparte (sin asignarla a nadie)</option>';
-    }
-    this.onUsrAsignarChange();
-  },
-
-  onUsrAsignarChange() {
-    const asignado = !!document.getElementById('usrAdminAsignarA').value;
-    document.getElementById('usrAdminAsignarAyuda').textContent = asignado
-      ? 'La persona conserva lo suyo (su usuario de empleado o su pago por comisión) y además tendrá este acceso de administrador, con el usuario y la contraseña que escribas aquí.'
-      : 'Se crea una cuenta de administrador nueva, con los datos de la persona que escribas abajo, sin relación con ningún empleado o lavador ya registrado.';
-    // Si se asigna a alguien ya registrado, sus datos y su sueldo ya existen: no se piden de nuevo.
-    document.getElementById('usrDatosPersona').classList.toggle('hidden', asignado);
-    document.getElementById('usrEmpleadoFields').classList.toggle('hidden', asignado);
   },
 
   onUsrRolChange() {
     const rol = document.getElementById('usrRol').value;
     const lavFields = document.getElementById('usrLavadorFields');
     const empFields = document.getElementById('usrEmpleadoFields');
-    const esAdmin = rol === 'administrador';
-    document.getElementById('usrAdminFields').classList.toggle('hidden', !esAdmin);
-    document.getElementById('usrAvisoCredencialesAuto').classList.toggle('hidden', esAdmin);
     if (rol === 'lavador') {
       lavFields.classList.remove('hidden');
       empFields.classList.add('hidden');
@@ -3153,8 +3114,6 @@ const app = {
       lavFields.classList.add('hidden');
       empFields.classList.remove('hidden');
     }
-    if (esAdmin) this.onUsrAsignarChange();
-    else document.getElementById('usrDatosPersona').classList.remove('hidden');
   },
 
   async guardarNuevoUsuario() {
@@ -3164,46 +3123,6 @@ const app = {
     const documento = document.getElementById('usrDocumento').value;
     const telefono = document.getElementById('usrTelefono').value;
     const rol = document.getElementById('usrRol').value;
-
-    // --- Administrador: usuario y contraseña personalizados, asignado a alguien o aparte
-    if (rol === 'administrador') {
-      const asignacion = document.getElementById('usrAdminAsignarA').value;
-      const username = document.getElementById('usrAdminUsername').value.trim().toLowerCase();
-      const password = document.getElementById('usrAdminPassword').value;
-      if (!/^[a-z0-9][a-z0-9._-]{3,29}$/.test(username)) { this.toast('El usuario debe tener de 4 a 30 caracteres: minúsculas, números, punto, guion o guion bajo.', 'warning'); return; }
-      if (password.length < 6) { this.toast('La contraseña debe tener al menos 6 caracteres.', 'warning'); return; }
-      if (password !== document.getElementById('usrAdminPassword2').value) { this.toast('La confirmación no coincide con la contraseña.', 'warning'); return; }
-
-      const cuerpo = { rol, username, password };
-      let destino = 'aparte';
-      if (asignacion) {
-        const [asignarTipo, asignarId] = asignacion.split(':');
-        Object.assign(cuerpo, { asignarTipo, asignarId: Number(asignarId) });
-        destino = document.getElementById('usrAdminAsignarA').selectedOptions[0].textContent;
-      } else {
-        if (!nombres || !apellidos || !documento) { this.toast('Nombres, apellidos y documento son obligatorios.', 'warning'); return; }
-        if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
-        if (!esDocumentoValido(documento)) { this.toast('El documento debe tener solo números, mínimo 4 dígitos.', 'warning'); return; }
-        if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
-        Object.assign(cuerpo, {
-          nombres, apellidos, documento, telefono,
-          salarioFijo: document.getElementById('usrSalario').value,
-          periodicidadPago: document.getElementById('usrPeriodicidad').value,
-          jornadaHorasDia: document.getElementById('usrJornadaHoras').value,
-          diasDescansoSemana: document.getElementById('usrDiasDescanso').value
-        });
-      }
-      try {
-        await ApiCliente.post('/api/personal/usuarios', cuerpo);
-        this.toast(asignacion ? `Cuenta de administrador "${username}" asignada a ${destino}.` : `Cuenta de administrador "${username}" creada.`, 'success');
-        this.closeModal('modalNuevoUsuario');
-        this.loadWashers();
-        this.loadNomina();
-      } catch (err) {
-        this.toast(err.message || 'No se pudo crear la cuenta de administrador.', 'error');
-      }
-      return;
-    }
 
     if (!nombres || !apellidos || !documento) { this.toast('Nombres, apellidos y documento son obligatorios.', 'warning'); return; }
     if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }

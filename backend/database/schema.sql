@@ -33,7 +33,7 @@ CREATE TABLE usuarios (
     nombre              VARCHAR(150) NOT NULL,   -- nombre completo (nombres + apellidos), se arma solo
     nombres             VARCHAR(100) NOT NULL DEFAULT '',
     apellidos           VARCHAR(100) NOT NULL DEFAULT '',
-    documento           VARCHAR(30)  NOT NULL,
+    documento           VARCHAR(30)  NOT NULL UNIQUE,
     telefono            VARCHAR(20),
     correo              VARCHAR(150) UNIQUE,
     username            VARCHAR(50)  NOT NULL UNIQUE,
@@ -54,18 +54,8 @@ CREATE TABLE usuarios (
     -- monto fijo sin importar cuánto se trabajó.
     jornada_horas_dia      DECIMAL(4,2) NOT NULL DEFAULT 8,
     dias_descanso_semana   TINYINT NOT NULL DEFAULT 1,
-    -- Cuenta de administrador ADICIONAL de una persona que ya está registrada
-    -- (un empleado o un lavador): esa persona conserva su propio registro (su
-    -- usuario de empleado, su pago por comisión) y además tiene esta cuenta
-    -- con usuario y contraseña personalizados. Las cuentas adicionales no
-    -- entran en nómina ni asistencia (la persona ya está en ellas) y comparten
-    -- el documento de la persona, por eso la unicidad es (documento, cuenta_adicional).
-    cuenta_adicional    TINYINT(1) NOT NULL DEFAULT 0,
-    vinculado_tipo      ENUM('lavador','empleado') NULL,
-    vinculado_id        INT NULL,
     creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_usuario_documento (documento, cuenta_adicional)
+    actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
 -- ============================================================================

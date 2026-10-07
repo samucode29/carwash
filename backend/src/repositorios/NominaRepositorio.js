@@ -215,8 +215,7 @@ async function obtenerSoporteLiquidacion(id) {
 // Salarios fijos (empleados y administradores)
 // ---------------------------------------------------------------------------
 async function listarEmpleadosConUltimoPago() {
-  const [empleados] = await pool.query(`SELECT * FROM usuarios ORDER BY cuenta_adicional, nombre`);
-  const [lavadoresTodos] = await pool.query(`SELECT id, nombre FROM lavadores`);
+  const [empleados] = await pool.query(`SELECT * FROM usuarios ORDER BY nombre`);
   const [pagos] = await pool.query(
     `SELECT id, empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos,
             valor_a_pagar, estado, fecha_pago_real, soporte_pago_url,
@@ -228,7 +227,6 @@ async function listarEmpleadosConUltimoPago() {
     const pagosDelEmpleado = pagos.filter(p => p.empleado_id === emp.id);
     return {
       empleado_id: emp.id,
-      username: emp.username,
       nombre: emp.nombre,
       nombres: emp.nombres,
       apellidos: emp.apellidos,
@@ -242,12 +240,6 @@ async function listarEmpleadosConUltimoPago() {
       dias_descanso_semana: emp.dias_descanso_semana ?? 1,
       fecha_ingreso: emp.fecha_ingreso,
       es_admin_principal: !!emp.es_admin_principal,
-      // Cuenta de administrador adicional de un empleado/lavador: no cobra salario ni marca asistencia por separado.
-      cuenta_adicional: !!emp.cuenta_adicional,
-      vinculado_tipo: emp.vinculado_tipo || null,
-      vinculado_nombre: emp.cuenta_adicional
-        ? ((emp.vinculado_tipo === 'lavador' ? lavadoresTodos.find(l => l.id === emp.vinculado_id) : empleados.find(u => u.id === emp.vinculado_id)) || {}).nombre || null
-        : null,
       estado: emp.estado || 'activo',
       ultimo_pago: pagosDelEmpleado[pagosDelEmpleado.length - 1] || null
     };
