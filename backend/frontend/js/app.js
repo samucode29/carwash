@@ -2523,11 +2523,10 @@ const app = {
     this.loadReporteActivo();
   },
 
-  /** Cambia cuál de los 7 reportes se está viendo en pantalla. */
+  /** Cambia cuál de los reportes se está viendo en pantalla. */
   setReporteTipo(tipo) {
     this.reporteTipoActivo = tipo;
     document.querySelectorAll('#reporteTipoSelector .period-btn').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-reporte') === tipo));
-    document.querySelectorAll('.reporte-subview').forEach(v => v.classList.toggle('hidden', v.id !== `reporte-${tipo}`));
 
     // Inventario y Clientes son una foto del momento: no aplica período.
     const sinPeriodo = tipo === 'inventario' || tipo === 'clientes';
@@ -2537,252 +2536,42 @@ const app = {
     this.loadReporteActivo();
   },
 
-  loadReporteActivo() {
+  /**
+   * Pide al servidor el "documento" del reporte activo (indicadores, hallazgos,
+   * gráficos y tablas ya calculados; es el mismo que se descarga en PDF) y lo dibuja.
+   */
+  async loadReporteActivo() {
     const tipo = this.reporteTipoActivo || 'resumen';
-    if (tipo === 'personalizado' && this.dashboardPeriod === 'personalizado') return; // guard, no-op
-    const cargadores = {
-      resumen: () => this.loadDashboard(),
-      ventas: () => this.loadReporteVentas(),
-      compras: () => this.loadReporteCompras(),
-      inventario: () => this.loadReporteInventario(),
-      nomina: () => this.loadReporteNomina(),
-      comparativo: () => this.loadReporteComparativo(),
-      operativo: () => this.loadReporteOperativo(),
-      asistencia: () => this.loadReporteAsistencia(),
-      clientes: () => this.loadReporteClientes()
-    };
-    (cargadores[tipo] || cargadores.resumen)();
-  },
+    const contenedor = document.getElementById('reporteVista');
+    if (!contenedor) return;
 
-  /** Barras horizontales simples (sin librerías externas). data = [{label, value}] */
-  renderBarChart(elId, data, { color = '#0077b6', money = true } = {}) {
-    const el = document.getElementById(elId);
-    if (!el) return;
-    if (!data || data.length === 0) {
-      el.innerHTML = '<p class="text-muted text-sm text-center py-3">Sin datos en el período.</p>';
-      return;
+    const sinPeriodo = tipo === 'inventario' || tipo === 'clientes';
+    if (!sinPeriodo && this.dashboardPeriod === 'personalizado') {
+      const inicio = document.getElementById('reporteFechaInicio').value;
+      const fin = document.getElementById('reporteFechaFin').value;
+      if (!inicio || !fin) {
+        contenedor.innerHTML = '<p class="rep-empty">Elige las fechas "Desde" y "Hasta" para ver el reporte.</p>';
+        return;
+      }
+      if (inicio > fin) {
+        contenedor.innerHTML = '<p class="rep-empty">La fecha "Desde" no puede ser posterior a "Hasta".</p>';
+        return;
+      }
     }
-    const max = Math.max(...data.map(d => d.value), 1);
-    el.innerHTML = `<div class="bar-chart-list">${data.map(d => `
-      <div class="bar-chart-row">
-        <span class="bar-chart-label" title="${d.label}">${d.label}</span>
-        <div class="bar-chart-track"><div class="bar-chart-fill" style="width:${Math.max(2, (d.value / max) * 100).toFixed(1)}%; background:${color}"></div></div>
-        <span class="bar-chart-value">${money ? this.formatMoney(d.value) : d.value}</span>
-      </div>
-    `).join('')}</div>`;
-  },
 
-  /** Dona SVG simple. data = [{label, value, color}] */
-  renderDonutChart(elId, data, { money = false } = {}) {
-    const el = document.getElementById(elId);
-    if (!el) return;
-    const total = data.reduce((s, d) => s + d.value, 0);
-    if (!total) {
-      el.innerHTML = '<p class="text-muted text-sm text-center py-3">Sin datos en el período.</p>';
-      return;
+    const idPedido = (this.reporteIdPedido = (this.reporteIdPedido || 0) + 1);
+    contenedor.innerHTML = '<div class="rep-loading"><div class="rep-spinner"></div>Calculando el reporte...</div>';
+    try {
+      const vista = await ApiCliente.get(`/api/reportes/${tipo}/vista${sinPeriodo ? '' : `?${this.construirQueryPeriodo()}`}`);
+      if (idPedido !== this.reporteIdPedido) return; // llegó una respuesta de una elección anterior
+      this.renderReporteVista(vista);
+    } catch (err) {
+      if (idPedido !== this.reporteIdPedido) return;
+      contenedor.innerHTML = `<div class="rep-loading">No se pudo cargar el reporte (${escapeHtml(err.message || 'error')}).<br><button class="btn btn-outline mt-2" onclick="app.loadReporteActivo()">Reintentar</button></div>`;
     }
-    const radio = 45, circunferencia = 2 * Math.PI * radio;
-    let acumulado = 0;
-    const circulos = data.filter(d => d.value > 0).map(d => {
-      const frac = d.value / total;
-      const largo = frac * circunferencia;
-      const circle = `<circle r="${radio}" cx="60" cy="60" fill="transparent" stroke="${d.color}" stroke-width="18" stroke-dasharray="${largo} ${circunferencia - largo}" stroke-dashoffset="${-acumulado}" transform="rotate(-90 60 60)"></circle>`;
-      acumulado += largo;
-      return circle;
-    }).join('');
-    const leyenda = data.map(d => `<div class="donut-legend-item"><span class="donut-dot" style="background:${d.color}"></span>${d.label}: ${money ? this.formatMoney(d.value) : d.value} (${Math.round((d.value / total) * 100)}%)</div>`).join('');
-    el.innerHTML = `<div class="donut-chart-wrapper"><svg width="120" height="120" viewBox="0 0 120 120">${circulos}</svg><div class="donut-legend">${leyenda}</div></div>`;
   },
 
-  async loadReporteVentas() {
-    try {
-      const r = await ApiCliente.get(`/api/reportes/ventas?${this.construirQueryPeriodo()}`);
-      document.getElementById('ventasTotal').textContent = this.formatMoney(r.totalVentas);
-      document.getElementById('ventasCantidad').textContent = r.cantidadVentas;
-      document.getElementById('ventasTicketProm').textContent = this.formatMoney(r.ticketPromedio);
-      document.getElementById('ventasTotalPropinas').textContent = this.formatMoney(r.totalPropinas);
-
-      this.renderBarChart('ventasPorServicioChart', Object.entries(r.porServicio).map(([label, value]) => ({ label, value })), { color: '#0077b6' });
-      this.renderDonutChart('ventasPorMetodoChart', Object.entries(r.porMetodoPago).map(([label, value], i) => ({ label: label.toUpperCase(), value, color: ['#0077b6', '#00b4d8', '#10b981', '#f59e0b'][i % 4] })), { money: true });
-      const coloresVeh = ['#0077b6', '#00b4d8', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
-      this.renderDonutChart('ventasPorVehiculoChart', Object.entries(r.porVehiculo).map(([tipo, value], i) => ({
-        label: `${tipo[0].toUpperCase() + tipo.slice(1)} (${(r.cantidadPorVehiculo || {})[tipo] || 0} servicios)`, value, color: coloresVeh[i % coloresVeh.length]
-      })), { money: true });
-
-      const elPorLav = document.getElementById('ventasPorLavadorChart');
-      if (elPorLav) {
-        elPorLav.innerHTML = (r.porLavador && r.porLavador.length)
-          ? '' : '<p class="text-sm text-muted">Sin servicios atendidos por lavadores en el período.</p>';
-        if (r.porLavador && r.porLavador.length) {
-          this.renderBarChart('ventasPorLavadorChart', r.porLavador.map(l => ({ label: `${nombreCorto(l.nombre)} (${l.servicios})${l.propinas > 0 ? ` +${this.formatMoney(l.propinas)} propinas` : ''}`, value: l.comision })), { color: '#10b981' });
-        }
-      }
-
-      document.getElementById('ventasTopClientesBody').innerHTML = r.topClientes.map(c => `
-        <tr><td>${c.nombre}</td><td>${c.cantidad}</td><td><strong>${this.formatMoney(c.total)}</strong></td></tr>
-      `).join('') || `<tr><td colspan="3" class="text-center text-muted text-sm py-3">Sin clientes registrados con compras en el período.</td></tr>`;
-
-      document.getElementById('ventasPropinasBody').innerHTML = (r.detallePropinas || []).map(p => `
-        <tr>
-          <td>${String(p.fecha).substring(0, 10)}</td>
-          <td>#${p.ordenId} ${escapeHtml(p.servicio)}</td>
-          <td>${escapeHtml(p.cliente)}</td>
-          <td>${escapeHtml(p.lavador)}</td>
-          <td class="text-success"><strong>${this.formatMoney(p.valor)}</strong></td>
-        </tr>
-      `).join('') || `<tr><td colspan="5" class="text-center text-muted text-sm py-3">Sin propinas registradas en el período.</td></tr>`;
-    } catch (err) { console.error(err); }
-  },
-
-  async loadReporteCompras() {
-    try {
-      const r = await ApiCliente.get(`/api/reportes/compras?${this.construirQueryPeriodo()}`);
-      document.getElementById('comprasTotal').textContent = this.formatMoney(r.totalCompras);
-      document.getElementById('comprasCantidad').textContent = r.cantidadCompras;
-      this.renderBarChart('comprasPorProveedorChart', Object.entries(r.porProveedor).map(([label, value]) => ({ label, value })), { color: '#f59e0b' });
-      this.renderBarChart('comprasPorInsumoChart', Object.entries(r.porInsumo).map(([label, value]) => ({ label, value })), { color: '#f59e0b' });
-    } catch (err) { console.error(err); }
-  },
-
-  async loadReporteInventario() {
-    try {
-      const r = await ApiCliente.get('/api/reportes/inventario');
-      document.getElementById('inventarioValorTotal').textContent = this.formatMoney(r.valorTotalInventario);
-      document.getElementById('inventarioAlertas').textContent = r.alertas.length;
-      this.renderBarChart('inventarioValorChart', r.insumos.map(i => ({ label: i.nombre, value: i.valor })), { color: '#0077b6' });
-    } catch (err) { console.error(err); }
-  },
-
-  async loadReporteNomina() {
-    try {
-      const r = await ApiCliente.get(`/api/reportes/nomina?${this.construirQueryPeriodo()}`);
-      document.getElementById('nominaSalarios').textContent = this.formatMoney(r.salariosPagados);
-      document.getElementById('nominaComisiones').textContent = this.formatMoney(r.comisionesPagadas);
-      document.getElementById('nominaPendiente').textContent = this.formatMoney(r.liquidacionesPendientesTotal);
-      document.getElementById('nominaHoras').textContent = `${r.horasTrabajadasTotal} hrs`;
-      document.getElementById('nominaPropinas').textContent = this.formatMoney(r.propinasPeriodo);
-      document.getElementById('nominaDescuentos').textContent = this.formatMoney(r.descuentosTrabajadorPeriodo);
-      this.renderDonutChart('nominaAsistenciaChart', [
-        { label: 'Presentes', value: r.asistenciasPresentes, color: '#10b981' },
-        { label: 'Inasistencias', value: r.inasistencias, color: '#ef4444' }
-      ]);
-
-      const elEmp = document.getElementById('nominaPorEmpleadoChart');
-      if (elEmp) {
-        elEmp.innerHTML = (r.porEmpleado && r.porEmpleado.length)
-          ? ''
-          : '<p class="text-sm text-muted">Sin pagos de salario en este período.</p>';
-        if (r.porEmpleado && r.porEmpleado.length) {
-          this.renderBarChart('nominaPorEmpleadoChart', r.porEmpleado.map(e => ({ label: e.nombre, value: e.total })), { color: '#0077b6' });
-        }
-      }
-
-      const elLav = document.getElementById('nominaPorLavadorChart');
-      if (elLav) {
-        elLav.innerHTML = (r.porLavador && r.porLavador.length)
-          ? ''
-          : '<p class="text-sm text-muted">Sin comisiones pagadas en este período.</p>';
-        if (r.porLavador && r.porLavador.length) {
-          this.renderBarChart('nominaPorLavadorChart', r.porLavador.map(l => ({ label: l.nombre, value: l.total })), { color: '#f59e0b' });
-        }
-      }
-    } catch (err) { console.error(err); }
-  },
-
-  async loadReporteComparativo() {
-    try {
-      const r = await ApiCliente.get(`/api/reportes/comparativo?${this.construirQueryPeriodo()}`);
-      const fmtVar = v => v === null ? 'Sin datos del período anterior' : `${v > 0 ? '▲' : v < 0 ? '▼' : '='} ${Math.abs(v)}% vs. período anterior`;
-
-      this.renderBarChart('compIngresosChart', [
-        { label: 'Actual', value: r.actual.totalIngresos },
-        { label: 'Anterior', value: r.anterior.totalIngresos }
-      ], { color: '#0077b6' });
-      document.getElementById('compIngresosVar').textContent = fmtVar(r.variacionIngresos);
-
-      this.renderBarChart('compGananciaChart', [
-        { label: 'Actual', value: r.actual.gananciaNeta },
-        { label: 'Anterior', value: r.anterior.gananciaNeta }
-      ], { color: '#10b981' });
-      document.getElementById('compGananciaVar').textContent = fmtVar(r.variacionGanancia);
-
-      this.renderBarChart('compServiciosChart', [
-        { label: 'Actual', value: r.actual.serviciosAtendidos },
-        { label: 'Anterior', value: r.anterior.serviciosAtendidos }
-      ], { color: '#f59e0b', money: false });
-      document.getElementById('compServiciosVar').textContent = fmtVar(r.variacionServicios);
-    } catch (err) { console.error(err); }
-  },
-
-  async loadReporteOperativo() {
-    try {
-      const r = await ApiCliente.get(`/api/reportes/operativo?${this.construirQueryPeriodo()}`);
-      document.getElementById('opClientesNuevos').textContent = r.clientesNuevos;
-      document.getElementById('opClientesRecurrentes').textContent = r.clientesRecurrentes;
-      const cancelados = r.serviciosCancelados || { turnos: 0, ordenes: 0, total: 0 };
-      document.getElementById('opServiciosCancelados').textContent = cancelados.total;
-      document.getElementById('opServiciosCanceladosDetalle').textContent = `${cancelados.turnos} turnos • ${cancelados.ordenes} órdenes`;
-      const coloresEstado = { agendada: '#0077b6', reprogramada: '#f59e0b', atendida: '#10b981', cancelada: '#ef4444' };
-      this.renderDonutChart('opCitasChart', Object.entries(r.porEstadoCitas).map(([label, value]) => ({ label: label[0].toUpperCase() + label.slice(1), value, color: coloresEstado[label] || '#64748b' })));
-    } catch (err) { console.error(err); }
-  },
-
-  async loadReporteAsistencia() {
-    try {
-      const r = await ApiCliente.get(`/api/reportes/asistencia?${this.construirQueryPeriodo()}`);
-      document.getElementById('asistTotalPresentes').textContent = r.totalPresentes;
-      document.getElementById('asistTotalInasistencias').textContent = r.totalInasistencias;
-      document.getElementById('asistTotalHoras').textContent = `${r.totalHorasTrabajadas} hrs`;
-
-      document.getElementById('asistPorTrabajadorBody').innerHTML = r.porTrabajador.map(t => `
-        <tr>
-          <td><strong>${t.nombre}</strong></td>
-          <td><span class="role-badge">${(t.rol || '').toUpperCase()}</span></td>
-          <td class="text-success">${t.presentes}</td>
-          <td class="text-danger">${t.inasistencias}</td>
-          <td>${t.horasTrabajadas} hrs</td>
-        </tr>
-      `).join('') || `<tr><td colspan="5" class="text-center text-muted text-sm py-3">Sin registros de asistencia en el período.</td></tr>`;
-
-      document.getElementById('asistDetalleBody').innerHTML = r.detalle.map(d => `
-        <tr>
-          <td>${d.fecha}</td>
-          <td>${d.nombre}</td>
-          <td>${d.sesiones || `${d.horaEntrada || '-'} a ${d.horaSalida || '-'}`}</td>
-          <td>${d.horasDescanso > 0 ? `${d.horasDescanso} hrs` : '-'}</td>
-          <td>${d.horasTrabajadas} hrs</td>
-          <td>${d.inasistencia ? '<span class="text-danger">Sí</span>' : 'No'}</td>
-        </tr>
-      `).join('') || `<tr><td colspan="6" class="text-center text-muted text-sm py-3">Sin registros de asistencia en el período.</td></tr>`;
-    } catch (err) { console.error(err); }
-  },
-
-  async loadReporteClientes() {
-    try {
-      const r = await ApiCliente.get('/api/reportes/clientes');
-      document.getElementById('clienTotal').textContent = r.totalClientes;
-      document.getElementById('clienActivos').textContent = r.activos;
-      document.getElementById('clienInactivos').textContent = r.inactivos;
-      document.getElementById('clienNuncaCompraron').textContent = r.nuncaCompraron;
-      document.getElementById('clienNotaInactividad').textContent = `Un cliente se marca inactivo si no ha comprado en más de ${r.diasInactividad} días.`;
-
-      const ETIQUETA_ESTADO = {
-        activo: '<span class="role-badge" style="background: #10b981">ACTIVO</span>',
-        inactivo: '<span class="role-badge" style="background: #ef4444">INACTIVO</span>',
-        nunca_compro: '<span class="role-badge" style="background: #f59e0b">NUNCA HA COMPRADO</span>'
-      };
-      document.getElementById('clienTableBody').innerHTML = r.clientes.map(c => `
-        <tr>
-          <td><strong>${c.nombre}</strong></td>
-          <td>${c.telefono || '-'}</td>
-          <td>${c.ultimaCompra || 'Nunca'}</td>
-          <td>${c.totalCompras}</td>
-          <td>${this.formatMoney(c.totalGastado)}</td>
-          <td>${ETIQUETA_ESTADO[c.estado] || c.estado}</td>
-        </tr>
-      `).join('') || `<tr><td colspan="6" class="text-center text-muted text-sm py-3">Sin clientes registrados.</td></tr>`;
-    } catch (err) { console.error(err); }
-  },
+  loadDashboard() { return this.loadReporteActivo(); },
 
   construirQueryPeriodo() {
     let query = `periodo=${this.dashboardPeriod}`;
@@ -2794,69 +2583,240 @@ const app = {
     return query;
   },
 
-  async loadDashboard() {
-    if (this.dashboardPeriod === 'personalizado') {
-      const inicio = document.getElementById('reporteFechaInicio').value;
-      const fin = document.getElementById('reporteFechaFin').value;
-      if (!inicio || !fin) return; // esperar a que el usuario complete ambas fechas
+  // ---- Dibujo del documento de reporte -------------------------------------
+  renderReporteVista(v) {
+    this.reporteDoc = v;
+    const e = escapeHtml;
+
+    const chips = [];
+    if (v.periodo) {
+      chips.push(`<span class="rep-chip">${e(v.periodo.etiqueta)}</span>`);
+      if (v.periodo.inicio) chips.push(`<span class="rep-chip muted">${e(v.periodo.inicio)} a ${e(v.periodo.fin)}</span>`);
+    }
+    chips.push(`<span class="rep-chip muted">Generado ${e(new Date().toLocaleString('es-CO'))}</span>`);
+    let html = `<div class="rep-header"><div class="rep-chips">${chips.join('')}</div><h3>${e(v.titulo)}</h3><p>${e(v.descripcion || '')}</p></div>`;
+
+    if (v.kpis && v.kpis.length) html += `<div class="rep-kpis">${v.kpis.map(k => this.repKpiHtml(k)).join('')}</div>`;
+
+    if (v.hallazgos && v.hallazgos.length) {
+      html += `<div class="rep-insights"><h4>Lo más importante de este reporte</h4><ul>${v.hallazgos.map(h => `<li>${e(h)}</li>`).join('')}</ul></div>`;
     }
 
-    try {
-      const [data, gastos] = await Promise.all([
-        ApiCliente.get(`/api/reportes/dashboard?${this.construirQueryPeriodo()}`),
-        ApiCliente.get('/api/gastos')
-      ]);
+    // Gráficos de torta/barras van de a dos por fila; todo lo demás a lo ancho.
+    const mitad = (s) => s.tipo === 'dona' || s.tipo === 'barras';
+    const anchos = v.secciones.map(s => !mitad(s));
+    let corrida = [];
+    const cerrarCorrida = () => { if (corrida.length % 2 === 1) anchos[corrida[corrida.length - 1]] = true; corrida = []; };
+    v.secciones.forEach((s, i) => { if (mitad(s)) corrida.push(i); else cerrarCorrida(); });
+    cerrarCorrida();
 
-      document.getElementById('dashIngresos').textContent = this.formatMoney(data.totalIngresos);
-      document.getElementById('dashCostoInsumos').textContent = this.formatMoney(data.costoInsumos);
-      document.getElementById('dashComisiones').textContent = this.formatMoney(data.totalComisionesLavadores);
-      document.getElementById('dashGastos').textContent = this.formatMoney(data.totalGastos);
-      document.getElementById('dashGananciaNeta').textContent = this.formatMoney(data.gananciaNeta);
-      document.getElementById('dashMargenNeto').textContent = `Margen Rentabilidad: ${data.margenPorcentaje}%`;
-      document.getElementById('dashDescNegocio').textContent = this.formatMoney(data.totalDescuentoNegocio);
-      document.getElementById('dashDescTrabajador').textContent = this.formatMoney(data.totalDescuentoTrabajador);
-      document.getElementById('dashPropinas').textContent = this.formatMoney(data.totalPropinas);
-      const canc = data.serviciosCancelados || { turnos: 0, ordenes: 0, total: 0 };
-      document.getElementById('dashCancelados').textContent = `${canc.total} (${canc.turnos} turnos • ${canc.ordenes} órdenes)`;
+    html += '<div class="rep-grid">' + v.secciones.map((s, i) => this.repSeccionHtml(s, i, anchos[i])).join('') + '</div>';
+    document.getElementById('reporteVista').innerHTML = html;
+  },
 
-      const coloresVehiculo = ['#0077b6', '#00b4d8', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
-      const entradasVeh = Object.entries(data.distribucionVehiculos || {});
-      const totVeh = entradasVeh.reduce((s, [, c]) => s + c, 0) || 1;
-      const elRatioBars = document.getElementById('dashVehiculosRatioBars');
-      if (elRatioBars) {
-        elRatioBars.innerHTML = entradasVeh.map(([tipo, count], i) => `
-          <div class="ratio-item ${i > 0 ? 'mt-3' : ''}">
-            <div class="d-flex justify-between text-sm mb-1">
-              <span>${tipo[0].toUpperCase() + tipo.slice(1)}</span>
-              <span>${count} servicios (${Math.round((count / totVeh) * 100)}%) • ${this.formatMoney(((data.porTipoVehiculo || {})[tipo] || {}).ingresos || 0)}</span>
-            </div>
-            <div class="progress-track"><div class="progress-fill" style="width: ${(count / totVeh) * 100}%; background: ${coloresVehiculo[i % coloresVehiculo.length]}"></div></div>
-          </div>
-        `).join('') || '<p class="text-sm text-muted">Sin vehículos atendidos en el período.</p>';
-      }
+  repKpiHtml(k) {
+    const e = escapeHtml;
+    let delta = '';
+    if (k.variacion !== null && k.variacion !== undefined) {
+      const mejor = k.mejorSiSube === false ? k.variacion < 0 : k.variacion > 0;
+      const clase = k.variacion === 0 ? 'neutro' : (mejor ? 'ok' : 'mal');
+      const flecha = k.variacion > 0 ? '▲' : (k.variacion < 0 ? '▼' : '=');
+      delta = `<span class="rep-delta ${clase}">${flecha} ${Math.abs(k.variacion).toLocaleString('es-CO')}% vs. período anterior</span>`;
+    }
+    return `<div class="rep-kpi ${e(k.tono || '')}" title="${e(k.titulo)}: ${e(k.valor)}">
+      <div class="rep-kpi-title">${e(k.titulo)}</div>
+      <div class="rep-kpi-value">${e(k.valor)}</div>
+      ${delta}
+      ${k.detalle ? `<div class="rep-kpi-detail">${e(k.detalle)}</div>` : ''}
+    </div>`;
+  },
 
-      document.getElementById('dashServiciosList').innerHTML = Object.entries(data.serviciosStats || {}).map(([nombre, stat]) => `
-        <div class="stats-row"><span>${nombre}</span><strong>${stat.count} atendidos (${this.formatMoney(stat.total)})</strong></div>
-      `).join('') || '<p class="text-sm text-muted">Sin servicios en el período</p>';
+  repSeccionHtml(s, idx, ancho) {
+    const e = escapeHtml;
+    let cuerpo = '';
+    let herramientas = '';
+    if (s.tipo === 'serie') cuerpo = this.repSerieHtml(s);
+    else if (s.tipo === 'barras') cuerpo = this.repBarrasHtml(s);
+    else if (s.tipo === 'dona') cuerpo = this.repDonaHtml(s);
+    else if (s.tipo === 'formula') cuerpo = this.repFormulaHtml(s);
+    else if (s.tipo === 'texto') cuerpo = `<p>${e(s.texto)}</p>`;
+    else if (s.tipo === 'tabla') {
+      cuerpo = this.repTablaHtml(s, idx);
+      const botones = [];
+      if (s.filas.length > 10) botones.push(`<input type="search" class="rep-filter" placeholder="Filtrar esta tabla..." oninput="app.filtrarTablaReporte(this, ${idx})">`);
+      if (s.filas.length > 0) botones.push(`<button class="btn btn-sm btn-outline" onclick="app.descargarTablaReporteCsv(${idx})" title="Descargar esta tabla para Excel">Exportar CSV</button>`);
+      if (s.accion && /^[A-Za-z]+$/.test(s.accion.fn || '')) botones.push(`<button class="btn btn-sm btn-outline" onclick="app.${s.accion.fn}()">${e(s.accion.texto)}</button>`);
+      herramientas = botones.length ? `<div class="rep-tools">${botones.join('')}</div>` : '';
+    }
+    return `<div class="chart-card rep-section ${ancho ? 'rep-full' : ''}">
+      <div class="rep-section-head"><h4>${e(s.titulo)}</h4>${herramientas}</div>
+      ${s.explicacion ? `<p class="rep-explain">${e(s.explicacion)}</p>` : '<div style="height:0.6rem"></div>'}
+      ${cuerpo}
+    </div>`;
+  },
 
-      document.getElementById('dashLavadoresList').innerHTML = Object.entries(data.lavadoresStats || {}).map(([nombre, stat]) => `
-        <div class="stats-row"><span>${nombre}</span><strong>${stat.servicios} lavados • ${this.formatMoney(stat.comision)}${stat.propinas > 0 ? ` • propinas ${this.formatMoney(stat.propinas)}` : ''}</strong></div>
-      `).join('') || '<p class="text-sm text-muted">Sin actividad en el período</p>';
+  repFormulaHtml(s) {
+    const e = escapeHtml;
+    const clase = { ok: 'text-success', mal: 'text-danger', destacado: 'text-bright' };
+    return `<div class="profit-formula-card">${s.pasos.map(p => `
+      ${p.operador ? `<span class="formula-op">${e(p.operador)}</span>` : ''}
+      <div class="formula-item ${p.tono === 'destacado' ? 'highlight-box' : ''}">
+        <span class="formula-label">${e(p.etiqueta)}</span>
+        <span class="formula-val ${clase[p.tono] || ''}">${e(p.valor)}</span>
+        ${p.detalle ? `<span class="formula-sub">${e(p.detalle)}</span>` : ''}
+      </div>`).join('')}</div>`;
+  },
 
-      const tbGastos = document.getElementById('gastosTableBody');
-      if (tbGastos) {
-        tbGastos.innerHTML = gastos.slice(0, 8).map(g => `
-          <tr><td>${g.fecha}</td><td>${g.concepto}</td><td><strong class="text-danger">${this.formatMoney(g.monto)}</strong></td></tr>
-        `).join('');
-      }
+  repEjeMaximo(max) {
+    const pot = Math.pow(10, Math.floor(Math.log10(max)));
+    const norm = max / pot;
+    return ([1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(p => norm <= p + 1e-9) || 10) * pot;
+  },
 
-      const tbAuditoria = document.getElementById('auditoriaTableBody');
-      if (tbAuditoria) {
-        tbAuditoria.innerHTML = (data.auditoriaReciente || []).map(a => `
-          <tr><td>${a.fecha.substring(5, 16)}</td><td><span class="role-badge">${a.accion.toUpperCase()}</span></td><td class="text-sm text-muted">${a.detalle}</td></tr>
-        `).join('');
-      }
-    } catch (err) { console.error(err); }
+  repMonedaCorta(v) {
+    const abs = Math.abs(v);
+    if (abs >= 1000000) return `$${(v / 1000000).toLocaleString('es-CO', { maximumFractionDigits: 1 })}M`;
+    if (abs >= 1000) return `$${(v / 1000).toLocaleString('es-CO', { maximumFractionDigits: abs >= 100000 ? 0 : 1 })}K`;
+    return `$${Math.round(v).toLocaleString('es-CO')}`;
+  },
+
+  /** Columnas (una serie) o líneas (varias series/comparaciones) con ejes, cuadrícula y tooltips. */
+  repSerieHtml(s) {
+    const e = escapeHtml;
+    const todos = s.series.flatMap(x => x.valores);
+    if (!todos.some(v => v > 0)) return '<p class="rep-empty">Sin datos en el período.</p>';
+
+    const W = 760, H = 270, ml = 60, mr = 12, mt = 14, mb = 38;
+    const pw = W - ml - mr, ph = H - mt - mb;
+    const max = this.repEjeMaximo(Math.max(...todos));
+    const dinero = s.formato === 'dinero';
+    const fmtEje = dinero ? v => this.repMonedaCorta(v) : v => Number(v).toLocaleString('es-CO', { maximumFractionDigits: Number.isInteger(v) ? 0 : 1 });
+    const fmtTip = dinero ? v => this.formatMoney(v) : v => Number(v).toLocaleString('es-CO');
+    const n = s.etiquetas.length;
+    const gw = pw / n;
+    const k = s.series.length;
+    const py = v => mt + ph - (v / max) * ph;
+    let g = '';
+
+    for (let i = 0; i <= 4; i++) {
+      const y = mt + ph - (ph * i) / 4;
+      g += `<line class="rep-grid-line" x1="${ml}" x2="${W - mr}" y1="${y}" y2="${y}"/><text class="rep-axis" x="${ml - 8}" y="${y + 3.5}" text-anchor="end">${fmtEje((max * i) / 4)}</text>`;
+    }
+
+    if (s.estilo === 'lineas' && n > 1) {
+      const px = i => ml + gw * i + gw / 2;
+      s.series.forEach((se, si) => {
+        const puntos = se.valores.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+        if (si === 0) g += `<polygon points="${px(0).toFixed(1)},${(mt + ph).toFixed(1)} ${puntos} ${px(n - 1).toFixed(1)},${(mt + ph).toFixed(1)}" fill="${se.color}" opacity="0.09"/>`;
+        g += `<polyline points="${puntos}" fill="none" stroke="${se.color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+        if (n <= 40) g += se.valores.map((v, i) => `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3" fill="${se.color}"/>`).join('');
+      });
+    } else {
+      const anchoBarra = Math.max(2, Math.min(34, (gw * 0.72) / k));
+      s.series.forEach((se, si) => {
+        se.valores.forEach((v, i) => {
+          if (v <= 0) return;
+          const h = (v / max) * ph;
+          const x = ml + gw * i + (gw - anchoBarra * k) / 2 + anchoBarra * si;
+          g += `<rect x="${x.toFixed(1)}" y="${(mt + ph - h).toFixed(1)}" width="${anchoBarra.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${se.color}"/>`;
+          if (n <= 12 && k === 1) g += `<text class="rep-axis" x="${(x + anchoBarra / 2).toFixed(1)}" y="${(mt + ph - h - 5).toFixed(1)}" text-anchor="middle" style="font-weight:700">${fmtEje(v)}</text>`;
+        });
+      });
+    }
+
+    // zonas sensibles con la información exacta de cada momento
+    for (let i = 0; i < n; i++) {
+      const detalle = s.series.map(se => `${se.nombre}: ${fmtTip(se.valores[i])}`).join('\n');
+      g += `<rect class="rep-col-hit" x="${(ml + gw * i).toFixed(1)}" y="${mt}" width="${gw.toFixed(1)}" height="${ph}"><title>${e(s.etiquetas[i])}\n${e(detalle)}</title></rect>`;
+    }
+
+    const paso = Math.max(1, Math.ceil(n / 13));
+    s.etiquetas.forEach((et, i) => {
+      if (i % paso === 0) g += `<text class="rep-axis" x="${(ml + gw * i + gw / 2).toFixed(1)}" y="${H - mb + 17}" text-anchor="middle">${e(et)}</text>`;
+    });
+    g += `<line class="rep-base-line" x1="${ml}" x2="${W - mr}" y1="${mt + ph}" y2="${mt + ph}"/>`;
+
+    const leyenda = k > 1 ? `<div class="rep-legend">${s.series.map(se => `<span><i style="background:${se.color}"></i>${e(se.nombre)}</span>`).join('')}</div>` : '';
+    return `${leyenda}<svg class="rep-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${e(s.titulo)}">${g}</svg>`;
+  },
+
+  repBarrasHtml(s) {
+    const e = escapeHtml;
+    if (!s.items.length || s.items.every(i => !i.valor)) return '<p class="rep-empty">Sin datos en el período.</p>';
+    const max = Math.max(...s.items.map(i => i.valor), 1);
+    return `<div class="rep-bar-list">${s.items.map(it => `
+      <div class="rep-bar-row">
+        <span class="rep-bar-label" title="${e(it.etiqueta)}">${e(it.etiqueta)}</span>
+        <div class="rep-bar-track"><div class="rep-bar-fill" style="width:${Math.max(it.valor > 0 ? 2 : 0, (it.valor / max) * 100).toFixed(1)}%; background:${it.color}"></div></div>
+        <span class="rep-bar-value">${e(it.texto)}</span>
+      </div>`).join('')}</div>`;
+  },
+
+  repDonaHtml(s) {
+    const e = escapeHtml;
+    const items = s.items.filter(i => i.valor > 0);
+    const total = items.reduce((a, i) => a + i.valor, 0);
+    if (!total) return '<p class="rep-empty">Sin datos en el período.</p>';
+    const r = 62;
+    const circ = 2 * Math.PI * r;
+    let acumulado = 0;
+    const aros = items.map(it => {
+      const largo = (it.valor / total) * circ;
+      const aro = `<circle r="${r}" cx="85" cy="85" fill="none" stroke="${it.color}" stroke-width="26" stroke-dasharray="${largo.toFixed(2)} ${(circ - largo).toFixed(2)}" stroke-dashoffset="${(-acumulado).toFixed(2)}" transform="rotate(-90 85 85)"><title>${e(it.etiqueta)}: ${e(it.texto)} (${Math.round((it.valor / total) * 100)}%)</title></circle>`;
+      acumulado += largo;
+      return aro;
+    }).join('');
+    const mayor = items.reduce((a, b) => (b.valor > a.valor ? b : a), items[0]);
+    const etiquetaMayor = mayor.etiqueta.length > 16 ? `${mayor.etiqueta.slice(0, 15)}…` : mayor.etiqueta;
+    const leyenda = items.map(it => `
+      <div class="rep-donut-item"><i style="background:${it.color}"></i><span>${e(it.etiqueta)}</span><span><strong>${e(it.texto)}</strong> <small>${Math.round((it.valor / total) * 100)}%</small></span></div>`).join('');
+    return `<div class="rep-donut">
+      <svg viewBox="0 0 170 170" role="img" aria-label="${e(s.titulo)}">${aros}
+        <text class="rep-donut-center-big" x="85" y="88" text-anchor="middle">${Math.round((mayor.valor / total) * 100)}%</text>
+        <text class="rep-donut-center-small" x="85" y="104" text-anchor="middle">${e(etiquetaMayor)}</text>
+      </svg>
+      <div class="rep-donut-legend">${leyenda}</div>
+    </div>`;
+  },
+
+  repTablaHtml(s, idx) {
+    const e = escapeHtml;
+    if (!s.filas.length) return `<p class="rep-empty">${e(s.vacio || 'Sin datos en el período.')}</p>`;
+    const texto = (c) => (c && typeof c === 'object' ? c.t : c);
+    const celda = (c, i) => {
+      const tono = c && typeof c === 'object' ? c.tono : '';
+      const contenido = tono ? `<span class="rep-tono-${e(tono)}">${e(texto(c))}</span>` : e(texto(c));
+      return `<td class="${s.columnas[i].alinear === 'der' ? 'num' : ''}">${contenido}</td>`;
+    };
+    const encabezado = `<tr>${s.columnas.map(c => `<th class="${c.alinear === 'der' ? 'num' : ''}">${e(c.titulo)}</th>`).join('')}</tr>`;
+    const filas = s.filas.map(f => `<tr>${f.map(celda).join('')}</tr>`).join('');
+    const pie = s.totales ? `<tfoot><tr>${s.totales.map(celda).join('')}</tr></tfoot>` : '';
+    return `<div class="rep-table-wrap"><table class="data-table data-table-sm rep-table" id="repTabla-${idx}"><thead>${encabezado}</thead><tbody>${filas}</tbody>${pie}</table></div>
+      ${s.nota ? `<p class="rep-note">${e(s.nota)}</p>` : ''}`;
+  },
+
+  filtrarTablaReporte(input, idx) {
+    const q = input.value.trim().toLowerCase();
+    document.querySelectorAll(`#repTabla-${idx} tbody tr`).forEach(tr => {
+      tr.classList.toggle('hidden', !!q && !tr.textContent.toLowerCase().includes(q));
+    });
+  },
+
+  /** Descarga una tabla del reporte como CSV (separador ";" y tildes correctas para Excel en español). */
+  descargarTablaReporteCsv(idx) {
+    const s = this.reporteDoc && this.reporteDoc.secciones[idx];
+    if (!s || s.tipo !== 'tabla') return;
+    const texto = (c) => (c && typeof c === 'object' ? c.t : c);
+    const esc = (v) => `"${String(v === null || v === undefined ? '' : v).replace(/"/g, '""')}"`;
+    const filas = [s.columnas.map(c => c.titulo), ...s.filas.map(f => f.map(texto))];
+    if (s.totales) filas.push(s.totales.map(texto));
+    const csv = '﻿' + filas.map(f => f.map(esc).join(';')).join('\r\n');
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    enlace.download = `${s.titulo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}.csv`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
   },
 
   /**

@@ -8,6 +8,11 @@ const { pool } = require('../config/baseDeDatos');
 const InsumoRepositorio = require('./InsumoRepositorio');
 const AuditoriaRepositorio = require('./AuditoriaRepositorio');
 const { formatearFechaLocal, obtenerFechaHoy } = require('../utilidades/fechas');
+const { planSerie, acumularSerie, acumularPorDiaSemana } = require('../utilidades/seriesReporte');
+
+// Cuántas filas de detalle se envían como máximo a pantalla/PDF (los totales
+// siempre se calculan con TODAS las filas del período).
+const MAX_FILAS_DETALLE = 500;
 
 function parsearFechaLocal(fechaStr) {
   const [anio, mes, dia] = fechaStr.split('-').map(Number);
@@ -28,7 +33,7 @@ function calcularRangoAnterior(inicio, fin) {
 async function calcularReporte(inicio, fin) {
   const [ordenesPagadas] = await pool.query(
     `SELECT o.id, o.total, p.monto AS pago_monto, p.descuento_negocio, p.descuento_trabajador, p.propina,
-            s.nombre AS servicio_nombre,
+            p.fecha_pago, p.metodo_pago, s.nombre AS servicio_nombre,
             COALESCE(v.tipo, o.tipo_vehiculo_anonimo, 'carro') AS tipo_vehiculo
      FROM pagos p
      INNER JOIN ordenes_servicio o ON o.id = p.orden_id
@@ -130,8 +135,37 @@ async function calcularReporte(inicio, fin) {
   const alertasStock = await InsumoRepositorio.listarAlertasStockBajo();
   const auditoriaReciente = await AuditoriaRepositorio.obtenerRecientes(8);
 
+  // Evolución de los ingresos (por hora si es un solo día, por día o por mes
+  // según el largo del rango) y desglose por método de pago.
+  const plan = planSerie(inicio, fin);
+  const serieIngresos = {
+    gran: plan.gran,
+    etiquetas: plan.etiquetas,
+    ingresos: acumularSerie(plan, ordenesPagadas, o => o.fecha_pago, montoDe),
+    servicios: acumularSerie(plan, ordenesPagadas, o => o.fecha_pago, () => 1)
+  };
+  const porMetodoPago = {};
+  ordenesPagadas.forEach(o => {
+    const metodo = o.metodo_pago || 'efectivo';
+    if (!porMetodoPago[metodo]) porMetodoPago[metodo] = { cantidad: 0, total: 0 };
+    porMetodoPago[metodo].cantidad += 1;
+    porMetodoPago[metodo].total += montoDe(o);
+  });
+
+  const [gastosDetalle] = await pool.query(
+    `SELECT g.id, g.fecha, g.concepto, g.monto, u.nombre AS registrado_por
+     FROM gastos_operativos g
+     LEFT JOIN usuarios u ON u.id = g.usuario_id
+     WHERE g.fecha BETWEEN ? AND ?
+     ORDER BY g.fecha DESC, g.id DESC`,
+    [inicio, fin]
+  );
+
   return {
     rango: { inicio, fin },
+    ticketPromedio: ordenesPagadas.length > 0 ? Math.round(totalIngresos / ordenesPagadas.length) : 0,
+    serieIngresos, porMetodoPago,
+    gastosDetalle: gastosDetalle.map(g => ({ id: g.id, fecha: g.fecha, concepto: g.concepto, monto: Number(g.monto), registradoPor: g.registrado_por || '-' })),
     totalIngresos, totalComisionesLavadores, costoInsumos, totalGastos, gananciaNeta, margenPorcentaje,
     totalDescuentoNegocio, totalDescuentoTrabajador, totalPropinas,
     serviciosAtendidos: ordenesPagadas.length,
@@ -145,49 +179,13 @@ async function calcularReporte(inicio, fin) {
   };
 }
 
-/** Ventas: por servicio, por método de pago, por vehículo, top clientes y ticket promedio. */
-async function calcularReporteVentas(inicio, fin) {
-  const [pagos] = await pool.query(
-    `SELECT p.metodo_pago, p.monto, s.nombre AS servicio_nombre,
-            COALESCE(v.tipo, o.tipo_vehiculo_anonimo, 'carro') AS tipo_vehiculo
-     FROM pagos p
-     INNER JOIN ordenes_servicio o ON o.id = p.orden_id
-     LEFT JOIN servicios s ON s.id = o.servicio_id
-     LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
-     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?`,
-    [inicio, fin]
-  );
-
-  const porServicio = {};
-  const porMetodoPago = {};
-  const porVehiculo = {};
-  const cantidadPorVehiculo = {};
-  let total = 0;
-  pagos.forEach(p => {
-    const monto = Number(p.monto);
-    total += monto;
-    const servicio = p.servicio_nombre || 'Otros';
-    const tipoVeh = p.tipo_vehiculo || 'carro';
-    porServicio[servicio] = (porServicio[servicio] || 0) + monto;
-    porMetodoPago[p.metodo_pago] = (porMetodoPago[p.metodo_pago] || 0) + monto;
-    porVehiculo[tipoVeh] = (porVehiculo[tipoVeh] || 0) + monto;
-    cantidadPorVehiculo[tipoVeh] = (cantidadPorVehiculo[tipoVeh] || 0) + 1;
-  });
-
-  const [topClientes] = await pool.query(
-    `SELECT cl.nombre, COUNT(*) AS cantidad, SUM(p.monto) AS total
-     FROM pagos p
-     INNER JOIN ordenes_servicio o ON o.id = p.orden_id
-     INNER JOIN clientes cl ON cl.id = o.cliente_id
-     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?
-     GROUP BY cl.id ORDER BY total DESC LIMIT 5`,
-    [inicio, fin]
-  );
-
-  // Ventas atendidas por cada lavador (cuántas órdenes pagadas trabajó, la
-  // comisión que le quedó después del descuento que asumió y las propinas
-  // que recibió), no solo el total del negocio.
-  const [lavadorOrdenFilas] = await pool.query(
+/**
+ * Productividad de cada lavador en el período: servicios pagados que trabajó,
+ * comisión bruta, la parte del descuento que asumió, comisión neta y propinas
+ * (en partes iguales si atendieron varios).
+ */
+async function calcularProductividadLavadores(inicio, fin) {
+  const [filas] = await pool.query(
     `SELECT ol.orden_id, ol.lavador_id, l.nombre, ol.valor_comision, p.descuento_trabajador, p.propina,
             (SELECT COUNT(*) FROM orden_lavadores x WHERE x.orden_id = ol.orden_id) AS lavadores_count,
             (SELECT SUM(x.valor_comision) FROM orden_lavadores x WHERE x.orden_id = ol.orden_id) AS comision_total_orden
@@ -197,19 +195,111 @@ async function calcularReporteVentas(inicio, fin) {
      WHERE DATE(p.fecha_pago) BETWEEN ? AND ?`,
     [inicio, fin]
   );
-  const porLavadorMapa = {};
-  lavadorOrdenFilas.forEach(f => {
+  const mapa = {};
+  filas.forEach(f => {
     const bruta = Number(f.valor_comision);
     const totalOrden = Number(f.comision_total_orden) || 0;
     const parteDescuento = totalOrden > 0 ? Number(f.descuento_trabajador || 0) * (bruta / totalOrden) : 0;
-    if (!porLavadorMapa[f.lavador_id]) porLavadorMapa[f.lavador_id] = { nombre: f.nombre, servicios: 0, comision: 0, propinas: 0 };
-    porLavadorMapa[f.lavador_id].servicios += 1;
-    porLavadorMapa[f.lavador_id].comision += bruta - parteDescuento;
-    porLavadorMapa[f.lavador_id].propinas += Number(f.propina || 0) / (Number(f.lavadores_count) || 1);
+    if (!mapa[f.lavador_id]) mapa[f.lavador_id] = { id: f.lavador_id, nombre: f.nombre, servicios: 0, comisionBruta: 0, descuentos: 0, comision: 0, propinas: 0 };
+    const l = mapa[f.lavador_id];
+    l.servicios += 1;
+    l.comisionBruta += bruta;
+    l.descuentos += parteDescuento;
+    l.comision += bruta - parteDescuento;
+    l.propinas += Number(f.propina || 0) / (Number(f.lavadores_count) || 1);
   });
-  const porLavador = Object.values(porLavadorMapa)
-    .map(l => ({ ...l, comision: Number(l.comision.toFixed(2)), propinas: Number(l.propinas.toFixed(2)) }))
+  return Object.values(mapa)
+    .map(l => ({
+      ...l,
+      comisionBruta: Number(l.comisionBruta.toFixed(2)),
+      descuentos: Number(l.descuentos.toFixed(2)),
+      comision: Number(l.comision.toFixed(2)),
+      propinas: Number(l.propinas.toFixed(2))
+    }))
     .sort((a, b) => b.comision - a.comision);
+}
+
+/** Ventas: por servicio, método de pago, vehículo, día/hora, lavador, clientes, propinas y detalle de cada venta. */
+async function calcularReporteVentas(inicio, fin) {
+  const [pagos] = await pool.query(
+    `SELECT p.id AS pago_id, p.fecha_pago, p.metodo_pago, p.monto, p.descuento_negocio, p.descuento_trabajador,
+            p.propina, p.observacion, o.id AS orden_id, o.es_venta_anonima, s.nombre AS servicio_nombre,
+            COALESCE(v.tipo, o.tipo_vehiculo_anonimo, 'carro') AS tipo_vehiculo,
+            COALESCE(v.placa, o.placa_anonima) AS placa,
+            cl.nombre AS cliente_nombre,
+            (SELECT GROUP_CONCAT(l.nombre ORDER BY l.nombre SEPARATOR ', ')
+             FROM orden_lavadores ol INNER JOIN lavadores l ON l.id = ol.lavador_id
+             WHERE ol.orden_id = o.id) AS lavadores
+     FROM pagos p
+     INNER JOIN ordenes_servicio o ON o.id = p.orden_id
+     LEFT JOIN servicios s ON s.id = o.servicio_id
+     LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
+     LEFT JOIN clientes cl ON cl.id = o.cliente_id
+     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?
+     ORDER BY p.fecha_pago DESC`,
+    [inicio, fin]
+  );
+
+  const porServicio = {};
+  const porMetodoPago = {};
+  const metodosDetalle = {};
+  const porVehiculo = {};
+  const cantidadPorVehiculo = {};
+  const serviciosMapa = {};
+  let total = 0;
+  let totalDescuentoNegocio = 0;
+  let totalDescuentoTrabajador = 0;
+  let mayorVenta = null;
+  const clientesDistintos = new Set();
+  let ventasAnonimas = 0;
+  pagos.forEach(p => {
+    const monto = Number(p.monto);
+    total += monto;
+    totalDescuentoNegocio += Number(p.descuento_negocio || 0);
+    totalDescuentoTrabajador += Number(p.descuento_trabajador || 0);
+    const servicio = p.servicio_nombre || 'Otros';
+    const tipoVeh = p.tipo_vehiculo || 'carro';
+    porServicio[servicio] = (porServicio[servicio] || 0) + monto;
+    porMetodoPago[p.metodo_pago] = (porMetodoPago[p.metodo_pago] || 0) + monto;
+    if (!metodosDetalle[p.metodo_pago]) metodosDetalle[p.metodo_pago] = { cantidad: 0, total: 0 };
+    metodosDetalle[p.metodo_pago].cantidad += 1;
+    metodosDetalle[p.metodo_pago].total += monto;
+    porVehiculo[tipoVeh] = (porVehiculo[tipoVeh] || 0) + monto;
+    cantidadPorVehiculo[tipoVeh] = (cantidadPorVehiculo[tipoVeh] || 0) + 1;
+    const clave = `${servicio}|${tipoVeh}`;
+    if (!serviciosMapa[clave]) serviciosMapa[clave] = { servicio, tipoVehiculo: tipoVeh, cantidad: 0, total: 0 };
+    serviciosMapa[clave].cantidad += 1;
+    serviciosMapa[clave].total += monto;
+    if (!mayorVenta || monto > mayorVenta.monto) mayorVenta = { monto, servicio, ordenId: p.orden_id };
+    if (p.cliente_nombre) clientesDistintos.add(p.cliente_nombre); else ventasAnonimas += 1;
+  });
+  const serviciosDetalle = Object.values(serviciosMapa).sort((a, b) => b.total - a.total);
+
+  const plan = planSerie(inicio, fin);
+  const serie = {
+    gran: plan.gran, etiquetas: plan.etiquetas,
+    ingresos: acumularSerie(plan, pagos, p => p.fecha_pago, p => p.monto),
+    servicios: acumularSerie(plan, pagos, p => p.fecha_pago, () => 1)
+  };
+  const porDiaSemana = acumularPorDiaSemana(pagos, p => p.fecha_pago, p => p.monto);
+  const planHoras = planSerie(inicio, inicio); // un día => 24 cubos por hora
+  const porHora = {
+    etiquetas: planHoras.etiquetas,
+    totales: acumularSerie(planHoras, pagos, p => p.fecha_pago, p => p.monto),
+    cantidades: acumularSerie(planHoras, pagos, p => p.fecha_pago, () => 1)
+  };
+
+  const [topClientes] = await pool.query(
+    `SELECT cl.nombre, COUNT(*) AS cantidad, SUM(p.monto) AS total, MAX(DATE(p.fecha_pago)) AS ultima
+     FROM pagos p
+     INNER JOIN ordenes_servicio o ON o.id = p.orden_id
+     INNER JOIN clientes cl ON cl.id = o.cliente_id
+     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?
+     GROUP BY cl.id ORDER BY total DESC LIMIT 10`,
+    [inicio, fin]
+  );
+
+  const porLavador = await calcularProductividadLavadores(inicio, fin);
 
   // Propinas del período: NO son ingreso del negocio (van 100% al lavador,
   // repartidas en partes iguales si atendieron varios), pero se reportan
@@ -244,40 +334,84 @@ async function calcularReporteVentas(inicio, fin) {
     totalVentas: total,
     cantidadVentas: pagos.length,
     ticketPromedio: pagos.length > 0 ? Math.round(total / pagos.length) : 0,
-    porServicio, porMetodoPago, porVehiculo, cantidadPorVehiculo,
+    mayorVenta,
+    totalDescuentoNegocio, totalDescuentoTrabajador,
+    clientesDistintos: clientesDistintos.size, ventasAnonimas,
+    porServicio, serviciosDetalle, porMetodoPago, metodosDetalle, porVehiculo, cantidadPorVehiculo,
+    serie, porDiaSemana, porHora,
     porLavador,
-    topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total) })),
+    topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total), ultima: c.ultima })),
     totalPropinas,
-    detallePropinas
+    detallePropinas,
+    detalleTotal: pagos.length,
+    detalle: pagos.slice(0, MAX_FILAS_DETALLE).map(p => ({
+      fecha: p.fecha_pago, ordenId: p.orden_id,
+      cliente: p.cliente_nombre || (p.es_venta_anonima ? 'Venta anónima' : 'Sin registrar'),
+      placa: p.placa || '-', servicio: p.servicio_nombre || 'Otros', tipoVehiculo: p.tipo_vehiculo,
+      lavadores: p.lavadores || 'Sin asignar', metodo: p.metodo_pago, monto: Number(p.monto),
+      descuentoNegocio: Number(p.descuento_negocio || 0), descuentoTrabajador: Number(p.descuento_trabajador || 0),
+      propina: Number(p.propina || 0), observacion: p.observacion || ''
+    }))
   };
 }
 
-/** Compras: por proveedor, por insumo y total del período (con base en las facturas de compra). */
+/** Compras: por proveedor, por insumo, evolución y el detalle de cada factura de compra. */
 async function calcularReporteCompras(inicio, fin) {
-  const [porProveedorFilas] = await pool.query(
-    `SELECT COALESCE(p.nombre, 'Sin proveedor') AS proveedor, COUNT(*) AS cantidad, SUM(f.total) AS total
+  const [filas] = await pool.query(
+    `SELECT f.id, f.numero_factura, f.fecha, f.concepto, f.total,
+            COALESCE(pr.nombre, 'Sin proveedor') AS proveedor, m.cantidad, i.unidad_medida
      FROM facturas f
-     LEFT JOIN proveedores p ON p.id = f.proveedor_id
+     LEFT JOIN proveedores pr ON pr.id = f.proveedor_id
+     LEFT JOIN movimientos_inventario m ON m.id = f.movimiento_id
+     LEFT JOIN insumos i ON i.id = m.insumo_id
      WHERE f.tipo = 'compra' AND f.fecha BETWEEN ? AND ?
-     GROUP BY proveedor ORDER BY total DESC`,
-    [inicio, fin]
-  );
-  const [porInsumoFilas] = await pool.query(
-    `SELECT concepto AS insumo, COUNT(*) AS cantidad, SUM(total) AS total
-     FROM facturas
-     WHERE tipo = 'compra' AND fecha BETWEEN ? AND ?
-     GROUP BY concepto ORDER BY total DESC`,
+     ORDER BY f.fecha DESC, f.id DESC`,
     [inicio, fin]
   );
 
   const porProveedor = {};
-  porProveedorFilas.forEach(f => { porProveedor[f.proveedor] = Number(f.total); });
+  const proveedoresMapa = {};
   const porInsumo = {};
-  porInsumoFilas.forEach(f => { porInsumo[f.insumo] = Number(f.total); });
+  const insumosMapa = {};
+  filas.forEach(f => {
+    const total = Number(f.total);
+    porProveedor[f.proveedor] = (porProveedor[f.proveedor] || 0) + total;
+    if (!proveedoresMapa[f.proveedor]) proveedoresMapa[f.proveedor] = { proveedor: f.proveedor, compras: 0, total: 0 };
+    proveedoresMapa[f.proveedor].compras += 1;
+    proveedoresMapa[f.proveedor].total += total;
+    porInsumo[f.concepto] = (porInsumo[f.concepto] || 0) + total;
+    if (!insumosMapa[f.concepto]) insumosMapa[f.concepto] = { insumo: f.concepto, compras: 0, cantidad: 0, unidad: f.unidad_medida || '', total: 0 };
+    insumosMapa[f.concepto].compras += 1;
+    insumosMapa[f.concepto].cantidad += Number(f.cantidad) || 0;
+    insumosMapa[f.concepto].total += total;
+  });
 
-  const totalCompras = porProveedorFilas.reduce((s, f) => s + Number(f.total), 0);
+  const totalCompras = filas.reduce((s, f) => s + Number(f.total), 0);
 
-  return { rango: { inicio, fin }, totalCompras, cantidadCompras: porProveedorFilas.reduce((s, f) => s + f.cantidad, 0), porProveedor, porInsumo };
+  // Las facturas solo guardan la fecha (no la hora): un solo día no se puede
+  // graficar por hora.
+  const plan = planSerie(inicio, fin);
+  const serie = plan.gran === 'hora' ? null : {
+    gran: plan.gran, etiquetas: plan.etiquetas,
+    compras: acumularSerie(plan, filas, f => f.fecha, f => f.total)
+  };
+
+  return {
+    rango: { inicio, fin },
+    totalCompras,
+    cantidadCompras: filas.length,
+    promedioCompra: filas.length > 0 ? Math.round(totalCompras / filas.length) : 0,
+    porProveedor, porInsumo,
+    proveedoresDetalle: Object.values(proveedoresMapa).sort((a, b) => b.total - a.total),
+    insumosDetalle: Object.values(insumosMapa).sort((a, b) => b.total - a.total),
+    serie,
+    detalleTotal: filas.length,
+    detalle: filas.slice(0, MAX_FILAS_DETALLE).map(f => ({
+      fecha: f.fecha, numero: f.numero_factura, proveedor: f.proveedor, concepto: f.concepto,
+      cantidad: f.cantidad !== null && f.cantidad !== undefined ? Number(f.cantidad) : null,
+      unidad: f.unidad_medida || '', total: Number(f.total)
+    }))
+  };
 }
 
 /** Inventario: valorización actual del stock y alertas (foto del momento, sin rango de fechas). */
@@ -287,7 +421,9 @@ async function calcularReporteInventario() {
     nombre: i.nombre,
     unidad_medida: i.unidad_medida,
     stock_actual: Number(i.stock_actual),
+    stock_minimo: Number(i.stock_minimo),
     costo_unitario: Number(i.costo_unitario),
+    proveedor: i.proveedor_nombre || '-',
     valor: Number(i.stock_actual) * Number(i.costo_unitario),
     bajo_stock: i.bajo_stock
   })).sort((a, b) => b.valor - a.valor);
@@ -298,7 +434,7 @@ async function calcularReporteInventario() {
   return { valorTotalInventario, insumos: valorizacion, alertas };
 }
 
-/** Nómina: salarios y comisiones pagados en el período, más liquidaciones/asistencia. */
+/** Nómina: salarios y comisiones pagados en el período, lo pendiente, productividad y detalle de cada pago. */
 async function calcularReporteNomina(inicio, fin) {
   const [salarios] = await pool.query(
     `SELECT SUM(valor_a_pagar) AS total, COUNT(*) AS cantidad FROM pagos_salario WHERE fecha_pago_real BETWEEN ? AND ?`,
@@ -348,6 +484,36 @@ async function calcularReporteNomina(inicio, fin) {
     [inicio, fin]
   );
 
+  const [salariosDetalle] = await pool.query(
+    `SELECT ps.id, ps.fecha_pago_real, u.nombre, u.rol, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin,
+            ps.salario_base, ps.descuentos, ps.valor_a_pagar
+     FROM pagos_salario ps
+     INNER JOIN usuarios u ON u.id = ps.empleado_id
+     WHERE ps.fecha_pago_real BETWEEN ? AND ?
+     ORDER BY ps.fecha_pago_real DESC, ps.id DESC`,
+    [inicio, fin]
+  );
+  const [liquidacionesDetalle] = await pool.query(
+    `SELECT ll.id, ll.fecha_pago, ll.creado_en, l.nombre, ll.periodo_inicio, ll.periodo_fin,
+            ll.total_comision, ll.descuentos, ll.valor_a_pagar, ll.estado
+     FROM liquidaciones_lavador ll
+     INNER JOIN lavadores l ON l.id = ll.lavador_id
+     WHERE (ll.estado = 'pagado' AND ll.fecha_pago BETWEEN ? AND ?) OR ll.estado = 'pendiente'
+     ORDER BY ll.estado DESC, ll.fecha_pago DESC, ll.id DESC`,
+    [inicio, fin]
+  );
+
+  // Lo que HOY se le debe a cada lavador (comisión + propinas - descuentos
+  // asumidos - lo ya liquidado), sin importar el período elegido.
+  const NominaRepositorio = require('./NominaRepositorio');
+  const resumenLavadores = await NominaRepositorio.resumenComisionesLavadores();
+  const pendientePorLavador = resumenLavadores
+    .filter(l => l.comision_pendiente > 0)
+    .map(l => ({ nombre: l.nombre, servicios: l.servicios_realizados, pendiente: Number(l.comision_pendiente) }))
+    .sort((a, b) => b.pendiente - a.pendiente);
+
+  const productividad = await calcularProductividadLavadores(inicio, fin);
+
   return {
     rango: { inicio, fin },
     propinasPeriodo: Number(propinasYDescuentos[0].propinas) || 0,
@@ -362,11 +528,24 @@ async function calcularReporteNomina(inicio, fin) {
     inasistencias: Number(asistencia[0].inasistencias) || 0,
     horasTrabajadasTotal: Number((Number(asistencia[0].horasTotales) || 0).toFixed(2)),
     porEmpleado: porEmpleado.map(e => ({ id: e.id, nombre: e.nombre, rol: e.rol, total: Number(e.total) || 0, cantidad: e.cantidad })),
-    porLavador: porLavador.map(l => ({ id: l.id, nombre: l.nombre, total: Number(l.total) || 0, cantidad: l.cantidad }))
+    porLavador: porLavador.map(l => ({ id: l.id, nombre: l.nombre, total: Number(l.total) || 0, cantidad: l.cantidad })),
+    salariosDetalle: salariosDetalle.map(s => ({
+      id: s.id, fecha: s.fecha_pago_real, nombre: s.nombre, rol: s.rol, periodicidad: s.periodicidad,
+      periodoInicio: s.periodo_inicio, periodoFin: s.periodo_fin,
+      base: Number(s.salario_base), descuentos: Number(s.descuentos), neto: Number(s.valor_a_pagar)
+    })),
+    liquidacionesDetalle: liquidacionesDetalle.map(l => ({
+      id: l.id, fecha: l.fecha_pago || String(l.creado_en).substring(0, 10), nombre: l.nombre,
+      periodoInicio: l.periodo_inicio, periodoFin: l.periodo_fin,
+      comision: Number(l.total_comision), descuentos: Number(l.descuentos), neto: Number(l.valor_a_pagar), estado: l.estado
+    })),
+    pendientePorLavador,
+    pendienteTotalLavadores: pendientePorLavador.reduce((s, l) => s + l.pendiente, 0),
+    productividad
   };
 }
 
-/** Comparativo: el período actual contra el período anterior de igual duración. */
+/** Comparativo: el período actual contra el período anterior de igual duración (métricas completas y series superpuestas). */
 async function calcularReporteComparativo(inicio, fin) {
   const anterior = calcularRangoAnterior(inicio, fin);
   const [actual, previo] = await Promise.all([
@@ -375,17 +554,50 @@ async function calcularReporteComparativo(inicio, fin) {
   ]);
 
   const variacion = (actualVal, previoVal) => previoVal > 0 ? Number((((actualVal - previoVal) / previoVal) * 100).toFixed(1)) : null;
+  const resumir = (r) => ({
+    rango: r.rango,
+    totalIngresos: r.totalIngresos,
+    costoInsumos: r.costoInsumos,
+    totalComisionesLavadores: r.totalComisionesLavadores,
+    totalGastos: r.totalGastos,
+    gananciaNeta: r.gananciaNeta,
+    margenPorcentaje: r.margenPorcentaje,
+    serviciosAtendidos: r.serviciosAtendidos,
+    ticketPromedio: r.ticketPromedio,
+    totalDescuentoNegocio: r.totalDescuentoNegocio,
+    totalPropinas: r.totalPropinas,
+    cancelados: r.serviciosCancelados.total
+  });
+
+  // El período anterior se alinea cubo a cubo con el actual (mismo largo).
+  const n = actual.serieIngresos.ingresos.length;
+  const alinear = (arr) => Array.from({ length: n }, (_, i) => arr[i] || 0);
+  const a = resumir(actual);
+  const b = resumir(previo);
 
   return {
-    actual: { rango: actual.rango, totalIngresos: actual.totalIngresos, gananciaNeta: actual.gananciaNeta, serviciosAtendidos: actual.serviciosAtendidos },
-    anterior: { rango: previo.rango, totalIngresos: previo.totalIngresos, gananciaNeta: previo.gananciaNeta, serviciosAtendidos: previo.serviciosAtendidos },
-    variacionIngresos: variacion(actual.totalIngresos, previo.totalIngresos),
-    variacionGanancia: variacion(actual.gananciaNeta, previo.gananciaNeta),
-    variacionServicios: variacion(actual.serviciosAtendidos, previo.serviciosAtendidos)
+    actual: a,
+    anterior: b,
+    serie: {
+      gran: actual.serieIngresos.gran,
+      etiquetas: actual.serieIngresos.etiquetas,
+      actual: actual.serieIngresos.ingresos,
+      anterior: alinear(previo.serieIngresos.ingresos)
+    },
+    variaciones: {
+      ingresos: variacion(a.totalIngresos, b.totalIngresos),
+      ganancia: variacion(a.gananciaNeta, b.gananciaNeta),
+      servicios: variacion(a.serviciosAtendidos, b.serviciosAtendidos),
+      ticket: variacion(a.ticketPromedio, b.ticketPromedio)
+    },
+    // compatibilidad con el formato anterior
+    variacionIngresos: variacion(a.totalIngresos, b.totalIngresos),
+    variacionGanancia: variacion(a.gananciaNeta, b.gananciaNeta),
+    variacionServicios: variacion(a.serviciosAtendidos, b.serviciosAtendidos)
   };
 }
 
-/** Operativo: citas por estado y clientes nuevos vs. recurrentes en el período. */
+/** Operativo: citas, demanda (día/hora), tiempos, cancelaciones y clientes nuevos vs. recurrentes. */
 async function calcularReporteOperativo(inicio, fin) {
   const [citasPorEstado] = await pool.query(
     `SELECT estado, COUNT(*) AS cantidad FROM citas WHERE fecha BETWEEN ? AND ? GROUP BY estado`,
@@ -407,28 +619,90 @@ async function calcularReporteOperativo(inicio, fin) {
   const porEstadoCitas = {};
   citasPorEstado.forEach(c => { porEstadoCitas[c.estado] = c.cantidad; });
 
+  const [citasDetalle] = await pool.query(
+    `SELECT c.fecha, c.hora, c.estado, s.nombre AS servicio,
+            COALESCE(cl.nombre, c.cliente_nombre_temp, 'Sin registrar') AS cliente,
+            COALESCE(v.placa, c.placa_temp) AS placa
+     FROM citas c
+     LEFT JOIN clientes cl ON cl.id = c.cliente_id
+     LEFT JOIN vehiculos v ON v.id = c.vehiculo_id
+     LEFT JOIN servicios s ON s.id = c.servicio_id
+     WHERE c.fecha BETWEEN ? AND ?
+     ORDER BY c.fecha DESC, c.hora DESC`,
+    [inicio, fin]
+  );
+
+  // Órdenes ingresadas en el período: demanda por día/hora, estados y tiempo
+  // promedio desde que el vehículo ingresa hasta que se entrega.
+  const [ordenes] = await pool.query(
+    `SELECT o.id, o.estado, o.fecha_hora_registro, o.fecha_hora_entrega
+     FROM ordenes_servicio o
+     WHERE DATE(o.fecha_hora_registro) BETWEEN ? AND ?`,
+    [inicio, fin]
+  );
+  const ordenesPorEstado = {};
+  ordenes.forEach(o => { ordenesPorEstado[o.estado] = (ordenesPorEstado[o.estado] || 0) + 1; });
+  const atenciones = ordenes.filter(o => o.estado !== 'cancelado');
+  const plan = planSerie(inicio, fin);
+  const serie = {
+    gran: plan.gran, etiquetas: plan.etiquetas,
+    atenciones: acumularSerie(plan, atenciones, o => o.fecha_hora_registro, () => 1)
+  };
+  const porDiaSemana = acumularPorDiaSemana(atenciones, o => o.fecha_hora_registro, () => 1);
+  const planHoras = planSerie(inicio, inicio);
+  const porHora = {
+    etiquetas: planHoras.etiquetas,
+    cantidades: acumularSerie(planHoras, atenciones, o => o.fecha_hora_registro, () => 1)
+  };
+  const duraciones = ordenes
+    .filter(o => o.fecha_hora_entrega && o.fecha_hora_registro)
+    .map(o => (new Date(String(o.fecha_hora_entrega).replace(' ', 'T')) - new Date(String(o.fecha_hora_registro).replace(' ', 'T'))) / 60000)
+    .filter(m => m > 0 && m < 600);
+  const minutosPromedio = duraciones.length ? Math.round(duraciones.reduce((s, m) => s + m, 0) / duraciones.length) : null;
+
   // Servicios cancelados del período: turnos que nunca se atendieron y
-  // órdenes canceladas en el POS. Se muestran solo como conteo porque su
-  // valor en dinero siempre es $0 (nunca llegaron a generar un pago).
-  const [[turnosCancelados]] = await pool.query(
-    `SELECT COUNT(*) AS cantidad FROM turnos WHERE estado = 'cancelado' AND fecha BETWEEN ? AND ?`,
+  // órdenes canceladas en el POS (valor $0, nunca llegaron a generar un pago).
+  const [turnosCancelados] = await pool.query(
+    `SELECT t.fecha, t.hora_llegada AS hora, COALESCE(v.placa, t.placa_temporal) AS placa, s.nombre AS servicio, t.observacion
+     FROM turnos t
+     LEFT JOIN vehiculos v ON v.id = t.vehiculo_id
+     LEFT JOIN servicios s ON s.id = t.servicio_id
+     WHERE t.estado = 'cancelado' AND t.fecha BETWEEN ? AND ?
+     ORDER BY t.fecha DESC, t.hora_llegada DESC`,
     [inicio, fin]
   );
-  const [[ordenesCanceladas]] = await pool.query(
-    `SELECT COUNT(*) AS cantidad FROM ordenes_servicio WHERE estado = 'cancelado' AND DATE(fecha_hora_registro) BETWEEN ? AND ?`,
+  const [ordenesCanceladas] = await pool.query(
+    `SELECT DATE(o.fecha_hora_registro) AS fecha, TIME(o.fecha_hora_registro) AS hora,
+            COALESCE(v.placa, o.placa_anonima) AS placa, s.nombre AS servicio, o.observacion
+     FROM ordenes_servicio o
+     LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
+     LEFT JOIN servicios s ON s.id = o.servicio_id
+     WHERE o.estado = 'cancelado' AND DATE(o.fecha_hora_registro) BETWEEN ? AND ?
+     ORDER BY o.fecha_hora_registro DESC`,
     [inicio, fin]
   );
+  const cancelacionesDetalle = [
+    ...turnosCancelados.map(t => ({ origen: 'Turno en fila', fecha: t.fecha, hora: t.hora, placa: t.placa || '-', servicio: t.servicio || '-', observacion: t.observacion || '' })),
+    ...ordenesCanceladas.map(o => ({ origen: 'Orden en el POS', fecha: o.fecha, hora: o.hora, placa: o.placa || '-', servicio: o.servicio || '-', observacion: o.observacion || '' }))
+  ].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
 
   return {
     rango: { inicio, fin },
     porEstadoCitas,
+    citasTotal: citasDetalle.length,
+    citasDetalle: citasDetalle.slice(0, MAX_FILAS_DETALLE).map(c => ({
+      fecha: c.fecha, hora: String(c.hora).substring(0, 5), estado: c.estado, servicio: c.servicio || '-', cliente: c.cliente, placa: c.placa || '-'
+    })),
     clientesNuevos: clientesNuevos[0].cantidad || 0,
     clientesRecurrentes: clientesRecurrentes[0].cantidad || 0,
+    atencionesTotal: atenciones.length,
+    ordenesPorEstado, serie, porDiaSemana, porHora, minutosPromedio,
     serviciosCancelados: {
-      turnos: turnosCancelados.cantidad || 0,
-      ordenes: ordenesCanceladas.cantidad || 0,
-      total: (turnosCancelados.cantidad || 0) + (ordenesCanceladas.cantidad || 0)
-    }
+      turnos: turnosCancelados.length,
+      ordenes: ordenesCanceladas.length,
+      total: turnosCancelados.length + ordenesCanceladas.length
+    },
+    cancelacionesDetalle: cancelacionesDetalle.slice(0, 200)
   };
 }
 
@@ -498,6 +772,8 @@ const DIAS_INACTIVIDAD_CLIENTE = 60;
 async function calcularReporteClientes() {
   const [filas] = await pool.query(
     `SELECT cl.id, cl.nombre, cl.telefono, cl.correo, cl.creado_en,
+            (SELECT COUNT(*) FROM cliente_notas n WHERE n.cliente_id = cl.id AND n.tipo = 'lista_negra') AS en_lista_negra,
+            (SELECT COUNT(*) FROM vehiculos v WHERE v.cliente_id = cl.id) AS vehiculos,
             MAX(DATE(p.fecha_pago)) AS ultima_compra,
             COUNT(p.id) AS total_compras,
             SUM(p.monto) AS total_gastado
@@ -521,6 +797,8 @@ async function calcularReporteClientes() {
       telefono: f.telefono,
       correo: f.correo,
       fechaRegistro: f.creado_en,
+      enListaNegra: Number(f.en_lista_negra) > 0,
+      vehiculos: Number(f.vehiculos) || 0,
       ultimaCompra: f.ultima_compra,
       totalCompras: f.total_compras || 0,
       totalGastado: Number(f.total_gastado) || 0,
@@ -534,11 +812,13 @@ async function calcularReporteClientes() {
     activos: clientes.filter((c) => c.estado === 'activo').length,
     inactivos: clientes.filter((c) => c.estado === 'inactivo').length,
     nuncaCompraron: clientes.filter((c) => c.estado === 'nunca_compro').length,
+    enListaNegra: clientes.filter((c) => c.enListaNegra).length,
     clientes
   };
 }
 
 module.exports = {
+  calcularRangoAnterior,
   calcularReporte,
   calcularReporteVentas,
   calcularReporteCompras,
