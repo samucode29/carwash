@@ -1437,32 +1437,59 @@
         <button class="close-btn" onclick="app.closeModal('modalNuevoUsuario')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label>Nombres: *</label>
-            <input type="text" id="usrNombres" placeholder="Ej: Camilo Andrés" oninput="soloLetras(this)">
-          </div>
-          <div class="form-group flex-1">
-            <label>Apellidos: *</label>
-            <input type="text" id="usrApellidos" placeholder="Ej: Torres Gómez" oninput="soloLetras(this)">
-          </div>
-        </div>
         <div class="form-group">
-          <label>Documento de Identidad: *</label>
-          <input type="text" id="usrDocumento" placeholder="1020304050" oninput="soloNumeros(this)">
+          <label>Rol: *</label>
+          <select id="usrRol" onchange="app.onUsrRolChange()">
+            <option value="lavador">Lavador (Comisión, sin acceso al sistema)</option>
+            <option value="empleado">Empleado / Recepcionista (Salario Fijo, con acceso al sistema)</option>
+            <option id="usrRolOpcionAdmin" value="administrador">Administrador (acceso total, usuario y contraseña personalizados)</option>
+          </select>
         </div>
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label>Teléfono:</label>
-            <input type="text" id="usrTelefono" placeholder="3001234567" oninput="soloNumeros(this)">
+
+        <!-- Solo para el rol Administrador: a quién se le asigna y con qué usuario/contraseña -->
+        <div id="usrAdminFields" class="hidden">
+          <div class="form-group">
+            <label>¿A quién se le asigna esta cuenta de administrador?</label>
+            <select id="usrAdminAsignarA" onchange="app.onUsrAsignarChange()"></select>
+            <p class="text-sm text-muted mt-1" id="usrAdminAsignarAyuda"></p>
           </div>
-          <div class="form-group flex-1">
-            <label>Rol: *</label>
-            <select id="usrRol" onchange="app.onUsrRolChange()">
-              <option value="lavador">Lavador (Comisión, sin acceso al sistema)</option>
-              <option value="empleado">Empleado / Recepcionista (Salario Fijo, con acceso al sistema)</option>
-              <option id="usrRolOpcionAdmin" value="administrador">Administrador (Salario Fijo, con acceso al sistema)</option>
-            </select>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Usuario de administrador: *</label>
+              <input type="text" id="usrAdminUsername" placeholder="Ej: carlos.admin" autocomplete="off" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="form-group flex-1">
+              <label>Contraseña: * <span class="text-muted text-sm">(mínimo 6)</span></label>
+              <input type="password" id="usrAdminPassword" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Confirmar contraseña: *</label>
+            <input type="password" id="usrAdminPassword2" autocomplete="new-password">
+          </div>
+          <hr class="modal-divider">
+        </div>
+
+        <div id="usrDatosPersona">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Nombres: *</label>
+              <input type="text" id="usrNombres" placeholder="Ej: Camilo Andrés" oninput="soloLetras(this)">
+            </div>
+            <div class="form-group flex-1">
+              <label>Apellidos: *</label>
+              <input type="text" id="usrApellidos" placeholder="Ej: Torres Gómez" oninput="soloLetras(this)">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Documento de Identidad: *</label>
+              <input type="text" id="usrDocumento" placeholder="1020304050" oninput="soloNumeros(this)">
+            </div>
+            <div class="form-group flex-1">
+              <label>Celular:</label>
+              <input type="text" id="usrTelefono" placeholder="3001234567" oninput="soloNumeros(this)">
+            </div>
           </div>
         </div>
         <div id="usrLavadorFields">
@@ -1498,7 +1525,7 @@
           </div>
           <p class="text-sm text-muted mb-2">El pago de nómina se calcula por hora: el salario base se divide entre las horas esperadas de la jornada, y se paga según las horas que realmente marque en asistencia.</p>
         </div>
-        <p class="text-sm text-muted mt-2">
+        <p class="text-sm text-muted mt-2" id="usrAvisoCredencialesAuto">
           El usuario y la contraseña de acceso se asignan automáticamente
           (usuario: primer nombre.primer apellido; contraseña: cédula + "carwash")
           y se muestran una vez al guardar, para que se los entregues a la persona.

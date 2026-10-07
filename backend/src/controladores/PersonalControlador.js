@@ -9,7 +9,7 @@ const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { hashearContrasena, generarPasswordPorDefecto } = require('../utilidades/contrasenas');
 const { normalizarParaUsername } = require('../utilidades/texto');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
-const { esDocumentoValido, esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
+const { esDocumentoValido, esTelefonoValido, esCorreoValido, esUsernameValido } = require('../utilidades/validadores');
 const { interpretarNombre, traeNombre, exigirCelularUnico } = require('../utilidades/personas');
 
 /**
@@ -47,7 +47,97 @@ async function obtenerMiPerfil(req, res) {
   res.json(usuario);
 }
 
+/**
+ * Cuenta de ADMINISTRADOR (solo la puede crear el administrador principal). El
+ * usuario y la contraseña los escribe él mismo, y puede:
+ *  - asignarla a un empleado o lavador ya registrado ({asignarTipo, asignarId}):
+ *    la persona conserva lo suyo (su usuario de empleado, su pago por comisión)
+ *    y además queda con este acceso de administrador, o
+ *  - crearla aparte, sin asignarla a nadie (con sus propios datos).
+ */
+async function crearCuentaAdministrador(req, res) {
+  if (!req.usuarioAutenticado.esAdminPrincipal) {
+    return res.status(403).json({ error: 'Solo el administrador principal puede crear cuentas de administrador.' });
+  }
+  const { password, asignarTipo, asignarId } = req.body;
+  const username = String(req.body.username || '').trim().toLowerCase();
+
+  if (!esUsernameValido(username)) {
+    return res.status(400).json({ error: 'El usuario debe tener de 4 a 30 caracteres: minúsculas, números, punto, guion o guion bajo (sin espacios ni tildes).' });
+  }
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  }
+  if (await UsuarioRepositorio.obtenerPorUsername(username)) {
+    return res.status(400).json({ error: 'Ese usuario ya está en uso. Elija otro.' });
+  }
+  let correo = `${username}@carwash.com`;
+  if (await UsuarioRepositorio.buscarPorUsernameOCorreo(correo)) correo = `${username}.admin@carwash.com`;
+  const passwordHash = hashearContrasena(String(password));
+
+  // --- Asignada a una persona ya registrada
+  if (asignarTipo) {
+    if (!['empleado', 'lavador'].includes(asignarTipo) || !asignarId) {
+      return res.status(400).json({ error: 'Indique si la cuenta es para un empleado o un lavador y cuál.' });
+    }
+    const personaId = Number(asignarId);
+    const persona = asignarTipo === 'lavador'
+      ? await LavadorRepositorio.obtenerPorId(personaId)
+      : await UsuarioRepositorio.obtenerPorId(personaId);
+    if (!persona || (asignarTipo === 'empleado' && (persona.rol !== 'empleado' || persona.cuenta_adicional))) {
+      return res.status(404).json({ error: 'No se encontró a la persona a la que se quiere asignar la cuenta.' });
+    }
+    if (persona.estado !== 'activo') {
+      return res.status(400).json({ error: `${persona.nombre} está inactivo/a: actívelo antes de darle una cuenta de administrador.` });
+    }
+    const yaTiene = await UsuarioRepositorio.obtenerCuentaAdicional(asignarTipo, personaId);
+    if (yaTiene) {
+      return res.status(400).json({ error: `${persona.nombre} ya tiene una cuenta de administrador (usuario: ${yaTiene.username}).` });
+    }
+
+    const cuenta = await UsuarioRepositorio.crear({
+      nombre: persona.nombre, nombres: persona.nombres, apellidos: persona.apellidos, documento: persona.documento,
+      telefono: '', // el celular queda solo en el registro de la persona (no se repite)
+      correo, username, passwordHash, rol: 'administrador',
+      salarioFijo: null, cuentaAdicional: true, vinculadoTipo: asignarTipo, vinculadoId: personaId
+    });
+    await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_admin_asignado',
+      `Cuenta de administrador "${username}" asignada a ${persona.nombre} (${asignarTipo} #${personaId})`);
+    return res.status(201).json(cuenta);
+  }
+
+  // --- Cuenta aparte, sin asignar a nadie: lleva sus propios datos
+  const { documento, telefono, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana } = req.body;
+  const persona = interpretarNombre(req.body);
+  if (persona.error) return res.status(400).json({ error: persona.error });
+  if (!documento || !esDocumentoValido(documento)) {
+    return res.status(400).json({ error: 'El documento debe tener solo números, mínimo 4 dígitos.' });
+  }
+  if (telefono && !esTelefonoValido(telefono)) {
+    return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
+  }
+  if (telefono) await exigirCelularUnico(telefono);
+  if (await UsuarioRepositorio.obtenerPorDocumento(documento)) {
+    return res.status(400).json({ error: 'Ya existe un usuario con este documento de identidad. Si es la misma persona, asígnele la cuenta en vez de crearla aparte.' });
+  }
+  if (await LavadorRepositorio.obtenerPorDocumento(documento)) {
+    return res.status(400).json({ error: 'Ya existe un lavador con este documento de identidad. Si es la misma persona, asígnele la cuenta en vez de crearla aparte.' });
+  }
+
+  const cuenta = await UsuarioRepositorio.crear({
+    nombre: persona.nombre, nombres: persona.nombres, apellidos: persona.apellidos, documento, telefono,
+    correo, username, passwordHash, rol: 'administrador',
+    salarioFijo: salarioFijo ? parseFloat(salarioFijo) : 1400000,
+    periodicidadPago: periodicidadPago || 'quincenal',
+    jornadaHorasDia: jornadaHorasDia ? parseFloat(jornadaHorasDia) : 8,
+    diasDescansoSemana: diasDescansoSemana !== undefined ? parseInt(diasDescansoSemana, 10) : 1
+  });
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_admin_aparte', `Cuenta de administrador "${username}" creada para ${persona.nombre} (sin asignar a un registro previo)`);
+  res.status(201).json(cuenta);
+}
+
 async function crearUsuario(req, res) {
+  if (req.body.rol === 'administrador') return crearCuentaAdministrador(req, res);
   const { documento, telefono, correo, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana } = req.body;
 
   const persona = interpretarNombre(req.body);
@@ -160,6 +250,9 @@ async function actualizarUsuario(req, res) {
 
   const usuario = await UsuarioRepositorio.actualizar(id, cambios);
   if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  if (estado === 'inactivo' && usuario.rol === 'empleado' && !usuario.cuenta_adicional) {
+    await UsuarioRepositorio.inactivarCuentasVinculadas('empleado', id);
+  }
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_usuario', `Actualizado usuario ID ${id}`);
   res.json(usuario);
@@ -171,7 +264,8 @@ async function actualizarUsuario(req, res) {
  * empleado solo puede cambiar su contraseña, ver AuthControlador).
  */
 async function actualizarMiPerfil(req, res) {
-  const { telefono, correo, username } = req.body;
+  const { telefono, correo } = req.body;
+  const username = req.body.username ? String(req.body.username).trim().toLowerCase() : req.body.username;
   const idPropio = req.usuarioAutenticado.id;
 
   const persona = traeNombre(req.body) ? interpretarNombre(req.body) : null;
@@ -302,6 +396,7 @@ async function actualizarLavador(req, res) {
 
   const lavador = await LavadorRepositorio.actualizar(id, cambios);
   if (!lavador) return res.status(404).json({ error: 'Lavador no encontrado.' });
+  if (estado === 'inactivo') await UsuarioRepositorio.inactivarCuentasVinculadas('lavador', id);
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_lavador', `Actualizado lavador ID ${id}`);
   res.json(lavador);

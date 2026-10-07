@@ -21,6 +21,11 @@ function esNombreValido(texto) {
   return limpio.length >= LONGITUD_MINIMA_NOMBRE && REGEX_NOMBRE.test(limpio);
 }
 
+/** Usuario de acceso: minúsculas, números y . _ - ; de 4 a 30 caracteres, empieza con letra o número. */
+function esUsernameValido(texto) {
+  return /^[a-z0-9][a-z0-9._-]{3,29}$/.test(String(texto || ''));
+}
+
 function esDocumentoValido(texto) {
   const limpio = (texto || '').trim();
   return (
@@ -47,6 +52,7 @@ function esCorreoValido(texto) {
 
 module.exports = {
   esNombreValido,
+  esUsernameValido,
   esDocumentoValido,
   esTelefonoValido,
   esCorreoValido,
