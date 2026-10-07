@@ -7,6 +7,8 @@ const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const FacturaRepositorio = require('../repositorios/FacturaRepositorio');
 const { obtenerFechaHoy, obtenerHoraActual } = require('../utilidades/fechas');
+const { generarPdfComprobanteNomina } = require('../utilidades/generadorComprobanteNomina');
+const { formatearMoneda } = require('../utilidades/generadorReportePdf');
 
 // ---------------------------------------------------------------------------
 // Comisiones de lavadores
@@ -26,47 +28,92 @@ async function listarServiciosLavador(req, res) {
   res.json(servicios);
 }
 
+/**
+ * Liquida la comisión pendiente de un lavador: queda registrada como PAGADA
+ * y el comprobante (PDF con firmas) se descarga aparte para imprimirlo.
+ */
 async function generarLiquidacion(req, res) {
   const { lavador_id, periodo_inicio, periodo_fin, total_comision, descuentos } = req.body;
   const hoy = obtenerFechaHoy();
+  const lavadorId = parseInt(lavador_id, 10);
+  const totalComision = parseFloat(total_comision) || 0;
+  const descuentosValor = parseFloat(descuentos) || 0;
 
-  const liquidacion = await NominaRepositorio.crearLiquidacion({
-    lavadorId: parseInt(lavador_id, 10),
-    periodoInicio: periodo_inicio || hoy,
-    periodoFin: periodo_fin || hoy,
-    totalComision: parseFloat(total_comision) || 0,
-    descuentos: parseFloat(descuentos) || 0
-  });
-
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'generar_liquidacion', `Liquidación #${liquidacion.id} para lavador ID ${lavador_id} ($${liquidacion.valor_a_pagar})`);
-  res.status(201).json(liquidacion);
-}
-
-async function pagarLiquidacion(req, res) {
-  const { liquidacion_id, fecha_pago } = req.body;
-  if (!req.file) {
-    return res.status(400).json({ error: 'El sistema requiere adjuntar un soporte de pago (foto o PDF) para cambiar a estado Pagado.' });
+  if (descuentosValor < 0 || descuentosValor > totalComision) {
+    return res.status(400).json({ error: 'Los descuentos no pueden ser negativos ni mayores que la comisión a liquidar.' });
+  }
+  // No se confía en el valor que manda el navegador: no se puede liquidar
+  // más de lo que realmente tiene pendiente el lavador.
+  const resumen = (await NominaRepositorio.resumenComisionesLavadores()).find(l => l.lavador_id === lavadorId);
+  if (!resumen) return res.status(404).json({ error: 'Lavador no encontrado.' });
+  if (totalComision <= 0 || resumen.comision_pendiente < 1) {
+    return res.status(400).json({ error: 'Este lavador no tiene comisión pendiente por liquidar.' });
+  }
+  if (totalComision > resumen.comision_pendiente + 1) {
+    return res.status(400).json({ error: `La comisión a liquidar supera lo pendiente del lavador ($${Math.round(resumen.comision_pendiente).toLocaleString('es-CO')}). Recargue la pantalla e intente de nuevo.` });
   }
 
-  const liquidacion = await NominaRepositorio.pagarLiquidacion({
-    liquidacionId: parseInt(liquidacion_id, 10),
-    soportePagoNombre: req.file.originalname,
-    soportePagoTipo: req.file.mimetype,
-    soportePagoDatos: req.file.buffer,
-    fechaPago: fecha_pago || obtenerFechaHoy()
+  const liquidacion = await NominaRepositorio.crearLiquidacion({
+    lavadorId,
+    periodoInicio: periodo_inicio || hoy,
+    periodoFin: periodo_fin || hoy,
+    totalComision,
+    descuentos: descuentosValor,
+    fechaPago: hoy
   });
-  if (!liquidacion) return res.status(404).json({ error: 'Liquidación no encontrada.' });
+  const factura = await registrarFacturaLiquidacion(liquidacion, req.usuarioAutenticado.id);
 
-  const factura = await FacturaRepositorio.crearFactura({
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'generar_liquidacion', `Liquidación #${liquidacion.id} pagada a lavador ID ${lavador_id} ($${liquidacion.valor_a_pagar}) (Factura ${factura.numero_factura})`);
+  res.status(201).json({ ...liquidacion, factura });
+}
+
+function registrarFacturaLiquidacion(liquidacion, usuarioId) {
+  return FacturaRepositorio.crearFactura({
     tipo: 'nomina',
     concepto: `Comisión - ${liquidacion.lavador_nombre || 'Lavador'}`,
     total: liquidacion.valor_a_pagar,
     fecha: liquidacion.fecha_pago,
-    creadoPor: req.usuarioAutenticado.id
+    creadoPor: usuarioId
   });
+}
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pagar_liquidacion', `Pagada liquidación #${liquidacion.id} con soporte: ${req.file.originalname} (Factura ${factura.numero_factura})`);
+/** Solo para liquidaciones antiguas que quedaron en PENDIENTE (antes se exigía subir soporte). */
+async function pagarLiquidacion(req, res) {
+  const { liquidacion_id, fecha_pago } = req.body;
+  const existente = await NominaRepositorio.obtenerLiquidacion(parseInt(liquidacion_id, 10));
+  if (!existente) return res.status(404).json({ error: 'Liquidación no encontrada.' });
+  if (existente.estado === 'pagado') return res.status(400).json({ error: 'Esta liquidación ya está pagada.' });
+
+  const liquidacion = await NominaRepositorio.pagarLiquidacion({
+    liquidacionId: existente.id,
+    fechaPago: fecha_pago || obtenerFechaHoy()
+  });
+  const factura = await registrarFacturaLiquidacion(liquidacion, req.usuarioAutenticado.id);
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pagar_liquidacion', `Pagada liquidación #${liquidacion.id} (Factura ${factura.numero_factura})`);
   res.json({ ...liquidacion, factura });
+}
+
+/** Comprobante imprimible de una liquidación de comisiones, con espacio para las firmas. */
+async function comprobanteLiquidacion(req, res) {
+  const liq = await NominaRepositorio.obtenerLiquidacion(Number(req.params.id));
+  if (!liq) return res.status(404).json({ error: 'Liquidación no encontrada.' });
+  const descuentos = Number(liq.descuentos) || 0;
+  generarPdfComprobanteNomina(res, {
+    titulo: 'Comprobante de Pago de Comisiones',
+    numero: `LIQ-${String(liq.id).padStart(5, '0')}`,
+    nombreArchivo: `comprobante_comision_${liq.id}.pdf`,
+    fechaPago: liq.fecha_pago || liq.creado_en,
+    persona: { etiqueta: 'Lavador', nombre: liq.lavador_nombre || 'Lavador', documento: liq.lavador_documento },
+    periodo: `${String(liq.periodo_inicio).substring(0, 10)} al ${String(liq.periodo_fin).substring(0, 10)}`,
+    concepto: 'Comisiones por servicios de lavado (incluye propinas y descuentos asumidos)',
+    valorNeto: Number(liq.valor_a_pagar),
+    filas: [
+      ['Comisión neta acumulada a liquidar', formatearMoneda(liq.total_comision)],
+      ['Descuentos (anticipos, daños, etc.)', descuentos > 0 ? `-${formatearMoneda(descuentos)}` : formatearMoneda(0)]
+    ],
+    notas: liq.estado === 'pendiente' ? ['Esta liquidación figura como PENDIENTE de pago en el sistema.'] : []
+  });
 }
 
 async function listarLiquidaciones(req, res) {
@@ -101,21 +148,15 @@ async function calcularPagoEmpleado(req, res) {
 
 async function pagarSalarioEmpleado(req, res) {
   const { empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, fecha_pago } = req.body;
-  if (!req.file) {
-    return res.status(400).json({ error: 'Debe adjuntar el soporte de pago (foto o PDF) para registrar la nómina como pagada.' });
-  }
 
   const hoy = obtenerFechaHoy();
   const pago = await NominaRepositorio.crearPagoSalario({
     empleadoId: parseInt(empleado_id, 10),
-    periodicidad: periodicidad || 'quincenal',
+    periodicidad: ['semanal', 'quincenal', 'mensual'].includes(periodicidad) ? periodicidad : 'quincenal',
     periodoInicio: periodo_inicio || hoy,
     periodoFin: periodo_fin || hoy,
     salarioBase: parseFloat(salario_base) || 0,
     descuentos: parseFloat(descuentos) || 0,
-    soportePagoNombre: req.file.originalname,
-    soportePagoTipo: req.file.mimetype,
-    soportePagoDatos: req.file.buffer,
     fechaPago: fecha_pago || hoy
   });
 
@@ -127,8 +168,40 @@ async function pagarSalarioEmpleado(req, res) {
     creadoPor: req.usuarioAutenticado.id
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar}) con soporte: ${req.file.originalname} (Factura ${factura.numero_factura})`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar}) (Factura ${factura.numero_factura})`);
   res.status(201).json({ ...pago, factura });
+}
+
+/** Comprobante imprimible del pago de salario, con horas del período y espacio para las firmas. */
+async function comprobantePagoSalario(req, res) {
+  const pago = await NominaRepositorio.obtenerPagoSalario(Number(req.params.id));
+  if (!pago) return res.status(404).json({ error: 'Pago no encontrado.' });
+  const inicio = String(pago.periodo_inicio).substring(0, 10);
+  const fin = String(pago.periodo_fin).substring(0, 10);
+  const calculo = await NominaRepositorio.calcularPagoEmpleado(pago.empleado_id, inicio, fin);
+  const descuentos = Number(pago.descuentos) || 0;
+
+  const filas = [];
+  if (calculo && calculo.horasTrabajadas > 0) {
+    filas.push([`Horas normales (${calculo.horasNormales} hrs a ${formatearMoneda(calculo.valorHora)}/hr)`, formatearMoneda(calculo.montoNormal)]);
+    if (calculo.horasExtra > 0) {
+      filas.push([`Horas extra (${calculo.horasExtra} hrs a ${formatearMoneda(calculo.valorHoraExtra)}/hr)`, formatearMoneda(calculo.montoExtra)]);
+    }
+  }
+  filas.push(['Salario del período (según horas trabajadas)', formatearMoneda(pago.salario_base)]);
+  filas.push(['Descuentos (inasistencias, anticipos, etc.)', descuentos > 0 ? `-${formatearMoneda(descuentos)}` : formatearMoneda(0)]);
+
+  generarPdfComprobanteNomina(res, {
+    titulo: 'Comprobante de Pago de Salario',
+    numero: `SAL-${String(pago.id).padStart(5, '0')}`,
+    nombreArchivo: `comprobante_salario_${pago.id}.pdf`,
+    fechaPago: pago.fecha_pago_real || pago.creado_en,
+    persona: { etiqueta: 'Empleado', nombre: pago.empleado_nombre || 'Empleado', documento: pago.empleado_documento },
+    periodo: `${inicio} al ${fin} (pago ${pago.periodicidad})`,
+    concepto: 'Salario por horas trabajadas en el período',
+    valorNeto: Number(pago.valor_a_pagar),
+    filas
+  });
 }
 
 async function listarPagosSalario(req, res) {
@@ -198,7 +271,7 @@ async function registrarAsistencia(req, res) {
 }
 
 module.exports = {
-  listarResumenLavadores, listarServiciosLavador, generarLiquidacion, pagarLiquidacion, listarLiquidaciones, descargarSoporteLiquidacion,
-  listarEmpleados, calcularPagoEmpleado, pagarSalarioEmpleado, listarPagosSalario, descargarSoportePagoSalario,
+  listarResumenLavadores, listarServiciosLavador, generarLiquidacion, pagarLiquidacion, comprobanteLiquidacion, listarLiquidaciones, descargarSoporteLiquidacion,
+  listarEmpleados, calcularPagoEmpleado, pagarSalarioEmpleado, comprobantePagoSalario, listarPagosSalario, descargarSoportePagoSalario,
   listarAsistenciaDelDia, registrarAsistencia
 };

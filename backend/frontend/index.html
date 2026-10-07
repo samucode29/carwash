@@ -480,7 +480,7 @@
                     <th>Descuentos</th>
                     <th>A Pagar</th>
                     <th>Estado</th>
-                    <th>Soporte de Pago</th>
+                    <th>Comprobante</th>
                     <th>Acción</th>
                   </tr>
                 </thead>
@@ -524,7 +524,7 @@
                     <th>Fecha Pago</th>
                     <th>Monto Pagado</th>
                     <th>Descuentos Inasistencia</th>
-                    <th>Soporte Adjunto</th>
+                    <th>Comprobante</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
@@ -1555,24 +1555,25 @@
           <span class="pay-label">Neto a Pagar:</span>
           <span class="pay-amount" id="liqNetoAPagar">$0</span>
         </div>
+        <p class="text-sm text-muted mt-2">Al confirmar, la comisión queda registrada como <strong>pagada</strong> y se abre el comprobante en PDF con espacio para la firma del lavador y la suya. Imprímalo, fírmenlo y guárdelo en físico.</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalLiquidarLavador')">Cancelar</button>
-        <button class="btn btn-primary" onclick="app.guardarLiquidacionLavador()">Generar Liquidación (Pendiente)</button>
+        <button class="btn btn-primary" onclick="app.guardarLiquidacionLavador()">Liquidar y Generar Comprobante (PDF)</button>
       </div>
     </div>
   </div>
 
   <!-- Modal: Historial de Servicios de un Lavador -->
   <div id="modalServiciosLavador" class="modal-overlay hidden">
-    <div class="modal-box" style="max-width: 900px">
+    <div class="modal-box" style="max-width: 1200px; width: 96vw">
       <div class="modal-header">
         <h3>Servicios de <span id="serviciosLavadorNombre">--</span></h3>
         <button class="close-btn" onclick="app.closeModal('modalServiciosLavador')">&times;</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" style="overflow-x: auto">
         <div style="overflow-x: auto">
-          <table class="data-table">
+          <table class="data-table data-table-sm" id="serviciosLavadorTable">
             <thead>
               <tr>
                 <th>Fecha</th>
@@ -1676,32 +1677,7 @@
     </div>
   </div>
 
-  <!-- Modal 8: Pagar Liquidación con Soporte -->
-  <div id="modalPagarLiquidacion" class="modal-overlay hidden">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Registrar Pago de Liquidación</h3>
-        <button class="close-btn" onclick="app.closeModal('modalPagarLiquidacion')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="text-sm text-muted mb-2">Para cambiar el estado de Pendiente a <strong>Pagado</strong>, el sistema exige adjuntar el soporte de pago (foto de recibo firmado, comprobante de transferencia bancaria o comprobante de caja).</p>
-        <div class="form-group">
-          <label>Soporte de Pago (foto o PDF del recibo/comprobante): *</label>
-          <input type="file" id="pagLiqSoporteArchivo" accept="image/*,.pdf">
-        </div>
-        <div class="form-group">
-          <label>Fecha de Pago:</label>
-          <input type="date" id="pagLiqFecha">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="app.closeModal('modalPagarLiquidacion')">Cancelar</button>
-        <button class="btn btn-success" onclick="app.confirmarPagoLiquidacion()">Confirmar Pago con Soporte</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: Pagar Salario de Empleado con Soporte -->
+  <!-- Modal: Pagar Salario de Empleado (genera comprobante PDF con firmas) -->
   <div id="modalPagarSalarioEmpleado" class="modal-overlay hidden">
     <div class="modal-box">
       <div class="modal-header">
@@ -1753,19 +1729,15 @@
           <span class="pay-label">Neto a Pagar:</span>
           <span class="pay-amount" id="pagSalNetoAPagar">$0</span>
         </div>
-        <p class="text-sm text-muted mb-2 mt-2">Para registrar el pago, el sistema exige adjuntar el soporte (foto de recibo firmado, comprobante de transferencia o comprobante de caja).</p>
-        <div class="form-group">
-          <label>Soporte de Pago (foto o PDF del recibo/comprobante): *</label>
-          <input type="file" id="pagSalSoporteArchivo" accept="image/*,.pdf">
-        </div>
-        <div class="form-group">
+        <div class="form-group mt-2">
           <label>Fecha de Pago:</label>
           <input type="date" id="pagSalFecha">
         </div>
+        <p class="text-sm text-muted">Al confirmar, el pago queda registrado y se abre el comprobante en PDF con espacio para la firma del empleado y la suya. Imprímalo, fírmenlo y guárdelo en físico.</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalPagarSalarioEmpleado')">Cancelar</button>
-        <button class="btn btn-success" onclick="app.confirmarPagoSalario()">Confirmar Pago con Soporte</button>
+        <button class="btn btn-success" onclick="app.confirmarPagoSalario()">Pagar y Generar Comprobante (PDF)</button>
       </div>
     </div>
   </div>

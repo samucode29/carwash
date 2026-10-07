@@ -1920,8 +1920,11 @@ const app = {
               <td>${this.formatMoney(l.descuentos)}</td>
               <td><strong class="text-success">${this.formatMoney(l.valor_a_pagar)}</strong></td>
               <td><span class="role-badge" style="background: ${l.estado === 'pagado' ? '#10b981' : '#f59e0b'}">${l.estado.toUpperCase()}</span></td>
-              <td class="text-sm">${l.tiene_soporte ? `<a href="#" onclick="app.verSoportePago('liquidaciones', ${l.id}); return false;">Ver soporte</a>` : '<span class="text-muted">Pendiente de soporte</span>'}</td>
-              <td>${l.estado === 'pendiente' ? `<button class="btn btn-sm btn-success admin-only" onclick="app.abrirModalPagarLiq(${l.id})">Pagar (Adjuntar Soporte)</button>` : '<span class="text-success text-sm">Pagado</span>'}</td>
+              <td class="text-sm">
+                <button class="btn btn-sm btn-outline admin-only" onclick="app.abrirComprobantePdf('liquidaciones', ${l.id})">Comprobante PDF</button>
+                ${l.tiene_soporte ? `<br><a href="#" onclick="app.verSoportePago('liquidaciones', ${l.id}); return false;">Ver soporte anterior</a>` : ''}
+              </td>
+              <td>${l.estado === 'pendiente' ? `<button class="btn btn-sm btn-success admin-only" onclick="app.pagarLiquidacionPendiente(${l.id})">Marcar Pagada</button>` : '<span class="text-success text-sm">Pagado</span>'}</td>
             </tr>
           `).join('');
         }
@@ -1966,7 +1969,10 @@ const app = {
               <td>${p.fecha_pago_real}</td>
               <td><strong>${this.formatMoney(p.valor_a_pagar)}</strong></td>
               <td>${this.formatMoney(p.descuentos)}</td>
-              <td>${p.tiene_soporte ? `<a href="#" onclick="app.verSoportePago('pagos-salario', ${p.id}); return false;">Ver soporte</a>` : '<span class="text-muted">Sin soporte</span>'}</td>
+              <td class="text-sm">
+                <button class="btn btn-sm btn-outline" onclick="app.abrirComprobantePdf('pagos-salario', ${p.id})">Comprobante PDF</button>
+                ${p.tiene_soporte ? `<br><a href="#" onclick="app.verSoportePago('pagos-salario', ${p.id}); return false;">Ver soporte anterior</a>` : ''}
+              </td>
               <td><span class="role-badge" style="background: #10b981">PAGADO</span></td>
             </tr>
           `).join('');
@@ -2070,21 +2076,24 @@ const app = {
         tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">Este lavador todavía no tiene servicios cobrados.</td></tr>`;
         return;
       }
+      const nw = 'style="white-space: nowrap"';
       tbody.innerHTML = servicios.map(s => `
         <tr>
-          <td>${String(s.fecha).substring(0, 10)}</td>
+          <td ${nw}>${String(s.fecha).substring(0, 10)}</td>
           <td>${escapeHtml(s.cliente)}</td>
-          <td>#${s.ordenId} ${s.servicio || ''}</td>
-          <td>${this.formatMoney(s.valorServicio)}</td>
-          <td>${this.formatMoney(s.comisionBruta)}</td>
-          <td class="${s.propina > 0 ? 'text-success' : ''}">${s.propina > 0 ? `+${this.formatMoney(s.propina)}` : '--'}</td>
-          <td class="${s.descuentoTotal > 0 ? 'text-danger' : ''}">${s.descuentoTotal > 0 ? `-${this.formatMoney(s.descuentoTotal)} (negocio ${this.formatMoney(s.descuentoNegocio)} / trabajador ${this.formatMoney(s.descuentoTrabajador)})` : '--'}</td>
-          <td><strong>${this.formatMoney(s.comisionNeta)}</strong></td>
-          <td class="text-sm text-muted">${s.observacion ? escapeHtml(s.observacion) : '--'}</td>
+          <td>#${s.ordenId} ${escapeHtml(s.servicio || '')}</td>
+          <td ${nw}>${this.formatMoney(s.valorServicio)}</td>
+          <td ${nw}>${this.formatMoney(s.comisionBruta)}</td>
+          <td ${nw} class="${s.propina > 0 ? 'text-success' : ''}">${s.propina > 0 ? `+${this.formatMoney(s.propina)}` : '--'}</td>
+          <td ${nw} class="${s.descuentoTotal > 0 ? 'text-danger' : ''}">${s.descuentoTotal > 0
+            ? `-${this.formatMoney(s.descuentoTotal)}<br><span class="text-sm text-muted">Negocio ${this.formatMoney(s.descuentoNegocio)}<br>Trabajador ${this.formatMoney(s.descuentoTrabajador)}</span>`
+            : '--'}</td>
+          <td ${nw}><strong>${this.formatMoney(s.comisionNeta)}</strong></td>
+          <td class="text-sm text-muted" style="min-width: 140px">${s.observacion ? escapeHtml(s.observacion) : '--'}</td>
         </tr>
       `).join('');
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar el historial.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Error al cargar el historial.</td></tr>`;
     }
   },
 
@@ -2101,47 +2110,51 @@ const app = {
     const periodo_fin = document.getElementById('liqPeriodoFin').value;
 
     try {
-      await ApiCliente.post('/api/nomina/liquidar-lavador', { lavador_id: this.liquidatingWasher, periodo_inicio, periodo_fin, total_comision, descuentos });
-      this.toast('Liquidación generada con estado PENDIENTE.', 'success');
+      const liquidacion = await ApiCliente.post('/api/nomina/liquidar-lavador', { lavador_id: this.liquidatingWasher, periodo_inicio, periodo_fin, total_comision, descuentos });
+      this.toast('Comisión liquidada y registrada como pagada. Imprima el comprobante para las firmas.', 'success');
       this.closeModal('modalLiquidarLavador');
       this.loadNomina();
+      this.abrirComprobantePdf('liquidaciones', liquidacion.id);
     } catch (err) {
-      this.toast('Error al generar liquidación.', 'error');
+      this.toast(err.message || 'Error al generar liquidación.', 'error');
     }
   },
 
-  abrirModalPagarLiq(liqId) {
-    this.payingLiqId = liqId;
-    document.getElementById('pagLiqSoporteArchivo').value = '';
-    document.getElementById('pagLiqFecha').value = fechaLocalHoy();
-    this.openModal('modalPagarLiquidacion');
-  },
-
-  async confirmarPagoLiquidacion() {
-    const archivo = document.getElementById('pagLiqSoporteArchivo').files[0];
-    const fecha = document.getElementById('pagLiqFecha').value;
-    if (!archivo) { this.toast('El sistema exige adjuntar el soporte de pago (foto o PDF).', 'warning'); return; }
-
-    const formData = new FormData();
-    formData.append('liquidacion_id', this.payingLiqId);
-    formData.append('fecha_pago', fecha);
-    formData.append('soporte', archivo);
-
+  /** Liquidaciones antiguas que quedaron pendientes (cuando se exigía subir soporte): se pagan y se genera su comprobante. */
+  async pagarLiquidacionPendiente(liqId) {
+    if (!confirm('¿Marcar esta liquidación como pagada? Se abrirá el comprobante en PDF para imprimir y firmar.')) return;
     try {
-      await ApiCliente.postForm('/api/nomina/pagar-liquidacion', formData);
-      this.toast('Liquidación pagada y registrada con soporte en auditoría.', 'success');
-      this.closeModal('modalPagarLiquidacion');
+      await ApiCliente.post('/api/nomina/pagar-liquidacion', { liquidacion_id: liqId, fecha_pago: fechaLocalHoy() });
+      this.toast('Liquidación pagada.', 'success');
       this.loadNomina();
+      this.abrirComprobantePdf('liquidaciones', liqId);
     } catch (err) {
       this.toast(err.message || 'Error al procesar pago de liquidación.', 'error');
     }
   },
 
+  /** Abre en otra pestaña el comprobante PDF (con firmas) de una liquidación ('liquidaciones') o de un pago de salario ('pagos-salario'). */
+  async abrirComprobantePdf(tipo, id) {
+    try {
+      const respuesta = await fetch(`/api/nomina/${tipo}/${id}/pdf`, { headers: { Authorization: `Bearer ${ApiCliente.obtenerToken()}` } });
+      if (!respuesta.ok) throw new Error('No se pudo generar el comprobante.');
+      const blob = await respuesta.blob();
+      const enlace = document.createElement('a');
+      enlace.href = URL.createObjectURL(blob);
+      enlace.target = '_blank';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo generar el comprobante.', 'error');
+    }
+  },
+
   abrirModalPagarSalario(empleadoId, nombre, periodicidadPago) {
     this.payingEmpleadoId = empleadoId;
+    this.payingPeriodicidad = periodicidadPago;
     document.getElementById('pagSalEmpleadoNombre').textContent = nombre;
     document.getElementById('pagSalDescuentos').value = 0;
-    document.getElementById('pagSalSoporteArchivo').value = '';
     document.getElementById('pagSalFecha').value = fechaLocalHoy();
 
     // Rango por defecto según la periodicidad de pago del empleado; el
@@ -2183,26 +2196,24 @@ const app = {
   },
 
   async confirmarPagoSalario() {
-    const archivo = document.getElementById('pagSalSoporteArchivo').files[0];
     const salarioBase = document.getElementById('pagSalBase').value;
     const descuentos = document.getElementById('pagSalDescuentos').value;
     const fecha = document.getElementById('pagSalFecha').value;
-    if (!archivo) { this.toast('El sistema exige adjuntar el soporte de pago (foto o PDF).', 'warning'); return; }
-
-    const formData = new FormData();
-    formData.append('empleado_id', this.payingEmpleadoId);
-    formData.append('salario_base', salarioBase);
-    formData.append('descuentos', descuentos);
-    formData.append('fecha_pago', fecha);
-    formData.append('periodo_inicio', document.getElementById('pagSalPeriodoInicio').value);
-    formData.append('periodo_fin', document.getElementById('pagSalPeriodoFin').value);
-    formData.append('soporte', archivo);
 
     try {
-      await ApiCliente.postForm('/api/nomina/pagar-empleado', formData);
-      this.toast('Salario pagado y registrado con soporte en auditoría.', 'success');
+      const pago = await ApiCliente.post('/api/nomina/pagar-empleado', {
+        empleado_id: this.payingEmpleadoId,
+        periodicidad: this.payingPeriodicidad,
+        salario_base: salarioBase,
+        descuentos,
+        fecha_pago: fecha,
+        periodo_inicio: document.getElementById('pagSalPeriodoInicio').value,
+        periodo_fin: document.getElementById('pagSalPeriodoFin').value
+      });
+      this.toast('Salario pagado y registrado. Imprima el comprobante para las firmas.', 'success');
       this.closeModal('modalPagarSalarioEmpleado');
       this.loadNomina();
+      this.abrirComprobantePdf('pagos-salario', pago.id);
     } catch (err) {
       this.toast(err.message || 'Error al registrar pago de salario.', 'error');
     }

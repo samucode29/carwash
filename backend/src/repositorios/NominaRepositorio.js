@@ -147,39 +147,45 @@ async function obtenerServiciosPorLavador(lavadorId) {
   });
 }
 
-async function crearLiquidacion({ lavadorId, periodoInicio, periodoFin, totalComision, descuentos }) {
+const SELECT_LIQUIDACION = `
+  SELECT liq.id, liq.lavador_id, liq.periodo_inicio, liq.periodo_fin, liq.total_comision, liq.descuentos,
+         liq.valor_a_pagar, liq.estado, liq.fecha_pago, liq.soporte_pago_url, liq.soporte_pago_nombre,
+         liq.soporte_pago_tipo, (liq.soporte_pago_datos IS NOT NULL) AS tiene_soporte, liq.creado_en,
+         l.nombre AS lavador_nombre, l.documento AS lavador_documento
+  FROM liquidaciones_lavador liq
+  LEFT JOIN lavadores l ON l.id = liq.lavador_id
+  WHERE liq.id = ?`;
+
+/**
+ * Se registra directamente como PAGADA: el comprobante se imprime, se firma
+ * y se archiva en físico, así que no hay un paso posterior de "adjuntar
+ * soporte" que la deje pendiente. Al quedar pagada deja de contar como
+ * comisión pendiente del lavador.
+ */
+async function crearLiquidacion({ lavadorId, periodoInicio, periodoFin, totalComision, descuentos, fechaPago }) {
   const valorAPagar = Math.max(0, totalComision - descuentos);
   const [resultado] = await pool.query(
-    `INSERT INTO liquidaciones_lavador (lavador_id, periodo_inicio, periodo_fin, total_comision, descuentos, valor_a_pagar, estado)
-     VALUES (?, ?, ?, ?, ?, ?, 'pendiente')`,
-    [lavadorId, periodoInicio, periodoFin, totalComision, descuentos, valorAPagar]
+    `INSERT INTO liquidaciones_lavador (lavador_id, periodo_inicio, periodo_fin, total_comision, descuentos, valor_a_pagar, estado, fecha_pago)
+     VALUES (?, ?, ?, ?, ?, ?, 'pagado', ?)`,
+    [lavadorId, periodoInicio, periodoFin, totalComision, descuentos, valorAPagar, fechaPago]
   );
-  const [filas] = await pool.query(`SELECT * FROM liquidaciones_lavador WHERE id = ?`, [resultado.insertId]);
-  return filas[0];
+  return obtenerLiquidacion(resultado.insertId);
 }
 
-async function pagarLiquidacion({ liquidacionId, soportePagoNombre, soportePagoTipo, soportePagoDatos, fechaPago }) {
-  const [filas] = await pool.query(`SELECT * FROM liquidaciones_lavador WHERE id = ?`, [liquidacionId]);
-  const liquidacion = filas[0];
-  if (!liquidacion) return null;
+async function obtenerLiquidacion(id) {
+  const [filas] = await pool.query(SELECT_LIQUIDACION, [id]);
+  return filas[0] ? { ...filas[0], tiene_soporte: !!filas[0].tiene_soporte } : null;
+}
 
+/** Para liquidaciones antiguas que quedaron pendientes: las marca pagadas. */
+async function pagarLiquidacion({ liquidacionId, fechaPago }) {
+  const existente = await obtenerLiquidacion(liquidacionId);
+  if (!existente) return null;
   await pool.query(
-    `UPDATE liquidaciones_lavador
-     SET estado = 'pagado', fecha_pago = ?, soporte_pago_url = ?, soporte_pago_nombre = ?, soporte_pago_tipo = ?, soporte_pago_datos = ?
-     WHERE id = ?`,
-    [fechaPago, soportePagoNombre, soportePagoNombre, soportePagoTipo, soportePagoDatos, liquidacionId]
+    `UPDATE liquidaciones_lavador SET estado = 'pagado', fecha_pago = ? WHERE id = ?`,
+    [fechaPago, liquidacionId]
   );
-  const [actualizada] = await pool.query(
-    `SELECT liq.id, liq.lavador_id, liq.periodo_inicio, liq.periodo_fin, liq.total_comision, liq.descuentos,
-            liq.valor_a_pagar, liq.estado, liq.fecha_pago, liq.soporte_pago_url, liq.soporte_pago_nombre,
-            liq.soporte_pago_tipo, (liq.soporte_pago_datos IS NOT NULL) AS tiene_soporte, liq.creado_en,
-            l.nombre AS lavador_nombre
-     FROM liquidaciones_lavador liq
-     LEFT JOIN lavadores l ON l.id = liq.lavador_id
-     WHERE liq.id = ?`,
-    [liquidacionId]
-  );
-  return actualizada[0] ? { ...actualizada[0], tiene_soporte: !!actualizada[0].tiene_soporte } : null;
+  return obtenerLiquidacion(liquidacionId);
 }
 
 async function listarLiquidaciones() {
@@ -236,26 +242,30 @@ async function listarEmpleadosConUltimoPago() {
   });
 }
 
-async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, soportePagoNombre, soportePagoTipo, soportePagoDatos, fechaPago }) {
+async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, fechaPago }) {
   const valorAPagar = Math.max(0, salarioBase - descuentos);
   const hoy = fechaPago || obtenerFechaHoy();
 
   const [resultado] = await pool.query(
     `INSERT INTO pagos_salario
-      (empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, valor_a_pagar, estado, fecha_pago_real, soporte_pago_url, soporte_pago_nombre, soporte_pago_tipo, soporte_pago_datos)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?, ?, ?)`,
-    [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, valorAPagar, hoy, soportePagoNombre, soportePagoNombre, soportePagoTipo, soportePagoDatos]
+      (empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, valor_a_pagar, estado, fecha_pago_real)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pagado', ?)`,
+    [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, valorAPagar, hoy]
   );
+  return obtenerPagoSalario(resultado.insertId);
+}
+
+async function obtenerPagoSalario(id) {
   const [filas] = await pool.query(
     `SELECT ps.id, ps.empleado_id, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin, ps.salario_base,
             ps.descuentos, ps.valor_a_pagar, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
             ps.soporte_pago_nombre, ps.soporte_pago_tipo,
             (ps.soporte_pago_datos IS NOT NULL) AS tiene_soporte, ps.creado_en,
-            u.nombre AS empleado_nombre
+            u.nombre AS empleado_nombre, u.documento AS empleado_documento
      FROM pagos_salario ps
      LEFT JOIN usuarios u ON u.id = ps.empleado_id
      WHERE ps.id = ?`,
-    [resultado.insertId]
+    [id]
   );
   return filas[0] ? { ...filas[0], tiene_soporte: !!filas[0].tiene_soporte } : null;
 }
@@ -360,12 +370,14 @@ module.exports = {
   resumenComisionesLavadores,
   obtenerServiciosPorLavador,
   crearLiquidacion,
+  obtenerLiquidacion,
   pagarLiquidacion,
   listarLiquidaciones,
   obtenerSoporteLiquidacion,
   listarEmpleadosConUltimoPago,
   calcularPagoEmpleado,
   crearPagoSalario,
+  obtenerPagoSalario,
   listarPagosSalario,
   obtenerSoportePagoSalario
 };
