@@ -82,6 +82,8 @@ async function resumenComisionesLavadores() {
     return {
       lavador_id: lavador.id,
       nombre: lavador.nombre,
+      nombres: lavador.nombres,
+      apellidos: lavador.apellidos,
       documento: lavador.documento,
       telefono: lavador.telefono,
       estado: lavador.estado,
@@ -226,6 +228,8 @@ async function listarEmpleadosConUltimoPago() {
     return {
       empleado_id: emp.id,
       nombre: emp.nombre,
+      nombres: emp.nombres,
+      apellidos: emp.apellidos,
       rol: emp.rol,
       documento: emp.documento,
       telefono: emp.telefono || '',

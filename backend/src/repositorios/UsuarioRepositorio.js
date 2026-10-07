@@ -6,7 +6,7 @@
 const { pool } = require('../config/baseDeDatos');
 
 const COLUMNAS_PUBLICAS = `
-  id, nombre, documento, telefono, correo, username, rol, es_admin_principal, estado,
+  id, nombre, nombres, apellidos, documento, telefono, correo, username, rol, es_admin_principal, estado,
   fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, creado_en
 `;
 
@@ -51,10 +51,10 @@ async function listar(rol) {
 async function crear(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO usuarios
-      (nombre, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?)`,
+      (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?)`,
     [
-      datos.nombre, datos.documento, datos.telefono || '', datos.correo, datos.username,
+      datos.nombre, datos.nombres, datos.apellidos, datos.documento, datos.telefono || '', datos.correo, datos.username,
       datos.passwordHash, datos.rol, datos.salarioFijo || null, datos.periodicidadPago || 'quincenal',
       datos.jornadaHorasDia || 8, datos.diasDescansoSemana ?? 1
     ]

@@ -833,13 +833,17 @@
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-1">
-            <label>Nombre Completo: *</label>
-            <input type="text" id="newClientNombre" placeholder="Ej: Andrés Morales" oninput="soloLetras(this)">
+            <label>Nombres: *</label>
+            <input type="text" id="newClientNombres" placeholder="Ej: Andrés Felipe" oninput="soloLetras(this)">
           </div>
           <div class="form-group flex-1">
-            <label>Teléfono: *</label>
-            <input type="text" id="newClientTelefono" placeholder="Ej: 3001234567" oninput="soloNumeros(this)">
+            <label>Apellidos: *</label>
+            <input type="text" id="newClientApellidos" placeholder="Ej: Morales Pérez" oninput="soloLetras(this)">
           </div>
+        </div>
+        <div class="form-group">
+          <label>Celular: * <span class="text-muted text-sm">(no puede repetirse con otro cliente, empleado o lavador)</span></label>
+          <input type="text" id="newClientTelefono" placeholder="Ej: 3001234567" oninput="soloNumeros(this)">
         </div>
         <div class="form-group">
           <label>Correo Electrónico (Opcional):</label>
@@ -885,11 +889,17 @@
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-1">
-            <label>Nombre Completo: *</label>
-            <input type="text" id="editClienteNombre" oninput="soloLetras(this)">
+            <label>Nombres: *</label>
+            <input type="text" id="editClienteNombres" oninput="soloLetras(this)">
           </div>
           <div class="form-group flex-1">
-            <label>Teléfono: *</label>
+            <label>Apellidos: *</label>
+            <input type="text" id="editClienteApellidos" oninput="soloLetras(this)">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Celular: *</label>
             <input type="text" id="editClienteTelefono" oninput="soloNumeros(this)">
           </div>
         </div>
@@ -1244,12 +1254,18 @@
         <button class="close-btn" onclick="app.closeModal('modalEditarLavador')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label>Nombre Completo:</label>
-          <input type="text" id="editLavNombre" oninput="soloLetras(this)">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Nombres:</label>
+            <input type="text" id="editLavNombres" oninput="soloLetras(this)">
+          </div>
+          <div class="form-group flex-1">
+            <label>Apellidos:</label>
+            <input type="text" id="editLavApellidos" oninput="soloLetras(this)">
+          </div>
         </div>
         <div class="form-group">
-          <label>Teléfono:</label>
+          <label>Celular:</label>
           <input type="text" id="editLavTelefono" oninput="soloNumeros(this)">
         </div>
         <div class="form-group">
@@ -1272,12 +1288,18 @@
         <button class="close-btn" onclick="app.closeModal('modalEditarEmpleado')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label>Nombre Completo:</label>
-          <input type="text" id="editEmpNombre" oninput="soloLetras(this)">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Nombres:</label>
+            <input type="text" id="editEmpNombres" oninput="soloLetras(this)">
+          </div>
+          <div class="form-group flex-1">
+            <label>Apellidos:</label>
+            <input type="text" id="editEmpApellidos" oninput="soloLetras(this)">
+          </div>
         </div>
         <div class="form-group">
-          <label>Teléfono:</label>
+          <label>Celular:</label>
           <input type="text" id="editEmpTelefono" oninput="soloNumeros(this)">
         </div>
         <div class="form-group">
@@ -1417,13 +1439,17 @@
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group flex-1">
-            <label>Nombre Completo: *</label>
-            <input type="text" id="usrNombre" placeholder="Ej: Camilo Torres" oninput="soloLetras(this)">
+            <label>Nombres: *</label>
+            <input type="text" id="usrNombres" placeholder="Ej: Camilo Andrés" oninput="soloLetras(this)">
           </div>
           <div class="form-group flex-1">
-            <label>Documento de Identidad: *</label>
-            <input type="text" id="usrDocumento" placeholder="1020304050" oninput="soloNumeros(this)">
+            <label>Apellidos: *</label>
+            <input type="text" id="usrApellidos" placeholder="Ej: Torres Gómez" oninput="soloLetras(this)">
           </div>
+        </div>
+        <div class="form-group">
+          <label>Documento de Identidad: *</label>
+          <input type="text" id="usrDocumento" placeholder="1020304050" oninput="soloNumeros(this)">
         </div>
         <div class="form-row">
           <div class="form-group flex-1">
@@ -1767,9 +1793,15 @@
         <button class="close-btn" onclick="app.closeModal('modalEditarPerfil')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label>Nombre Completo:</label>
-          <input type="text" id="editPerfilNombre">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Nombres:</label>
+            <input type="text" id="editPerfilNombres" oninput="soloLetras(this)">
+          </div>
+          <div class="form-group flex-1">
+            <label>Apellidos:</label>
+            <input type="text" id="editPerfilApellidos" oninput="soloLetras(this)">
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group flex-1">

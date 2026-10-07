@@ -16,14 +16,14 @@
 
 USE carwash_pro;
 
-INSERT INTO usuarios (nombre, documento, telefono, correo, username, password_hash, rol, es_admin_principal, estado, fecha_ingreso, salario_fijo, periodicidad_pago)
+INSERT INTO usuarios (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, es_admin_principal, estado, fecha_ingreso, salario_fijo, periodicidad_pago)
 VALUES
- ('Samuel Petro Avalos', '1037120618', '', 'samuelpetroavalos@gmail.com', 'admin', '$2b$10$eX4GBMLIsjIMowuFglQUzegdpVfsZ9ytqswgRIN8b9jEfBxxR5aRy', 'administrador', TRUE, 'activo', CURDATE(), 2500000, 'mensual'),
- ('Laura Gómez', '1098765432', '3123456789', 'laura@carwash.com', 'laura', '$2b$10$0aA8mHN9PojENNxQ2Bao5ergiO9zYGa76EEMinFDHiWt52Rd424Bi', 'empleado', FALSE, 'activo', CURDATE(), 1400000, 'quincenal');
+ ('Samuel Petro Avalos', 'Samuel', 'Petro Avalos', '1037120618', '', 'samuelpetroavalos@gmail.com', 'admin', '$2b$10$eX4GBMLIsjIMowuFglQUzegdpVfsZ9ytqswgRIN8b9jEfBxxR5aRy', 'administrador', TRUE, 'activo', CURDATE(), 2500000, 'mensual'),
+ ('Laura Gómez', 'Laura', 'Gómez', '1098765432', '3123456789', 'laura@carwash.com', 'laura', '$2b$10$0aA8mHN9PojENNxQ2Bao5ergiO9zYGa76EEMinFDHiWt52Rd424Bi', 'empleado', FALSE, 'activo', CURDATE(), 1400000, 'quincenal');
 
-INSERT INTO lavadores (nombre, documento, telefono, estado, fecha_ingreso, porcentaje_comision, creado_por)
+INSERT INTO lavadores (nombre, nombres, apellidos, documento, telefono, estado, fecha_ingreso, porcentaje_comision, creado_por)
 VALUES
- ('Jorge Martínez', '1033445566', '3157778899', 'activo', CURDATE(), 60.00, 1);
+ ('Jorge Martínez', 'Jorge', 'Martínez', '1033445566', '3157778899', 'activo', CURDATE(), 60.00, 1);
 
 INSERT INTO proveedores (nombre, contacto, telefono, correo, direccion)
 VALUES

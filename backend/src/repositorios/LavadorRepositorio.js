@@ -27,9 +27,9 @@ async function obtenerPorDocumento(documento) {
 
 async function crear(datos) {
   const [resultado] = await pool.query(
-    `INSERT INTO lavadores (nombre, documento, telefono, estado, fecha_ingreso, porcentaje_comision, creado_por)
-     VALUES (?, ?, ?, 'activo', CURDATE(), ?, ?)`,
-    [datos.nombre, datos.documento, datos.telefono || '', datos.porcentajeComision || 60.0, datos.creadoPor]
+    `INSERT INTO lavadores (nombre, nombres, apellidos, documento, telefono, estado, fecha_ingreso, porcentaje_comision, creado_por)
+     VALUES (?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?)`,
+    [datos.nombre, datos.nombres, datos.apellidos, datos.documento, datos.telefono || '', datos.porcentajeComision || 60.0, datos.creadoPor]
   );
   return obtenerPorId(resultado.insertId);
 }

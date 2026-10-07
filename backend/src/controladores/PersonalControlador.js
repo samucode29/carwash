@@ -9,17 +9,17 @@ const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { hashearContrasena, generarPasswordPorDefecto } = require('../utilidades/contrasenas');
 const { normalizarParaUsername } = require('../utilidades/texto');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
-const { esNombreValido, esDocumentoValido, esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
+const { esDocumentoValido, esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
+const { interpretarNombre, traeNombre, exigirCelularUnico } = require('../utilidades/personas');
 
 /**
- * Genera un nombre de usuario único a partir del nombre completo:
- * "primernombre.primerapellido", y si ya existe le agrega un número
- * (primernombre.primerapellido2, 3, ...) hasta encontrar uno libre.
+ * Genera un nombre de usuario único: "primernombre.primerapellido", y si ya
+ * existe le agrega un número (primernombre.primerapellido2, 3, ...) hasta
+ * encontrar uno libre.
  */
-async function generarUsernameUnico(nombreCompleto) {
-  const partes = (nombreCompleto || '').trim().split(/\s+/);
-  const primerNombre = normalizarParaUsername(partes[0]) || 'usuario';
-  const primerApellido = normalizarParaUsername(partes[1]);
+async function generarUsernameUnico(nombres, apellidos) {
+  const primerNombre = normalizarParaUsername((nombres || '').trim().split(/\s+/)[0]) || 'usuario';
+  const primerApellido = normalizarParaUsername((apellidos || '').trim().split(/\s+/)[0]);
   const base = primerApellido ? `${primerNombre}.${primerApellido}` : primerNombre;
 
   let candidato = base;
@@ -48,13 +48,12 @@ async function obtenerMiPerfil(req, res) {
 }
 
 async function crearUsuario(req, res) {
-  const { nombre, documento, telefono, correo, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana } = req.body;
+  const { documento, telefono, correo, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana } = req.body;
 
-  if (!nombre || !documento || !rol) {
-    return res.status(400).json({ error: 'Nombre, documento y rol son obligatorios.' });
-  }
-  if (!esNombreValido(nombre)) {
-    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  const persona = interpretarNombre(req.body);
+  if (persona.error) return res.status(400).json({ error: persona.error });
+  if (!documento || !rol) {
+    return res.status(400).json({ error: 'Documento y rol son obligatorios.' });
   }
   if (!esDocumentoValido(documento)) {
     return res.status(400).json({ error: 'El documento debe tener solo números, mínimo 4 dígitos.' });
@@ -74,6 +73,8 @@ async function crearUsuario(req, res) {
     return res.status(403).json({ error: 'Solo el administrador principal puede crear nuevas cuentas de administrador.' });
   }
 
+  if (telefono) await exigirCelularUnico(telefono);
+
   const existente = await UsuarioRepositorio.obtenerPorDocumento(documento);
   if (existente) {
     return res.status(400).json({ error: 'Ya existe un usuario con este documento de identidad.' });
@@ -86,11 +87,13 @@ async function crearUsuario(req, res) {
   // El usuario y la contraseña siempre se asignan automáticamente, no los
   // escribe el administrador: usuario = primernombre.primerapellido (con
   // un número si ya existe), contraseña = documento + "carwash".
-  const nombreUsuario = await generarUsernameUnico(nombre);
+  const nombreUsuario = await generarUsernameUnico(persona.nombres, persona.apellidos);
   const passwordAsignada = generarPasswordPorDefecto(documento);
 
   const nuevoUsuario = await UsuarioRepositorio.crear({
-    nombre,
+    nombre: persona.nombre,
+    nombres: persona.nombres,
+    apellidos: persona.apellidos,
     documento,
     telefono,
     correo: correo || `${nombreUsuario}@carwash.com`,
@@ -103,7 +106,7 @@ async function crearUsuario(req, res) {
     diasDescansoSemana: diasDescansoSemana !== undefined ? parseInt(diasDescansoSemana, 10) : 1
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_usuario', `Creado usuario ${nombre} con rol ${rol}`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_usuario', `Creado usuario ${persona.nombre} con rol ${rol}`);
   // Se devuelve la contraseña en texto plano SOLO en esta respuesta (no se
   // guarda en ningún lado) para que el administrador se la entregue a la
   // persona; el frontend la muestra una única vez.
@@ -112,20 +115,24 @@ async function crearUsuario(req, res) {
 
 async function actualizarUsuario(req, res) {
   const id = Number(req.params.id);
-  const { nombre, telefono, correo, rol, estado, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana, password } = req.body;
+  const { telefono, correo, rol, estado, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana, password } = req.body;
 
   if (rol === 'administrador' && !req.usuarioAutenticado.esAdminPrincipal) {
     return res.status(403).json({ error: 'Solo el administrador principal puede otorgar el rol de administrador.' });
   }
-  if (nombre && !esNombreValido(nombre)) {
-    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
-  }
+  const persona = traeNombre(req.body) ? interpretarNombre(req.body) : null;
+  if (persona && persona.error) return res.status(400).json({ error: persona.error });
   if (telefono && !esTelefonoValido(telefono)) {
     return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
   }
   if (correo && !esCorreoValido(correo)) {
     return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
+  const actual = await UsuarioRepositorio.obtenerPorId(id);
+  if (!actual) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  // El celular solo se valida si cambió (así se puede editar otro dato aunque
+  // el número ya estuviera repetido de antes).
+  if (telefono && telefono !== actual.telefono) await exigirCelularUnico(telefono, { tipo: 'empleado', id });
 
   // Nadie puede inactivar su propia cuenta (se quedaría sin poder volver a
   // entrar), y al administrador principal solo lo puede inactivar él mismo.
@@ -140,7 +147,7 @@ async function actualizarUsuario(req, res) {
   }
 
   const cambios = {};
-  if (nombre) cambios.nombre = nombre;
+  if (persona) Object.assign(cambios, { nombre: persona.nombre, nombres: persona.nombres, apellidos: persona.apellidos });
   if (telefono !== undefined) cambios.telefono = telefono;
   if (correo) cambios.correo = correo;
   if (rol) cambios.rol = rol;
@@ -164,18 +171,19 @@ async function actualizarUsuario(req, res) {
  * empleado solo puede cambiar su contraseña, ver AuthControlador).
  */
 async function actualizarMiPerfil(req, res) {
-  const { nombre, telefono, correo, username } = req.body;
+  const { telefono, correo, username } = req.body;
   const idPropio = req.usuarioAutenticado.id;
 
-  if (nombre && !esNombreValido(nombre)) {
-    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
-  }
+  const persona = traeNombre(req.body) ? interpretarNombre(req.body) : null;
+  if (persona && persona.error) return res.status(400).json({ error: persona.error });
   if (telefono && !esTelefonoValido(telefono)) {
     return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
   }
   if (correo && !esCorreoValido(correo)) {
     return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
+  const propio = await UsuarioRepositorio.obtenerPorId(idPropio);
+  if (telefono && propio && telefono !== propio.telefono) await exigirCelularUnico(telefono, { tipo: 'empleado', id: idPropio });
 
   if (username) {
     const existente = await UsuarioRepositorio.obtenerPorUsername(username);
@@ -185,7 +193,7 @@ async function actualizarMiPerfil(req, res) {
   }
 
   const cambios = {};
-  if (nombre) cambios.nombre = nombre;
+  if (persona) Object.assign(cambios, { nombre: persona.nombre, nombres: persona.nombres, apellidos: persona.apellidos });
   if (telefono !== undefined) cambios.telefono = telefono;
   if (correo) cambios.correo = correo;
   if (username) cambios.username = username;
@@ -235,12 +243,11 @@ async function listarLavadores(req, res) {
 }
 
 async function crearLavador(req, res) {
-  const { nombre, documento, telefono, porcentajeComision } = req.body;
-  if (!nombre || !documento) {
-    return res.status(400).json({ error: 'Nombre y documento son obligatorios.' });
-  }
-  if (!esNombreValido(nombre)) {
-    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  const { documento, telefono, porcentajeComision } = req.body;
+  const persona = interpretarNombre(req.body);
+  if (persona.error) return res.status(400).json({ error: persona.error });
+  if (!documento) {
+    return res.status(400).json({ error: 'El documento es obligatorio.' });
   }
   if (!esDocumentoValido(documento)) {
     return res.status(400).json({ error: 'El documento debe tener solo números, mínimo 4 dígitos.' });
@@ -248,6 +255,8 @@ async function crearLavador(req, res) {
   if (telefono && !esTelefonoValido(telefono)) {
     return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
   }
+
+  if (telefono) await exigirCelularUnico(telefono);
 
   const existente = await LavadorRepositorio.obtenerPorDocumento(documento);
   if (existente) {
@@ -259,30 +268,34 @@ async function crearLavador(req, res) {
   }
 
   const nuevoLavador = await LavadorRepositorio.crear({
-    nombre,
+    nombre: persona.nombre,
+    nombres: persona.nombres,
+    apellidos: persona.apellidos,
     documento,
     telefono,
     porcentajeComision: porcentajeComision ? parseFloat(porcentajeComision) : 60.0,
     creadoPor: req.usuarioAutenticado.id
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_lavador', `Creado lavador ${nombre}`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_lavador', `Creado lavador ${persona.nombre}`);
   res.status(201).json(nuevoLavador);
 }
 
 async function actualizarLavador(req, res) {
   const id = Number(req.params.id);
-  const { nombre, telefono, estado, porcentajeComision } = req.body;
+  const { telefono, estado, porcentajeComision } = req.body;
 
-  if (nombre && !esNombreValido(nombre)) {
-    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
-  }
+  const persona = traeNombre(req.body) ? interpretarNombre(req.body) : null;
+  if (persona && persona.error) return res.status(400).json({ error: persona.error });
   if (telefono && !esTelefonoValido(telefono)) {
     return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
   }
+  const actual = await LavadorRepositorio.obtenerPorId(id);
+  if (!actual) return res.status(404).json({ error: 'Lavador no encontrado.' });
+  if (telefono && telefono !== actual.telefono) await exigirCelularUnico(telefono, { tipo: 'lavador', id });
 
   const cambios = {};
-  if (nombre) cambios.nombre = nombre;
+  if (persona) Object.assign(cambios, { nombre: persona.nombre, nombres: persona.nombres, apellidos: persona.apellidos });
   if (telefono !== undefined) cambios.telefono = telefono;
   if (estado) cambios.estado = estado;
   if (porcentajeComision !== undefined) cambios.porcentaje_comision = parseFloat(porcentajeComision);

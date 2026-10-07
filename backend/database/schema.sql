@@ -30,7 +30,9 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ni contraseña: son personal operativo registrado en la tabla `lavadores`.
 CREATE TABLE usuarios (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
-    nombre              VARCHAR(150) NOT NULL,
+    nombre              VARCHAR(150) NOT NULL,   -- nombre completo (nombres + apellidos), se arma solo
+    nombres             VARCHAR(100) NOT NULL DEFAULT '',
+    apellidos           VARCHAR(100) NOT NULL DEFAULT '',
     documento           VARCHAR(30)  NOT NULL UNIQUE,
     telefono            VARCHAR(20),
     correo              VARCHAR(150) UNIQUE,
@@ -61,7 +63,9 @@ CREATE TABLE usuarios (
 -- ============================================================================
 CREATE TABLE lavadores (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
-    nombre              VARCHAR(150) NOT NULL,
+    nombre              VARCHAR(150) NOT NULL,   -- nombre completo (nombres + apellidos), se arma solo
+    nombres             VARCHAR(100) NOT NULL DEFAULT '',
+    apellidos           VARCHAR(100) NOT NULL DEFAULT '',
     documento           VARCHAR(30)  NOT NULL UNIQUE,
     telefono            VARCHAR(20),
     estado              ENUM('activo','inactivo') NOT NULL DEFAULT 'activo',
@@ -88,7 +92,9 @@ INSERT INTO tipos_vehiculo (nombre) VALUES ('carro'), ('moto');
 
 CREATE TABLE clientes (
     id          INT AUTO_INCREMENT PRIMARY KEY,
-    nombre      VARCHAR(150) NOT NULL,
+    nombre      VARCHAR(150) NOT NULL,   -- nombre completo (nombres + apellidos), se arma solo
+    nombres     VARCHAR(100) NOT NULL DEFAULT '',
+    apellidos   VARCHAR(100) NOT NULL DEFAULT '',
     telefono    VARCHAR(20)  NOT NULL,
     correo      VARCHAR(150),
     -- Un cliente inactivo conserva su historial pero no se le crean citas ni servicios nuevos.

@@ -24,8 +24,8 @@ async function listarConVehiculos() {
 
 async function crearCliente(datos) {
   const [resultado] = await pool.query(
-    `INSERT INTO clientes (nombre, telefono, correo, creado_por) VALUES (?, ?, ?, ?)`,
-    [datos.nombre, datos.telefono, datos.correo || '', datos.creadoPor]
+    `INSERT INTO clientes (nombre, nombres, apellidos, telefono, correo, creado_por) VALUES (?, ?, ?, ?, ?, ?)`,
+    [datos.nombre, datos.nombres, datos.apellidos, datos.telefono, datos.correo || '', datos.creadoPor]
   );
   const [filas] = await pool.query(`SELECT * FROM clientes WHERE id = ?`, [resultado.insertId]);
   return filas[0];

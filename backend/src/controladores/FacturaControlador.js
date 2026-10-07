@@ -20,7 +20,8 @@ async function obtenerFactura(req, res) {
 async function descargarFacturaPdf(req, res) {
   const factura = await FacturaRepositorio.obtenerFacturaPorId(Number(req.params.id));
   if (!factura) return res.status(404).json({ error: 'Factura no encontrada.' });
-  generarPdfFactura(res, factura);
+  const detalle = await FacturaRepositorio.obtenerDetalleFactura(factura);
+  generarPdfFactura(res, factura, detalle);
 }
 
 module.exports = { listarFacturas, obtenerFactura, descargarFacturaPdf };

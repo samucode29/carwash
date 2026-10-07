@@ -31,6 +31,13 @@ function fechaLocalHaceDias(n) {
  * con 4 o más ("Nombre Nombre Apellido Apellido") la primera y la tercera.
  */
 function nombreCorto(nombre) {
+  // Si llega el registro de la persona, se usa su primer nombre y su primer apellido.
+  if (nombre && typeof nombre === 'object') {
+    const primerNombre = String(nombre.nombres || '').trim().split(/\s+/)[0];
+    const primerApellido = String(nombre.apellidos || '').trim().split(/\s+/)[0];
+    if (primerNombre && primerApellido) return `${primerNombre} ${primerApellido}`;
+    nombre = nombre.nombre;
+  }
   const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
   if (partes.length <= 2) return partes.join(' ');
   if (partes.length === 3) return `${partes[0]} ${partes[1]}`;
@@ -433,7 +440,8 @@ const app = {
     this.closeModal('modalMiPerfil');
     try {
       const perfil = await ApiCliente.get('/api/personal/mi-perfil');
-      document.getElementById('editPerfilNombre').value = perfil.nombre;
+      document.getElementById('editPerfilNombres').value = perfil.nombres || '';
+      document.getElementById('editPerfilApellidos').value = perfil.apellidos || '';
       document.getElementById('editPerfilTelefono').value = perfil.telefono || '';
       document.getElementById('editPerfilCorreo').value = perfil.correo || '';
       document.getElementById('editPerfilUsername').value = perfil.username;
@@ -444,15 +452,17 @@ const app = {
   },
 
   async guardarEdicionPerfil() {
-    const nombre = document.getElementById('editPerfilNombre').value;
+    const nombres = document.getElementById('editPerfilNombres').value.trim();
+    const apellidos = document.getElementById('editPerfilApellidos').value.trim();
     const telefono = document.getElementById('editPerfilTelefono').value;
     const correo = document.getElementById('editPerfilCorreo').value;
     const username = document.getElementById('editPerfilUsername').value;
 
-    if (!nombre || !username) { this.toast('Nombre y usuario son obligatorios.', 'warning'); return; }
+    if (!nombres || !apellidos || !username) { this.toast('Nombres, apellidos y usuario son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
 
     try {
-      const actualizado = await ApiCliente.put('/api/personal/mi-perfil', { nombre, telefono, correo, username });
+      const actualizado = await ApiCliente.put('/api/personal/mi-perfil', { nombres, apellidos, telefono, correo, username });
       this.toast('Tus datos se actualizaron correctamente.', 'success');
       this.closeModal('modalEditarPerfil');
 
@@ -1388,7 +1398,7 @@ const app = {
       return `
         <div class="${clases.join(' ')}" onclick="app.toggleAsignLavSelection(${w.id}, ${disponible}, '${motivo}')" title="${disponible ? '' : motivo}">
           <span class="washer-status-dot"></span>
-          <span>${nombreCorto(w.nombre)} (${w.porcentaje_comision}%)${disponible ? '' : ` — ${motivo}`}</span>
+          <span>${nombreCorto(w)} (${w.porcentaje_comision}%)${disponible ? '' : ` — ${motivo}`}</span>
         </div>
       `;
     }).join('');
@@ -1877,6 +1887,7 @@ const app = {
           ApiCliente.get('/api/nomina/liquidaciones')
         ]);
 
+        this.lavadoresNomina = lavadores;
         const grid = document.getElementById('lavadoresCardsGrid');
         if (grid) {
           grid.innerHTML = lavadores.map(w => `
@@ -1902,7 +1913,7 @@ const app = {
                 <button class="btn btn-sm btn-outline" onclick="app.abrirModalServiciosLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}')">Ver Servicios</button>
               </div>
               <div class="d-flex gap-2 mt-2">
-                <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.abrirModalEditarLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}', '${(w.telefono || '').replace(/'/g, "\\'")}', ${w.porcentaje_comision})">Editar</button>
+                <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.abrirModalEditarLavador(${w.lavador_id})">Editar</button>
                 <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.toggleEstadoLavador(${w.lavador_id}, '${w.estado}', '${w.nombre}')">${w.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
               </div>
             </div>
@@ -1937,6 +1948,7 @@ const app = {
           ApiCliente.get('/api/nomina/pagos-salario')
         ]);
 
+        this.empleadosNomina = empleados;
         const tbEmp = document.getElementById('empleadosSalarioTableBody');
         if (tbEmp) {
           tbEmp.innerHTML = empleados.map(e => `
@@ -1950,7 +1962,7 @@ const app = {
               <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
               <td>
                 <button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${e.periodicidad_pago || 'quincenal'}')">Pagar Salario</button>
-                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${(e.telefono || '').replace(/'/g, "\\'")}', '${(e.correo || '').replace(/'/g, "\\'")}', ${e.salario_fijo}, '${e.periodicidad_pago}', ${e.jornada_horas_dia || 8}, ${e.dias_descanso_semana ?? 1})">Editar</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id})">Editar</button>
                 <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">Reiniciar Contraseña</button>
                 ${(e.empleado_id === this.currentUser.id || e.es_admin_principal)
                   ? ''
@@ -2345,24 +2357,28 @@ const app = {
     }
   },
 
-  abrirModalEditarLavador(id, nombre, telefono, porcentajeComision) {
+  abrirModalEditarLavador(id) {
+    const l = (this.lavadoresNomina || []).find(x => x.lavador_id === id);
+    if (!l) return;
     this.editingWasherId = id;
-    document.getElementById('editLavNombre').value = nombre;
-    document.getElementById('editLavTelefono').value = telefono;
-    document.getElementById('editLavComision').value = porcentajeComision;
+    document.getElementById('editLavNombres').value = l.nombres || '';
+    document.getElementById('editLavApellidos').value = l.apellidos || '';
+    document.getElementById('editLavTelefono').value = l.telefono || '';
+    document.getElementById('editLavComision').value = l.porcentaje_comision;
     this.openModal('modalEditarLavador');
   },
 
   async guardarEdicionLavador() {
-    const nombre = document.getElementById('editLavNombre').value.trim();
+    const nombres = document.getElementById('editLavNombres').value.trim();
+    const apellidos = document.getElementById('editLavApellidos').value.trim();
     const telefono = document.getElementById('editLavTelefono').value.trim();
     const porcentajeComision = document.getElementById('editLavComision').value;
-    if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
-    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!nombres || !apellidos) { this.toast('Nombres y apellidos son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
     if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
 
     try {
-      await ApiCliente.put(`/api/personal/lavadores/${this.editingWasherId}`, { nombre, telefono, porcentajeComision });
+      await ApiCliente.put(`/api/personal/lavadores/${this.editingWasherId}`, { nombres, apellidos, telefono, porcentajeComision });
       this.toast('Datos del lavador actualizados.', 'success');
       this.closeModal('modalEditarLavador');
       this.loadNomina();
@@ -2868,7 +2884,8 @@ const app = {
   },
 
   abrirModalNuevoCliente() {
-    document.getElementById('newClientNombre').value = '';
+    document.getElementById('newClientNombres').value = '';
+    document.getElementById('newClientApellidos').value = '';
     document.getElementById('newClientTelefono').value = '';
     document.getElementById('newClientCorreo').value = '';
     document.getElementById('newClientPlaca').value = '';
@@ -2880,7 +2897,9 @@ const app = {
 
   // Crear Cliente desde Modal
   async guardarNuevoCliente() {
-    const nombre = document.getElementById('newClientNombre').value;
+    const nombres = document.getElementById('newClientNombres').value.trim();
+    const apellidos = document.getElementById('newClientApellidos').value.trim();
+    const nombre = `${nombres} ${apellidos}`;
     const telefono = document.getElementById('newClientTelefono').value;
     const correo = document.getElementById('newClientCorreo').value;
     const placa = document.getElementById('newClientPlaca').value;
@@ -2888,13 +2907,13 @@ const app = {
     const marca = document.getElementById('newClientMarca').value;
     const color = document.getElementById('newClientColor').value;
 
-    if (!nombre || !telefono || !placa) { this.toast('Nombre, teléfono y placa son obligatorios.', 'warning'); return; }
-    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!nombres || !apellidos || !telefono || !placa) { this.toast('Nombres, apellidos, celular y placa son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
     if (!esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
     if (correo && !esCorreoValido(correo)) { this.toast('El correo electrónico no tiene un formato válido.', 'warning'); return; }
 
     try {
-      const data = await ApiCliente.post('/api/clientes', { nombre, telefono, correo, placa, tipo, marca, color });
+      const data = await ApiCliente.post('/api/clientes', { nombres, apellidos, telefono, correo, placa, tipo, marca, color });
       this.toast(`Cliente ${nombre} y vehículo ${placa} registrados con éxito.`, 'success');
       this.closeModal('modalNuevoCliente');
       await this.loadClients();
@@ -2966,7 +2985,8 @@ const app = {
     const cliente = this.clients.find(c => c.id === id);
     if (!cliente) return;
     this.editingClienteId = id;
-    document.getElementById('editClienteNombre').value = cliente.nombre;
+    document.getElementById('editClienteNombres').value = cliente.nombres || '';
+    document.getElementById('editClienteApellidos').value = cliente.apellidos || '';
     document.getElementById('editClienteTelefono').value = cliente.telefono;
     document.getElementById('editClienteCorreo').value = cliente.correo || '';
     document.getElementById('editClienteNuevaPlaca').value = '';
@@ -3047,16 +3067,17 @@ const app = {
   },
 
   async guardarEdicionCliente() {
-    const nombre = document.getElementById('editClienteNombre').value;
+    const nombres = document.getElementById('editClienteNombres').value.trim();
+    const apellidos = document.getElementById('editClienteApellidos').value.trim();
     const telefono = document.getElementById('editClienteTelefono').value;
     const correo = document.getElementById('editClienteCorreo').value;
-    if (!nombre || !telefono) { this.toast('Nombre y teléfono son obligatorios.', 'warning'); return; }
-    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!nombres || !apellidos || !telefono) { this.toast('Nombres, apellidos y celular son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
     if (!esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
     if (correo && !esCorreoValido(correo)) { this.toast('El correo electrónico no tiene un formato válido.', 'warning'); return; }
 
     try {
-      await ApiCliente.put(`/api/clientes/${this.editingClienteId}`, { nombre, telefono, correo });
+      await ApiCliente.put(`/api/clientes/${this.editingClienteId}`, { nombres, apellidos, telefono, correo });
       this.toast('Cliente actualizado con éxito.', 'success');
       this.closeModal('modalEditarCliente');
       this.loadClientesAdmin();
@@ -3068,7 +3089,8 @@ const app = {
   // Crear Personal (usuario con login o lavador sin login). Usuario y
   // contraseña siempre se asignan automáticamente (ver modal).
   abrirModalNuevoUsuario() {
-    document.getElementById('usrNombre').value = '';
+    document.getElementById('usrNombres').value = '';
+    document.getElementById('usrApellidos').value = '';
     document.getElementById('usrDocumento').value = '';
     document.getElementById('usrTelefono').value = '';
     document.getElementById('usrRol').value = 'lavador';
@@ -3095,20 +3117,22 @@ const app = {
   },
 
   async guardarNuevoUsuario() {
-    const nombre = document.getElementById('usrNombre').value;
+    const nombres = document.getElementById('usrNombres').value.trim();
+    const apellidos = document.getElementById('usrApellidos').value.trim();
+    const nombre = `${nombres} ${apellidos}`;
     const documento = document.getElementById('usrDocumento').value;
     const telefono = document.getElementById('usrTelefono').value;
     const rol = document.getElementById('usrRol').value;
 
-    if (!nombre || !documento) { this.toast('Nombre y documento son obligatorios.', 'warning'); return; }
-    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!nombres || !apellidos || !documento) { this.toast('Nombres, apellidos y documento son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
     if (!esDocumentoValido(documento)) { this.toast('El documento debe tener solo números, mínimo 4 dígitos.', 'warning'); return; }
     if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
 
     try {
       if (rol === 'lavador') {
         const porcentajeComision = document.getElementById('usrComision').value;
-        await ApiCliente.post('/api/personal/lavadores', { nombre, documento, telefono, porcentajeComision });
+        await ApiCliente.post('/api/personal/lavadores', { nombres, apellidos, documento, telefono, porcentajeComision });
         this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       } else {
         const salarioFijo = document.getElementById('usrSalario').value;
@@ -3116,7 +3140,7 @@ const app = {
         const jornadaHorasDia = document.getElementById('usrJornadaHoras').value;
         const diasDescansoSemana = document.getElementById('usrDiasDescanso').value;
 
-        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombre, documento, telefono, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
+        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombres, apellidos, documento, telefono, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
         alert(`Cuenta creada para ${nombre}.\n\nUsuario: ${nuevo.username}\nContraseña temporal: ${nuevo.passwordAsignada}\n\nCompártela con la persona; puede cambiarla desde "Mi Perfil" -> "Cambiar Contraseña".`);
         this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       }
@@ -3166,33 +3190,37 @@ const app = {
   },
 
   /** Botón visible solo para admin: edita los datos de un empleado (el empleado mismo solo puede cambiar su contraseña). */
-  abrirModalEditarEmpleado(id, nombre, telefono, correo, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana) {
+  abrirModalEditarEmpleado(id) {
+    const e = (this.empleadosNomina || []).find(x => x.empleado_id === id);
+    if (!e) return;
     this.editingEmpleadoId = id;
-    document.getElementById('editEmpNombre').value = nombre;
-    document.getElementById('editEmpTelefono').value = telefono;
-    document.getElementById('editEmpCorreo').value = correo;
-    document.getElementById('editEmpSalario').value = salarioFijo;
-    document.getElementById('editEmpPeriodicidad').value = periodicidadPago;
-    document.getElementById('editEmpJornadaHoras').value = jornadaHorasDia || 8;
-    document.getElementById('editEmpDiasDescanso').value = diasDescansoSemana ?? 1;
+    document.getElementById('editEmpNombres').value = e.nombres || '';
+    document.getElementById('editEmpApellidos').value = e.apellidos || '';
+    document.getElementById('editEmpTelefono').value = e.telefono || '';
+    document.getElementById('editEmpCorreo').value = e.correo || '';
+    document.getElementById('editEmpSalario').value = e.salario_fijo;
+    document.getElementById('editEmpPeriodicidad').value = e.periodicidad_pago;
+    document.getElementById('editEmpJornadaHoras').value = e.jornada_horas_dia || 8;
+    document.getElementById('editEmpDiasDescanso').value = e.dias_descanso_semana ?? 1;
     this.openModal('modalEditarEmpleado');
   },
 
   async guardarEdicionEmpleado() {
-    const nombre = document.getElementById('editEmpNombre').value.trim();
+    const nombres = document.getElementById('editEmpNombres').value.trim();
+    const apellidos = document.getElementById('editEmpApellidos').value.trim();
     const telefono = document.getElementById('editEmpTelefono').value.trim();
     const correo = document.getElementById('editEmpCorreo').value.trim();
     const salarioFijo = document.getElementById('editEmpSalario').value;
     const periodicidadPago = document.getElementById('editEmpPeriodicidad').value;
     const jornadaHorasDia = document.getElementById('editEmpJornadaHoras').value;
     const diasDescansoSemana = document.getElementById('editEmpDiasDescanso').value;
-    if (!nombre) { this.toast('El nombre es obligatorio.', 'warning'); return; }
-    if (!esNombreValido(nombre)) { this.toast('El nombre debe tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
+    if (!nombres || !apellidos) { this.toast('Nombres y apellidos son obligatorios.', 'warning'); return; }
+    if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
     if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
     if (correo && !esCorreoValido(correo)) { this.toast('El correo electrónico no tiene un formato válido.', 'warning'); return; }
 
     try {
-      await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombre, telefono, correo, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
+      await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombres, apellidos, telefono, correo, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
       this.toast('Datos del empleado actualizados.', 'success');
       this.closeModal('modalEditarEmpleado');
       this.loadNomina();

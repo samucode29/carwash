@@ -3,7 +3,8 @@
  */
 const ClienteRepositorio = require('../repositorios/ClienteRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
-const { esNombreValido, esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
+const { esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
+const { interpretarNombre, exigirCelularUnico } = require('../utilidades/personas');
 
 async function listarClientes(req, res) {
   const clientes = await ClienteRepositorio.listarConVehiculos();
@@ -11,12 +12,11 @@ async function listarClientes(req, res) {
 }
 
 async function crearClienteConVehiculo(req, res) {
-  const { nombre, telefono, correo, placa, tipo, marca, color } = req.body;
-  if (!nombre || !telefono) {
-    return res.status(400).json({ error: 'Nombre y teléfono son obligatorios.' });
-  }
-  if (!esNombreValido(nombre)) {
-    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  const { telefono, correo, placa, tipo, marca, color } = req.body;
+  const persona = interpretarNombre(req.body);
+  if (persona.error) return res.status(400).json({ error: persona.error });
+  if (!telefono) {
+    return res.status(400).json({ error: 'El celular es obligatorio.' });
   }
   if (!esTelefonoValido(telefono)) {
     return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
@@ -24,6 +24,7 @@ async function crearClienteConVehiculo(req, res) {
   if (correo && !esCorreoValido(correo)) {
     return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
+  await exigirCelularUnico(telefono);
 
   // Un mismo vehículo (placa) no puede quedar asociado a dos clientes
   // distintos: se valida antes de crear el cliente para no dejar un
@@ -39,7 +40,7 @@ async function crearClienteConVehiculo(req, res) {
     }
   }
 
-  const cliente = await ClienteRepositorio.crearCliente({ nombre, telefono, correo, creadoPor: req.usuarioAutenticado.id });
+  const cliente = await ClienteRepositorio.crearCliente({ nombre: persona.nombre, nombres: persona.nombres, apellidos: persona.apellidos, telefono, correo, creadoPor: req.usuarioAutenticado.id });
 
   let vehiculo = null;
   if (placaLimpia) {
@@ -52,7 +53,7 @@ async function crearClienteConVehiculo(req, res) {
     }
   }
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_cliente', `Registrado cliente ${nombre} con placa ${placa || 'N/A'}`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'crear_cliente', `Registrado cliente ${persona.nombre} con placa ${placa || 'N/A'}`);
   res.status(201).json({ cliente, vehiculo });
 }
 
@@ -88,12 +89,11 @@ async function agregarVehiculo(req, res) {
 
 async function actualizarCliente(req, res) {
   const id = Number(req.params.id);
-  const { nombre, telefono, correo } = req.body;
-  if (!nombre || !telefono) {
-    return res.status(400).json({ error: 'Nombre y teléfono son obligatorios.' });
-  }
-  if (!esNombreValido(nombre)) {
-    return res.status(400).json({ error: 'El nombre debe tener solo letras y espacios, mínimo 3 caracteres.' });
+  const { telefono, correo } = req.body;
+  const persona = interpretarNombre(req.body);
+  if (persona.error) return res.status(400).json({ error: persona.error });
+  if (!telefono) {
+    return res.status(400).json({ error: 'El celular es obligatorio.' });
   }
   if (!esTelefonoValido(telefono)) {
     return res.status(400).json({ error: 'El teléfono debe tener solo números (7 a 10 dígitos).' });
@@ -105,8 +105,12 @@ async function actualizarCliente(req, res) {
   const cliente = await ClienteRepositorio.obtenerClientePorId(id);
   if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
 
-  const actualizado = await ClienteRepositorio.actualizarCliente(id, { nombre, telefono, correo: correo || '' });
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_cliente', `Cliente #${id} actualizado: ${nombre}`);
+  // El celular solo se valida si cambió (así se puede editar otro dato aunque
+  // el número ya estuviera repetido de antes).
+  if (telefono !== cliente.telefono) await exigirCelularUnico(telefono, { tipo: 'cliente', id });
+
+  const actualizado = await ClienteRepositorio.actualizarCliente(id, { nombre: persona.nombre, nombres: persona.nombres, apellidos: persona.apellidos, telefono, correo: correo || '' });
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_cliente', `Cliente #${id} actualizado: ${persona.nombre}`);
   res.json(actualizado);
 }
 
