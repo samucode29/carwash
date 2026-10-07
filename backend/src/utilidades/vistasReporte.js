@@ -841,26 +841,27 @@ function vistaAsistencia(r, periodo) {
 // ---------------------------------------------------------------------------
 // CLIENTES
 // ---------------------------------------------------------------------------
-const ETIQUETA_ESTADO_CLIENTE = { activo: 'ACTIVO', inactivo: 'INACTIVO', nunca_compro: 'NUNCA HA COMPRADO' };
+const ETIQUETA_ESTADO_CLIENTE = { activo: 'VIENE SEGUIDO', inactivo: 'SIN VISITAS RECIENTES', nunca_compro: 'NUNCA HA COMPRADO' };
 const TONO_ESTADO_CLIENTE = { activo: 'ok', inactivo: 'mal', nunca_compro: 'aviso' };
 
 function vistaClientes(r, fechaCorte) {
   const doc = documento({
     tipo: 'clientes', titulo: 'Reporte de Clientes',
     periodo: { etiqueta: `Corte al ${fechaCorte}`, inicio: null, fin: null },
-    descripcion: `Foto de la cartera de clientes (no depende del período): quiénes siguen viniendo, quiénes dejaron de venir y quiénes aportan más. Un cliente se considera inactivo si no ha comprado en más de ${r.diasInactividad} días.`
+    descripcion: `Foto de la cartera de clientes (no depende del período): quiénes siguen viniendo, quiénes dejaron de venir y quiénes aportan más. Un cliente aparece "sin visitas recientes" si no ha comprado en más de ${r.diasInactividad} días; eso es distinto de un cliente desactivado a mano en la pestaña Clientes.`
   });
   const conCompras = r.clientes.filter(c => c.totalCompras > 0);
   const totalGastado = r.clientes.reduce((s, c) => s + c.totalGastado, 0);
   const totalCompras = r.clientes.reduce((s, c) => s + c.totalCompras, 0);
   const ranking = [...conCompras].sort((a, b) => b.totalGastado - a.totalGastado);
-  const inactivos = r.clientes.filter(c => c.estado === 'inactivo').sort((a, b) => b.totalGastado - a.totalGastado);
+  const inactivos = r.clientes.filter(c => c.estado === 'inactivo' && !c.desactivado).sort((a, b) => b.totalGastado - a.totalGastado);
 
   doc.kpis.push(
     kpi('Total de clientes', F.entero(r.totalClientes), { detalle: 'Registrados en el sistema' }),
-    kpi('Activos', F.entero(r.activos), { tono: 'ok', detalle: `${F.porcentaje(F.participacion(r.activos, r.totalClientes))} de la cartera` }),
-    kpi('Inactivos', F.entero(r.inactivos), { tono: r.inactivos > 0 ? 'mal' : 'ok', detalle: `Más de ${r.diasInactividad} días sin comprar` }),
+    kpi('Vienen seguido', F.entero(r.activos), { tono: 'ok', detalle: `${F.porcentaje(F.participacion(r.activos, r.totalClientes))} de la cartera (compraron en los últimos ${r.diasInactividad} días)` }),
+    kpi('Sin visitas recientes', F.entero(r.inactivos), { tono: r.inactivos > 0 ? 'mal' : 'ok', detalle: `Más de ${r.diasInactividad} días sin comprar` }),
     kpi('Nunca han comprado', F.entero(r.nuncaCompraron), { tono: r.nuncaCompraron > 0 ? 'aviso' : undefined, detalle: 'Registrados sin ninguna compra' }),
+    kpi('Desactivados', F.entero(r.desactivados), { detalle: 'Inactivados a mano; ya no se les agenda ni atiende' }),
     kpi('En lista negra', F.entero(r.enListaNegra), { tono: r.enListaNegra > 0 ? 'mal' : undefined, detalle: 'Con observaciones de riesgo' }),
     kpi('Gasto promedio por cliente', conCompras.length ? F.moneda(totalGastado / conCompras.length) : '-', { detalle: 'Entre clientes con compras' })
   );
@@ -868,7 +869,7 @@ function vistaClientes(r, fechaCorte) {
   if (r.totalClientes === 0) {
     doc.hallazgos.push('Aún no hay clientes registrados.');
   } else {
-    doc.hallazgos.push(`De ${F.entero(r.totalClientes)} clientes, ${F.entero(r.activos)} están activos (${F.porcentaje(F.participacion(r.activos, r.totalClientes))}), ${F.entero(r.inactivos)} inactivos y ${F.entero(r.nuncaCompraron)} nunca han comprado.`);
+    doc.hallazgos.push(`De ${F.entero(r.totalClientes)} clientes, ${F.entero(r.activos)} vienen seguido (${F.porcentaje(F.participacion(r.activos, r.totalClientes))}), ${F.entero(r.inactivos)} llevan tiempo sin venir y ${F.entero(r.nuncaCompraron)} nunca han comprado.`);
     if (ranking[0]) doc.hallazgos.push(`El mejor cliente histórico es ${ranking[0].nombre}: ${F.entero(ranking[0].totalCompras)} servicios y ${F.moneda(ranking[0].totalGastado)}.`);
     if (ranking.length >= 5 && totalGastado > 0) {
       const top5 = ranking.slice(0, 5).reduce((s, c) => s + c.totalGastado, 0);
@@ -880,10 +881,10 @@ function vistaClientes(r, fechaCorte) {
 
   doc.secciones.push(dona(
     'Estado de la cartera',
-    'Cuántos clientes siguen activos, cuántos se perdieron y cuántos nunca compraron.',
+    'Cuántos clientes siguen viniendo, cuántos llevan tiempo sin venir y cuántos nunca compraron.',
     [
-      { etiqueta: 'Activos', valor: r.activos, texto: String(r.activos), color: '#10b981' },
-      { etiqueta: 'Inactivos', valor: r.inactivos, texto: String(r.inactivos), color: '#ef4444' },
+      { etiqueta: 'Vienen seguido', valor: r.activos, texto: String(r.activos), color: '#10b981' },
+      { etiqueta: 'Sin visitas recientes', valor: r.inactivos, texto: String(r.inactivos), color: '#ef4444' },
       { etiqueta: 'Nunca han comprado', valor: r.nuncaCompraron, texto: String(r.nuncaCompraron), color: '#f59e0b' }
     ]
   ));
@@ -896,7 +897,7 @@ function vistaClientes(r, fechaCorte) {
   if (inactivos.length > 0) {
     doc.secciones.push(tabla(
       'Clientes por recuperar',
-      'Clientes inactivos que más gastaron: son los más valiosos para contactar con una oferta.',
+      'Clientes que llevan tiempo sin venir y más gastaron: son los más valiosos para contactar con una oferta.',
       [col('Cliente'), col('Teléfono'), col('Última compra'), col('Servicios', 'der'), col('Total gastado', 'der')],
       inactivos.slice(0, 20).map(c => [c.nombre, c.telefono || '-', c.ultimaCompra || 'Nunca', F.entero(c.totalCompras), F.moneda(c.totalGastado)])
     ));
@@ -906,7 +907,7 @@ function vistaClientes(r, fechaCorte) {
     'Cartera completa, de la compra más reciente a la más antigua.',
     [col('Cliente'), col('Teléfono'), col('Vehículos', 'der'), col('Última compra'), col('Servicios', 'der'), col('Total gastado', 'der'), col('Promedio', 'der'), col('Estado')],
     r.clientes.slice(0, 500).map(c => [
-      c.enListaNegra ? celda(`${c.nombre} (lista negra)`, 'mal') : c.nombre, c.telefono || '-', F.entero(c.vehiculos), c.ultimaCompra || 'Nunca',
+      c.desactivado ? celda(`${c.nombre} (desactivado)`, 'aviso') : (c.enListaNegra ? celda(`${c.nombre} (lista negra)`, 'mal') : c.nombre), c.telefono || '-', F.entero(c.vehiculos), c.ultimaCompra || 'Nunca',
       F.entero(c.totalCompras), F.moneda(c.totalGastado), c.totalCompras > 0 ? F.moneda(c.totalGastado / c.totalCompras) : '-',
       celda(ETIQUETA_ESTADO_CLIENTE[c.estado] || c.estado, TONO_ESTADO_CLIENTE[c.estado])
     ]),

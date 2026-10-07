@@ -647,7 +647,7 @@ const app = {
         const el = document.getElementById(id);
         if (el) {
           const defaultOpt = id === 'citaClienteSelect' ? '<option value="">-- Cita Anónima / Ocasional --</option>' : '<option value="">-- Seleccione un cliente --</option>';
-          el.innerHTML = defaultOpt + this.clients.map(c => `<option value="${c.id}">${c.nombre} (${c.telefono})</option>`).join('');
+          el.innerHTML = defaultOpt + this.clients.filter(c => c.estado !== 'inactivo').map(c => `<option value="${c.id}">${c.nombre} (${c.telefono})</option>`).join('');
         }
       });
     } catch (err) { console.error(err); }
@@ -682,7 +682,9 @@ const app = {
           <strong>Propietario:</strong> ${data.cliente ? data.cliente.nombre : 'Sin propietario registrado'}<br>
           <strong>Historial:</strong> ${data.historial.length} servicios anteriores realizados.
         `;
-        if (data.cliente) {
+        if (data.cliente && data.cliente.estado === 'inactivo') {
+          banner.innerHTML += `<br><strong class="text-danger">El cliente está INACTIVO:</strong> actívelo en la pestaña Clientes para poder atenderlo.`;
+        } else if (data.cliente) {
           document.querySelector('input[name="posClientType"][value="registrado"]').checked = true;
           this.toggleClientMode();
           document.getElementById('posClienteSelect').value = data.cliente.id;
@@ -2915,7 +2917,7 @@ const app = {
       if (!tbody) return;
 
       if (this.clients.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay clientes registrados todavía.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No hay clientes registrados todavía.</td></tr>`;
         return;
       }
 
@@ -2923,18 +2925,41 @@ const app = {
         const placas = (c.vehiculos || []).map(v => v.placa).join(', ') || 'Sin vehículos';
         const registrado = c.creado_en ? String(c.creado_en).substring(0, 10) : '--';
         const badgeListaNegra = c.en_lista_negra ? `<span class="role-badge" style="background: #ef4444">LISTA NEGRA</span>` : '';
+        const inactivo = c.estado === 'inactivo';
+        const badgeEstado = `<span class="role-badge" style="background: ${inactivo ? '#ef4444' : '#10b981'}">${inactivo ? 'INACTIVO' : 'ACTIVO'}</span>`;
         return `
-          <tr>
-            <td><strong>${c.nombre}</strong> ${badgeListaNegra}</td>
+          <tr style="${inactivo ? 'opacity: 0.6' : ''}">
+            <td><strong>${escapeHtml(c.nombre)}</strong> ${badgeListaNegra}</td>
             <td>${c.telefono}</td>
             <td>${c.correo || '--'}</td>
             <td>${placas}</td>
             <td>${registrado}</td>
-            <td><button class="btn btn-sm btn-secondary" onclick="app.abrirModalEditarCliente(${c.id})">Editar</button></td>
+            <td>${badgeEstado}</td>
+            <td>
+              <button class="btn btn-sm btn-secondary" onclick="app.abrirModalEditarCliente(${c.id})">Editar</button>
+              <button class="btn btn-sm btn-outline admin-only" onclick="app.toggleEstadoCliente(${c.id}, '${c.estado || 'activo'}')">${inactivo ? 'Activar' : 'Inactivar'}</button>
+            </td>
           </tr>
         `;
       }).join('');
     } catch (err) { console.error(err); }
+  },
+
+  async toggleEstadoCliente(id, estadoActual) {
+    const cliente = this.clients.find(c => c.id === id);
+    const nombre = cliente ? cliente.nombre : `#${id}`;
+    const nuevoEstado = estadoActual === 'inactivo' ? 'activo' : 'inactivo';
+    const aviso = nuevoEstado === 'inactivo'
+      ? `¿Inactivar al cliente "${nombre}"? Conserva su historial, pero no se le podrán agendar citas ni crear servicios hasta que lo active de nuevo.`
+      : `¿Activar de nuevo al cliente "${nombre}"?`;
+    if (!confirm(aviso)) return;
+    try {
+      await ApiCliente.put(`/api/clientes/${id}/estado`, { estado: nuevoEstado });
+      this.toast(`Cliente ${nuevoEstado === 'activo' ? 'activado' : 'inactivado'}.`, 'success');
+      this.loadClientesAdmin();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cambiar el estado del cliente.', 'error');
+    }
   },
 
   abrirModalEditarCliente(id) {

@@ -771,7 +771,7 @@ const DIAS_INACTIVIDAD_CLIENTE = 60;
 /** Clientes: activos/inactivos según su última compra (foto del momento, no por período). */
 async function calcularReporteClientes() {
   const [filas] = await pool.query(
-    `SELECT cl.id, cl.nombre, cl.telefono, cl.correo, cl.creado_en,
+    `SELECT cl.id, cl.nombre, cl.telefono, cl.correo, cl.creado_en, cl.estado AS estado_manual,
             (SELECT COUNT(*) FROM cliente_notas n WHERE n.cliente_id = cl.id AND n.tipo = 'lista_negra') AS en_lista_negra,
             (SELECT COUNT(*) FROM vehiculos v WHERE v.cliente_id = cl.id) AS vehiculos,
             MAX(DATE(p.fecha_pago)) AS ultima_compra,
@@ -780,7 +780,7 @@ async function calcularReporteClientes() {
      FROM clientes cl
      LEFT JOIN ordenes_servicio o ON o.cliente_id = cl.id
      LEFT JOIN pagos p ON p.orden_id = o.id
-     GROUP BY cl.id, cl.nombre, cl.telefono, cl.correo, cl.creado_en
+     GROUP BY cl.id, cl.nombre, cl.telefono, cl.correo, cl.creado_en, cl.estado
      ORDER BY ultima_compra IS NULL, ultima_compra DESC`
   );
 
@@ -797,6 +797,7 @@ async function calcularReporteClientes() {
       telefono: f.telefono,
       correo: f.correo,
       fechaRegistro: f.creado_en,
+      desactivado: f.estado_manual === 'inactivo',
       enListaNegra: Number(f.en_lista_negra) > 0,
       vehiculos: Number(f.vehiculos) || 0,
       ultimaCompra: f.ultima_compra,
@@ -812,6 +813,7 @@ async function calcularReporteClientes() {
     activos: clientes.filter((c) => c.estado === 'activo').length,
     inactivos: clientes.filter((c) => c.estado === 'inactivo').length,
     nuncaCompraron: clientes.filter((c) => c.estado === 'nunca_compro').length,
+    desactivados: clientes.filter((c) => c.desactivado).length,
     enListaNegra: clientes.filter((c) => c.enListaNegra).length,
     clientes
   };

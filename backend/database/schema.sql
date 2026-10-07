@@ -91,6 +91,8 @@ CREATE TABLE clientes (
     nombre      VARCHAR(150) NOT NULL,
     telefono    VARCHAR(20)  NOT NULL,
     correo      VARCHAR(150),
+    -- Un cliente inactivo conserva su historial pero no se le crean citas ni servicios nuevos.
+    estado      ENUM('activo','inactivo') NOT NULL DEFAULT 'activo',
     creado_por  INT NOT NULL,
     creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_cliente_creador FOREIGN KEY (creado_por) REFERENCES usuarios(id)

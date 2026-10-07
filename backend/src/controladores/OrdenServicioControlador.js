@@ -14,6 +14,7 @@ const ClienteRepositorio = require('../repositorios/ClienteRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
 const { exigirServicioParaVehiculo } = require('../utilidades/vehiculos');
+const { exigirClienteActivo } = require('../utilidades/clientes');
 
 async function listarOrdenes(req, res) {
   const { estado, fecha } = req.query;
@@ -138,6 +139,7 @@ async function crearOrden(req, res) {
 
   const clienteId = cliente_id ? parseInt(cliente_id, 10) : null;
   const vehiculoId = vehiculo_id ? parseInt(vehiculo_id, 10) : null;
+  await exigirClienteActivo({ clienteId, vehiculoId });
   let esVentaAnonima = !!es_venta_anonima;
   let placaAnonima = placa_anonima ? placa_anonima.toUpperCase().trim() : null;
   let tipoVehiculoAnonimo = tipo_vehiculo_anonimo || null;

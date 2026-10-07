@@ -23,6 +23,7 @@ process.env.TZ = 'America/Bogota';
 
 const app = require('./src/app');
 const { verificarConexion } = require('./src/config/baseDeDatos');
+const { aplicarMigraciones } = require('./src/config/migraciones');
 
 const PUERTO = process.env.PORT || 3000;
 
@@ -35,6 +36,7 @@ async function iniciarServidor() {
   try {
     await verificarConexion();
     console.log('✅ Conexión a MySQL verificada.');
+    await aplicarMigraciones();
   } catch (err) {
     console.error('❌ No se pudo conectar a MySQL. Revisa DB_HOST/DB_USER/DB_PASSWORD/DB_NAME en tu .env.');
     console.error('   Detalle:', err.message);

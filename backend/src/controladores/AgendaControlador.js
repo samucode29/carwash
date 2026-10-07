@@ -9,6 +9,7 @@ const ClienteRepositorio = require('../repositorios/ClienteRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const { obtenerFechaHoy, obtenerFechaHoraActual, obtenerHoraActual, obtenerDiaSemana, NOMBRES_DIAS_SEMANA } = require('../utilidades/fechas');
 const { exigirServicioParaVehiculo } = require('../utilidades/vehiculos');
+const { exigirClienteActivo } = require('../utilidades/clientes');
 
 /** Una cita no puede quedar en una fecha ni en una hora que ya pasó (CU04 / RF04). */
 function validarNoEsPasado(fecha, hora) {
@@ -67,6 +68,7 @@ async function crearCita(req, res) {
 
   validarNoEsPasado(fecha, hora);
   await validarDentroDeHorarioAtencion(fecha, hora);
+  await exigirClienteActivo({ clienteId: cliente_id ? parseInt(cliente_id, 10) : null, vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null });
 
   const servicio = await ServicioRepositorio.obtenerPorId(parseInt(servicio_id, 10));
   if (!servicio) return res.status(400).json({ error: 'Servicio no válido.' });
@@ -132,6 +134,7 @@ async function crearTurno(req, res) {
   if (!servicio_id) {
     return res.status(400).json({ error: 'El servicio es obligatorio para generar un turno.' });
   }
+  await exigirClienteActivo({ clienteId: cliente_id ? parseInt(cliente_id, 10) : null, vehiculoId: vehiculo_id ? parseInt(vehiculo_id, 10) : null });
 
   // Una cita solo se puede pasar a la fila el mismo día para el que se agendó.
   if (cita_id) {

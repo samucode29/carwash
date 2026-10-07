@@ -110,6 +110,21 @@ async function actualizarCliente(req, res) {
   res.json(actualizado);
 }
 
+/** Inactiva o reactiva un cliente (no se borra: conserva su historial). */
+async function cambiarEstadoCliente(req, res) {
+  const id = Number(req.params.id);
+  const { estado } = req.body;
+  if (!['activo', 'inactivo'].includes(estado)) {
+    return res.status(400).json({ error: 'Estado no válido (activo o inactivo).' });
+  }
+  const cliente = await ClienteRepositorio.obtenerClientePorId(id);
+  if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+
+  const actualizado = await ClienteRepositorio.actualizarCliente(id, { estado });
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, estado === 'inactivo' ? 'inactivar_cliente' : 'activar_cliente', `Cliente #${id} (${cliente.nombre}) ${estado === 'inactivo' ? 'inactivado' : 'activado'}`);
+  res.json(actualizado);
+}
+
 async function buscarVehiculoPorPlaca(req, res) {
   const { placa } = req.query;
   if (!placa) return res.status(400).json({ error: 'Debe ingresar una placa a buscar.' });
@@ -157,6 +172,6 @@ async function eliminarNotaCliente(req, res) {
 }
 
 module.exports = {
-  listarClientes, crearClienteConVehiculo, actualizarCliente, agregarVehiculo, buscarVehiculoPorPlaca,
+  listarClientes, crearClienteConVehiculo, actualizarCliente, cambiarEstadoCliente, agregarVehiculo, buscarVehiculoPorPlaca,
   agregarNotaCliente, eliminarNotaCliente
 };
