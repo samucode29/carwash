@@ -4,6 +4,7 @@
  */
 const NominaRepositorio = require('../repositorios/NominaRepositorio');
 const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
+const UsuarioRepositorio = require('../repositorios/UsuarioRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const FacturaRepositorio = require('../repositorios/FacturaRepositorio');
 const { obtenerFechaHoy, obtenerHoraActual } = require('../utilidades/fechas');
@@ -148,6 +149,10 @@ async function calcularPagoEmpleado(req, res) {
 
 async function pagarSalarioEmpleado(req, res) {
   const { empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, fecha_pago } = req.body;
+  const beneficiario = await UsuarioRepositorio.obtenerPorId(parseInt(empleado_id, 10));
+  if (beneficiario && beneficiario.lavador_id) {
+    return res.status(400).json({ error: 'Esta cuenta es el acceso de un lavador: a él se le paga por comisiones (Nómina > Lavadores), no salario.' });
+  }
 
   const hoy = obtenerFechaHoy();
   const pago = await NominaRepositorio.crearPagoSalario({
@@ -231,6 +236,13 @@ async function registrarAsistencia(req, res) {
   const { persona_tipo, persona_id, tipo, inasistencia } = req.body;
   if (!['usuario', 'lavador'].includes(persona_tipo) || !persona_id) {
     return res.status(400).json({ error: 'persona_tipo (usuario|lavador) y persona_id son obligatorios.' });
+  }
+
+  if (persona_tipo === 'usuario') {
+    const cuenta = await UsuarioRepositorio.obtenerPorId(Number(persona_id));
+    if (cuenta && cuenta.lavador_id) {
+      return res.status(400).json({ error: 'Esta cuenta es el acceso de un lavador: su asistencia se registra como lavador.' });
+    }
   }
 
   const hoy = obtenerFechaHoy();

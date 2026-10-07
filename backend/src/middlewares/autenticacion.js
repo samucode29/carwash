@@ -5,8 +5,9 @@
  * para registrar quién hizo una acción en auditoría).
  */
 const { verificarToken } = require('../utilidades/tokenJwt');
+const UsuarioRepositorio = require('../repositorios/UsuarioRepositorio');
 
-function exigirAutenticacion(req, res, next) {
+async function exigirAutenticacion(req, res, next) {
   const encabezado = req.headers.authorization || '';
   const [tipo, token] = encabezado.split(' ');
 
@@ -14,11 +15,25 @@ function exigirAutenticacion(req, res, next) {
     return res.status(401).json({ error: 'No se encontró un token de sesión válido. Inicie sesión nuevamente.' });
   }
 
+  let datos;
   try {
-    req.usuarioAutenticado = verificarToken(token);
-    next();
+    datos = verificarToken(token);
   } catch (err) {
     return res.status(401).json({ error: 'La sesión expiró o el token no es válido. Inicie sesión nuevamente.' });
+  }
+
+  try {
+    // El rol y el estado se leen de la base en cada petición (no del token):
+    // si a alguien le cambian el rol o lo inactivan, el cambio vale ya, sin
+    // esperar a que venza su sesión.
+    const usuario = await UsuarioRepositorio.obtenerPorId(datos.id);
+    if (!usuario || usuario.estado !== 'activo') {
+      return res.status(401).json({ error: 'Esta cuenta ya no está activa. Inicie sesión nuevamente o contacte al administrador.' });
+    }
+    req.usuarioAutenticado = { ...datos, rol: usuario.rol, nombre: usuario.nombre, esAdminPrincipal: !!usuario.es_admin_principal };
+    next();
+  } catch (err) {
+    next(err);
   }
 }
 

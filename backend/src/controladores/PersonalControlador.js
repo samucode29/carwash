@@ -47,6 +47,41 @@ async function obtenerMiPerfil(req, res) {
   res.json(usuario);
 }
 
+/**
+ * Le da acceso al sistema a un lavador: se crea su cuenta de usuario como la
+ * de un empleado (usuario primer nombre.primer apellido y contraseña cédula +
+ * "carwash", que se muestran una sola vez). El lavador sigue cobrando por
+ * comisión: esa cuenta no entra en la nómina de salarios ni en la asistencia
+ * de empleados.
+ */
+async function darAccesoLavador(req, res) {
+  const lavadorId = Number(req.params.id);
+  const lavador = await LavadorRepositorio.obtenerPorId(lavadorId);
+  if (!lavador) return res.status(404).json({ error: 'Lavador no encontrado.' });
+  if (lavador.estado !== 'activo') {
+    return res.status(400).json({ error: `${lavador.nombre} está inactivo: actívelo antes de darle acceso al sistema.` });
+  }
+  const existente = await UsuarioRepositorio.obtenerCuentaDeLavador(lavadorId);
+  if (existente) {
+    return res.status(400).json({ error: `${lavador.nombre} ya tiene acceso al sistema (usuario: ${existente.username}).` });
+  }
+  if (await UsuarioRepositorio.obtenerPorDocumento(lavador.documento)) {
+    return res.status(400).json({ error: 'Ya existe un usuario con el documento de este lavador.' });
+  }
+
+  const username = await generarUsernameUnico(lavador.nombres, lavador.apellidos);
+  const passwordAsignada = generarPasswordPorDefecto(lavador.documento);
+  const cuenta = await UsuarioRepositorio.crear({
+    nombre: lavador.nombre, nombres: lavador.nombres, apellidos: lavador.apellidos, documento: lavador.documento,
+    telefono: '', // el celular queda solo en el registro del lavador (no se repite)
+    correo: `${username}@carwash.com`, username, passwordHash: hashearContrasena(passwordAsignada),
+    rol: 'empleado', salarioFijo: null, lavadorId
+  });
+
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'dar_acceso_lavador', `Acceso al sistema para el lavador ${lavador.nombre} (usuario ${username})`);
+  res.status(201).json({ ...cuenta, passwordAsignada });
+}
+
 async function crearUsuario(req, res) {
   const { documento, telefono, correo, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana } = req.body;
 
@@ -120,6 +155,25 @@ async function actualizarUsuario(req, res) {
   if (rol === 'administrador' && !req.usuarioAutenticado.esAdminPrincipal) {
     return res.status(403).json({ error: 'Solo el administrador principal puede otorgar el rol de administrador.' });
   }
+  const actual = await UsuarioRepositorio.obtenerPorId(id);
+  if (!actual) return res.status(404).json({ error: 'Usuario no encontrado.' });
+
+  // Cambiar de empleado a administrador (o al revés) lo decide solo el
+  // administrador principal; nadie cambia su propio rol ni el del principal.
+  if (rol && rol !== actual.rol) {
+    if (!['administrador', 'empleado'].includes(rol)) {
+      return res.status(400).json({ error: "El rol debe ser 'administrador' o 'empleado'." });
+    }
+    if (!req.usuarioAutenticado.esAdminPrincipal) {
+      return res.status(403).json({ error: 'Solo el administrador principal puede cambiar el rol de una cuenta.' });
+    }
+    if (id === req.usuarioAutenticado.id) {
+      return res.status(400).json({ error: 'No puedes cambiar tu propio rol.' });
+    }
+    if (actual.es_admin_principal) {
+      return res.status(400).json({ error: 'No se puede cambiar el rol del administrador principal.' });
+    }
+  }
   const persona = traeNombre(req.body) ? interpretarNombre(req.body) : null;
   if (persona && persona.error) return res.status(400).json({ error: persona.error });
   if (telefono && !esTelefonoValido(telefono)) {
@@ -128,8 +182,6 @@ async function actualizarUsuario(req, res) {
   if (correo && !esCorreoValido(correo)) {
     return res.status(400).json({ error: 'El correo electrónico no tiene un formato válido.' });
   }
-  const actual = await UsuarioRepositorio.obtenerPorId(id);
-  if (!actual) return res.status(404).json({ error: 'Usuario no encontrado.' });
   // El celular solo se valida si cambió (así se puede editar otro dato aunque
   // el número ya estuviera repetido de antes).
   if (telefono && telefono !== actual.telefono) await exigirCelularUnico(telefono, { tipo: 'empleado', id });
@@ -171,7 +223,8 @@ async function actualizarUsuario(req, res) {
  * empleado solo puede cambiar su contraseña, ver AuthControlador).
  */
 async function actualizarMiPerfil(req, res) {
-  const { telefono, correo, username } = req.body;
+  const { telefono, correo } = req.body;
+  const username = req.body.username ? String(req.body.username).trim().toLowerCase() : req.body.username;
   const idPropio = req.usuarioAutenticado.id;
 
   const persona = traeNombre(req.body) ? interpretarNombre(req.body) : null;
@@ -302,6 +355,7 @@ async function actualizarLavador(req, res) {
 
   const lavador = await LavadorRepositorio.actualizar(id, cambios);
   if (!lavador) return res.status(404).json({ error: 'Lavador no encontrado.' });
+  if (estado === 'inactivo') await UsuarioRepositorio.inactivarCuentaDeLavador(id);
 
   await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'actualizar_lavador', `Actualizado lavador ID ${id}`);
   res.json(lavador);
@@ -316,5 +370,6 @@ module.exports = {
   reiniciarContrasena,
   listarLavadores,
   crearLavador,
-  actualizarLavador
+  actualizarLavador,
+  darAccesoLavador
 };

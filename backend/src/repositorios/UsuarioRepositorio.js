@@ -7,7 +7,7 @@ const { pool } = require('../config/baseDeDatos');
 
 const COLUMNAS_PUBLICAS = `
   id, nombre, nombres, apellidos, documento, telefono, correo, username, rol, es_admin_principal, estado,
-  fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, creado_en
+  fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, lavador_id, creado_en
 `;
 
 async function buscarPorUsernameOCorreo(identificador) {
@@ -51,15 +51,27 @@ async function listar(rol) {
 async function crear(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO usuarios
-      (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?)`,
+      (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, lavador_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?, ?)`,
     [
       datos.nombre, datos.nombres, datos.apellidos, datos.documento, datos.telefono || '', datos.correo, datos.username,
       datos.passwordHash, datos.rol, datos.salarioFijo || null, datos.periodicidadPago || 'quincenal',
-      datos.jornadaHorasDia || 8, datos.diasDescansoSemana ?? 1
+      datos.jornadaHorasDia || 8, datos.diasDescansoSemana ?? 1, datos.lavadorId || null
     ]
   );
   return obtenerPorId(resultado.insertId);
+}
+
+/** Cuenta de acceso al sistema que tiene un lavador, si la tiene. */
+async function obtenerCuentaDeLavador(lavadorId) {
+  const [filas] = await pool.query(`SELECT id, username, estado FROM usuarios WHERE lavador_id = ? LIMIT 1`, [lavadorId]);
+  return filas[0] || null;
+}
+
+/** Si el lavador se inactiva, su acceso al sistema también (no queda un acceso abierto). */
+async function inactivarCuentaDeLavador(lavadorId) {
+  const [resultado] = await pool.query(`UPDATE usuarios SET estado = 'inactivo' WHERE lavador_id = ? AND estado = 'activo'`, [lavadorId]);
+  return resultado.affectedRows;
 }
 
 async function actualizar(id, cambios) {
@@ -83,6 +95,8 @@ module.exports = {
   obtenerConHashPorId,
   obtenerPorDocumento,
   obtenerPorUsername,
+  obtenerCuentaDeLavador,
+  inactivarCuentaDeLavador,
   listar,
   crear,
   actualizar

@@ -54,6 +54,10 @@ CREATE TABLE usuarios (
     -- monto fijo sin importar cuánto se trabajó.
     jornada_horas_dia      DECIMAL(4,2) NOT NULL DEFAULT 8,
     dias_descanso_semana   TINYINT NOT NULL DEFAULT 1,
+    -- Si esta cuenta es el ACCESO AL SISTEMA de un lavador, aquí va el id del
+    -- lavador. Su pago son las comisiones: la cuenta no entra en la nómina de
+    -- salarios ni en la asistencia de empleados (el lavador ya tiene lo suyo).
+    lavador_id          INT NULL,
     creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

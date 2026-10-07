@@ -24,5 +24,7 @@ router.put('/mi-perfil', permitirRoles('administrador'), envolverAsync(PersonalC
 router.get('/lavadores', envolverAsync(PersonalControlador.listarLavadores));
 router.post('/lavadores', permitirRoles('administrador'), envolverAsync(PersonalControlador.crearLavador));
 router.put('/lavadores/:id', permitirRoles('administrador'), envolverAsync(PersonalControlador.actualizarLavador));
+// Le da al lavador su acceso al sistema (cuenta como la de un empleado, sin nómina de salarios).
+router.post('/lavadores/:id/acceso', permitirRoles('administrador'), envolverAsync(PersonalControlador.darAccesoLavador));
 
 module.exports = router;

@@ -11,6 +11,7 @@ const { calcularValorHora, calcularHorasEsperadasPorPeriodo, calcularHorasEspera
 // ---------------------------------------------------------------------------
 async function resumenComisionesLavadores() {
   const [lavadores] = await pool.query(`SELECT * FROM lavadores ORDER BY nombre`);
+  const [accesos] = await pool.query(`SELECT lavador_id, username, estado FROM usuarios WHERE lavador_id IS NOT NULL`);
 
   const [comisionesPorOrden] = await pool.query(
     `SELECT ol.lavador_id, ol.valor_comision, ol.orden_id
@@ -88,6 +89,7 @@ async function resumenComisionesLavadores() {
       telefono: lavador.telefono,
       estado: lavador.estado,
       porcentaje_comision: lavador.porcentaje_comision,
+      usuario_acceso: (accesos.find(a => a.lavador_id === lavador.id) || {}).username || null,
       servicios_realizados: comisionesDeEsteLavador.length,
       comision_historica_total: comisionTotalHistorica,
       descuento_trabajador_total: descuentoTrabajadorTotal,
@@ -216,6 +218,7 @@ async function obtenerSoporteLiquidacion(id) {
 // ---------------------------------------------------------------------------
 async function listarEmpleadosConUltimoPago() {
   const [empleados] = await pool.query(`SELECT * FROM usuarios ORDER BY nombre`);
+  const [lavadoresTodos] = await pool.query(`SELECT id, nombre FROM lavadores`);
   const [pagos] = await pool.query(
     `SELECT id, empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos,
             valor_a_pagar, estado, fecha_pago_real, soporte_pago_url,
@@ -240,6 +243,10 @@ async function listarEmpleadosConUltimoPago() {
       dias_descanso_semana: emp.dias_descanso_semana ?? 1,
       fecha_ingreso: emp.fecha_ingreso,
       es_admin_principal: !!emp.es_admin_principal,
+      username: emp.username,
+      // Acceso al sistema de un lavador: no cobra salario ni marca asistencia como empleado (lo suyo son las comisiones).
+      lavador_id: emp.lavador_id || null,
+      lavador_nombre: emp.lavador_id ? ((lavadoresTodos.find(l => l.id === emp.lavador_id) || {}).nombre || null) : null,
       estado: emp.estado || 'activo',
       ultimo_pago: pagosDelEmpleado[pagosDelEmpleado.length - 1] || null
     };

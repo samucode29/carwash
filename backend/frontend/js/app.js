@@ -1908,6 +1908,7 @@ const app = {
               </div>
               ${w.propina_total > 0 ? `<div class="text-sm text-success mt-1">Propinas (100% suyas): +${this.formatMoney(w.propina_total)}</div>` : ''}
               ${w.descuento_trabajador_total > 0 ? `<div class="text-sm text-danger mt-1">Descuentos asumidos: -${this.formatMoney(w.descuento_trabajador_total)}</div>` : ''}
+              ${w.usuario_acceso ? `<div class="text-sm mt-1">Acceso al sistema: <strong>${escapeHtml(w.usuario_acceso)}</strong></div>` : ''}
               <div class="d-flex gap-2 mt-2">
                 <button class="btn btn-sm btn-primary admin-only" style="flex: 1" onclick="app.abrirModalLiquidar(${w.lavador_id}, '${w.nombre}', ${w.comision_pendiente})">Liquidar Comisión</button>
                 <button class="btn btn-sm btn-outline" onclick="app.abrirModalServiciosLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}')">Ver Servicios</button>
@@ -1916,6 +1917,7 @@ const app = {
                 <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.abrirModalEditarLavador(${w.lavador_id})">Editar</button>
                 <button class="btn btn-sm btn-outline admin-only" style="flex: 1" onclick="app.toggleEstadoLavador(${w.lavador_id}, '${w.estado}', '${w.nombre}')">${w.estado === 'activo' ? 'Inactivar' : 'Activar'}</button>
               </div>
+              ${(!w.usuario_acceso && w.estado === 'activo') ? `<div class="mt-2"><button class="btn btn-sm btn-outline admin-only" style="width: 100%" onclick="app.darAccesoLavador(${w.lavador_id}, '${w.nombre.replace(/'/g, "\\'")}')">Dar acceso al sistema</button></div>` : ''}
             </div>
           `).join('');
         }
@@ -1953,16 +1955,19 @@ const app = {
         if (tbEmp) {
           tbEmp.innerHTML = empleados.map(e => `
             <tr>
-              <td><strong>${e.nombre}</strong></td>
+              <td><strong>${escapeHtml(e.nombre)}</strong>${e.lavador_id ? `<br><span class="text-sm text-muted">Acceso de lavador (cobra por comisión, sin nómina de salario) • usuario ${escapeHtml(e.username || '')}</span>` : ''}</td>
               <td>${e.documento}</td>
               <td><span class="role-badge">${e.rol.toUpperCase()}</span></td>
-              <td><strong>${this.formatMoney(e.salario_fijo)}</strong></td>
-              <td>${(e.periodicidad_pago || '').toUpperCase()}</td>
+              <td>${e.lavador_id ? '<span class="text-muted">--</span>' : `<strong>${this.formatMoney(e.salario_fijo)}</strong>`}</td>
+              <td>${e.lavador_id ? '--' : (e.periodicidad_pago || '').toUpperCase()}</td>
               <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
-              <td>${e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados'}</td>
+              <td>${e.lavador_id ? '--' : (e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados')}</td>
               <td>
-                <button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${e.periodicidad_pago || 'quincenal'}')">Pagar Salario</button>
-                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id})">Editar</button>
+                ${e.lavador_id ? '' : `<button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${e.periodicidad_pago || 'quincenal'}')">Pagar Salario</button>
+                <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id})">Editar</button>`}
+                ${(this.currentUser.esAdminPrincipal && e.empleado_id !== this.currentUser.id && !e.es_admin_principal)
+                  ? `<button class="btn btn-sm btn-outline" onclick="app.cambiarRolUsuario(${e.empleado_id}, '${e.rol}', '${e.nombre.replace(/'/g, "\\'")}')">${e.rol === 'administrador' ? 'Pasar a Empleado' : 'Hacer Administrador'}</button>`
+                  : ''}
                 <button class="btn btn-sm btn-outline" onclick="app.reiniciarContrasenaUsuario(${e.empleado_id}, '${e.nombre}')">Reiniciar Contraseña</button>
                 ${(e.empleado_id === this.currentUser.id || e.es_admin_principal)
                   ? ''
@@ -2054,7 +2059,7 @@ const app = {
     if (this.currentUser.rol === 'administrador') {
       try {
         const usuarios = await ApiCliente.get('/api/personal/usuarios');
-        usuarios.forEach(u => opciones.push({ tipo: 'usuario', id: u.id, etiqueta: `${u.nombre} (${u.rol})` }));
+        usuarios.filter(u => !u.lavador_id).forEach(u => opciones.push({ tipo: 'usuario', id: u.id, etiqueta: `${u.nombre} (${u.rol})` }));
       } catch (err) { /* si falla, seguimos solo con lavadores + el propio usuario */ }
     } else {
       opciones.push({ tipo: 'usuario', id: this.currentUser.id, etiqueta: `${this.currentUser.nombre} (yo)` });
@@ -3186,6 +3191,35 @@ const app = {
       this.toast('Contraseña reiniciada.', 'success');
     } catch (err) {
       this.toast(err.message || 'No se pudo reiniciar la contraseña.', 'error');
+    }
+  },
+
+  /** Solo el administrador principal: pasa una cuenta de empleado a administrador, o de administrador a empleado. */
+  async cambiarRolUsuario(id, rolActual, nombre) {
+    const nuevoRol = rolActual === 'administrador' ? 'empleado' : 'administrador';
+    const aviso = nuevoRol === 'administrador'
+      ? `¿Hacer ADMINISTRADOR a ${nombre}? Tendrá acceso a todo el sistema (caja, reportes, nómina, personal). Conserva su mismo usuario y contraseña.`
+      : `¿Pasar a ${nombre} de administrador a EMPLEADO? Perderá el acceso a reportes, nómina y personal. Conserva su mismo usuario y contraseña.`;
+    if (!confirm(aviso)) return;
+    try {
+      await ApiCliente.put(`/api/personal/usuarios/${id}`, { rol: nuevoRol });
+      this.toast(`${nombre} ahora es ${nuevoRol === 'administrador' ? 'administrador' : 'empleado'}.`, 'success');
+      this.loadNomina();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo cambiar el rol.', 'error');
+    }
+  },
+
+  /** Le da acceso al sistema a un lavador (cuenta como la de un empleado, pero él sigue cobrando por comisión). */
+  async darAccesoLavador(id, nombre) {
+    if (!confirm(`¿Darle acceso al sistema a ${nombre}? Se crea su usuario como el de un empleado; él sigue cobrando por comisiones (no entra en la nómina de salarios).`)) return;
+    try {
+      const cuenta = await ApiCliente.post(`/api/personal/lavadores/${id}/acceso`, {});
+      alert(`Acceso creado para ${nombre}.\n\nUsuario: ${cuenta.username}\nContraseña temporal: ${cuenta.passwordAsignada}\n\nEntrégasela a la persona; puede cambiarla desde "Mi Perfil" -> "Cambiar Contraseña".`);
+      this.toast(`${nombre} ya tiene acceso al sistema.`, 'success');
+      this.loadNomina();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo dar acceso al lavador.', 'error');
     }
   },
 
