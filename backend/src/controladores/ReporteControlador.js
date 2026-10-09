@@ -34,6 +34,11 @@ function idDeQuery(valor, nombre) {
   return id;
 }
 
+/** Cliente del filtro: id numérico o 'anonimo' (ventas sin cliente registrado). */
+function idClienteDeQuery(valor) {
+  return valor === 'anonimo' ? 'anonimo' : idDeQuery(valor, 'El cliente');
+}
+
 function resolverRango(query) {
   const periodo = query.periodo || 'dia';
   const rango = calcularRangoPorPeriodo(periodo, query.fecha_inicio, query.fecha_fin);
@@ -69,11 +74,11 @@ async function construirDocumento(tipoPedido, query) {
     case 'ventas': {
       const metodo = query.metodo || null;
       if (metodo && !METODOS_PAGO.includes(metodo)) throw errorDeFiltro('El método de pago no es válido.');
-      const filtros = { clienteId: idDeQuery(query.cliente_id, 'El cliente'), lavadorId: idDeQuery(query.lavador_id, 'El lavador'), metodo };
+      const filtros = { clienteId: idClienteDeQuery(query.cliente_id), lavadorId: idDeQuery(query.lavador_id, 'El lavador'), metodo };
       return VistasReporte.vistaVentas(await ReporteRepositorio.calcularReporteVentas(rango.inicio, rango.fin, filtros), per);
     }
     case 'cliente': {
-      const clienteId = idDeQuery(query.cliente_id, 'El cliente');
+      const clienteId = idClienteDeQuery(query.cliente_id);
       if (!clienteId) throw errorDeFiltro('Elige el cliente del que quieres el reporte.');
       return VistasReporteDetalle.vistaCliente(await ReporteDetalleRepositorio.calcularReporteCliente(rango.inicio, rango.fin, clienteId), per);
     }

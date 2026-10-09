@@ -187,7 +187,8 @@ async function calcularReporte(inicio, fin) {
 function condicionesVenta(filtros = {}) {
   const sql = [];
   const params = [];
-  if (filtros.clienteId) { sql.push('o.cliente_id = ?'); params.push(filtros.clienteId); }
+  if (filtros.clienteId === 'anonimo') sql.push('o.cliente_id IS NULL'); // ventas sin cliente registrado
+  else if (filtros.clienteId) { sql.push('o.cliente_id = ?'); params.push(filtros.clienteId); }
   if (filtros.lavadorId) {
     sql.push('EXISTS (SELECT 1 FROM orden_lavadores fl WHERE fl.orden_id = o.id AND fl.lavador_id = ?)');
     params.push(filtros.lavadorId);
@@ -369,7 +370,9 @@ async function calcularReporteVentas(inicio, fin, filtros = {}) {
   const totalPropinas = detallePropinas.reduce((s, p) => s + p.valor, 0);
 
   const filtrosAplicados = { cliente: null, lavador: null, metodo: filtros.metodo || null };
-  if (filtros.clienteId) {
+  if (filtros.clienteId === 'anonimo') {
+    filtrosAplicados.cliente = 'Venta anónima';
+  } else if (filtros.clienteId) {
     const [[c]] = await pool.query(`SELECT nombre FROM clientes WHERE id = ?`, [filtros.clienteId]);
     filtrosAplicados.cliente = c ? c.nombre : `#${filtros.clienteId}`;
   }

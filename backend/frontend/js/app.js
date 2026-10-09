@@ -2642,8 +2642,10 @@ const app = {
     if (usaCliente) {
       try {
         const clientes = await ApiCliente.get('/api/clientes');
-        this.repClientesMapa = {};
-        document.getElementById('repClientesLista').innerHTML = clientes.map(c => {
+        // Primera opción: las ventas sin cliente registrado, como si fueran un cliente más.
+        const etiquetaAnonimo = 'Venta anónima (sin cliente registrado)';
+        this.repClientesMapa = { [etiquetaAnonimo]: 'anonimo' };
+        document.getElementById('repClientesLista').innerHTML = `<option value="${etiquetaAnonimo}"></option>` + clientes.map(c => {
           const etiqueta = `${c.nombre} · ${c.telefono || 'sin teléfono'}`;
           this.repClientesMapa[etiqueta] = c.id;
           return `<option value="${escapeHtml(etiqueta)}"></option>`;

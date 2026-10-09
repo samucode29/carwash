@@ -32,7 +32,11 @@ function vistaCliente(r, periodo) {
     kpi('Última visita', F.fecha(r.historico.ultima), { detalle: r.historico.ultima ? 'Último servicio cobrado' : 'Nunca ha comprado' })
   );
 
-  const ficha = [
+  const ficha = c.anonimo ? [
+    'Cliente: Venta anónima',
+    'Reúne todas las ventas hechas sin cliente registrado (ventas rápidas): no hay nombre, teléfono ni vehículos asociados.',
+    'Para conocer a esos clientes y poder atenderlos mejor, registra al cliente al hacer el servicio.'
+  ] : [
     `Nombre: ${c.nombre}`, `Teléfono: ${c.telefono || '-'}`, `Correo: ${c.correo || '-'}`,
     `Estado: ${c.estado === 'activo' ? 'Activo' : 'Inactivo (no se le crean citas ni servicios nuevos)'}`,
     `Cliente desde: ${F.fecha(c.desde)}`,

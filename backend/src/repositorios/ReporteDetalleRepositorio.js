@@ -21,17 +21,32 @@ const SQL_LAVADORES_DE_ORDEN = `(SELECT GROUP_CONCAT(l.nombre ORDER BY l.nombre 
 // ---------------------------------------------------------------------------
 // CLIENTE
 // ---------------------------------------------------------------------------
+/**
+ * `clienteId` es el id de un cliente o 'anonimo': todas las ventas sin cliente
+ * registrado (ventas rápidas) se reportan juntas como si fueran un cliente.
+ */
 async function calcularReporteCliente(inicio, fin, clienteId) {
-  const [[cliente]] = await pool.query(`SELECT * FROM clientes WHERE id = ?`, [clienteId]);
-  if (!cliente) throw noEncontrado('Cliente no encontrado.');
+  const esAnonimo = clienteId === 'anonimo';
+  const condOrden = esAnonimo ? 'o.cliente_id IS NULL' : 'o.cliente_id = ?';
+  const condCita = esAnonimo ? 'c.cliente_id IS NULL' : 'c.cliente_id = ?';
+  const paramId = esAnonimo ? [] : [clienteId];
 
-  const [vehiculos] = await pool.query(`SELECT placa, tipo, marca, color FROM vehiculos WHERE cliente_id = ? ORDER BY id`, [clienteId]);
-  const [notas] = await pool.query(`SELECT tipo, texto, creado_en FROM cliente_notas WHERE cliente_id = ? ORDER BY id DESC`, [clienteId]);
+  let cliente;
+  let vehiculos = [];
+  let notas = [];
+  if (esAnonimo) {
+    cliente = { id: 'anonimo', nombre: 'Venta anónima', telefono: '', correo: '', estado: 'activo', creado_en: null, anonimo: true };
+  } else {
+    [[cliente]] = await pool.query(`SELECT * FROM clientes WHERE id = ?`, [clienteId]);
+    if (!cliente) throw noEncontrado('Cliente no encontrado.');
+    [vehiculos] = await pool.query(`SELECT placa, tipo, marca, color FROM vehiculos WHERE cliente_id = ? ORDER BY id`, [clienteId]);
+    [notas] = await pool.query(`SELECT tipo, texto, creado_en FROM cliente_notas WHERE cliente_id = ? ORDER BY id DESC`, [clienteId]);
+  }
 
   const [[historico]] = await pool.query(
     `SELECT COUNT(*) AS ventas, COALESCE(SUM(p.monto), 0) AS total, MIN(p.fecha_pago) AS primera, MAX(p.fecha_pago) AS ultima
-     FROM pagos p INNER JOIN ordenes_servicio o ON o.id = p.orden_id WHERE o.cliente_id = ?`,
-    [clienteId]
+     FROM pagos p INNER JOIN ordenes_servicio o ON o.id = p.orden_id WHERE ${condOrden}`,
+    paramId
   );
 
   const [pagos] = await pool.query(
@@ -45,9 +60,9 @@ async function calcularReporteCliente(inicio, fin, clienteId) {
      INNER JOIN ordenes_servicio o ON o.id = p.orden_id
      LEFT JOIN servicios s ON s.id = o.servicio_id
      LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
-     WHERE o.cliente_id = ? AND DATE(p.fecha_pago) BETWEEN ? AND ?
+     WHERE ${condOrden} AND DATE(p.fecha_pago) BETWEEN ? AND ?
      ORDER BY p.fecha_pago DESC`,
-    [clienteId, inicio, fin]
+    [...paramId, inicio, fin]
   );
 
   const porServicio = {};
@@ -85,9 +100,9 @@ async function calcularReporteCliente(inicio, fin, clienteId) {
      INNER JOIN ordenes_servicio o ON o.id = ol.orden_id
      INNER JOIN pagos p ON p.orden_id = o.id
      INNER JOIN lavadores l ON l.id = ol.lavador_id
-     WHERE o.cliente_id = ? AND DATE(p.fecha_pago) BETWEEN ? AND ?
+     WHERE ${condOrden} AND DATE(p.fecha_pago) BETWEEN ? AND ?
      GROUP BY l.id, l.nombre ORDER BY servicios DESC, total DESC`,
-    [clienteId, inicio, fin]
+    [...paramId, inicio, fin]
   );
 
   const [citas] = await pool.query(
@@ -95,9 +110,9 @@ async function calcularReporteCliente(inicio, fin, clienteId) {
      FROM citas c
      LEFT JOIN servicios s ON s.id = c.servicio_id
      LEFT JOIN vehiculos v ON v.id = c.vehiculo_id
-     WHERE c.cliente_id = ? AND c.fecha BETWEEN ? AND ?
+     WHERE ${condCita} AND c.fecha BETWEEN ? AND ?
      ORDER BY c.fecha DESC, c.hora DESC`,
-    [clienteId, inicio, fin]
+    [...paramId, inicio, fin]
   );
 
   // Servicios del cliente que no terminaron en una venta cobrada (cancelados
@@ -108,9 +123,9 @@ async function calcularReporteCliente(inicio, fin, clienteId) {
      FROM ordenes_servicio o
      LEFT JOIN servicios s ON s.id = o.servicio_id
      LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
-     WHERE o.cliente_id = ? AND o.estado <> 'entregado' AND DATE(o.fecha_hora_registro) BETWEEN ? AND ?
+     WHERE ${condOrden} AND o.estado <> 'entregado' AND DATE(o.fecha_hora_registro) BETWEEN ? AND ?
      ORDER BY o.fecha_hora_registro DESC`,
-    [clienteId, inicio, fin]
+    [...paramId, inicio, fin]
   );
 
   const plan = planSerie(inicio, fin);
@@ -118,7 +133,7 @@ async function calcularReporteCliente(inicio, fin, clienteId) {
     rango: { inicio, fin },
     cliente: {
       id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono, correo: cliente.correo || '',
-      estado: cliente.estado, desde: cliente.creado_en
+      estado: cliente.estado, desde: cliente.creado_en, anonimo: !!cliente.anonimo
     },
     vehiculos, notas,
     historico: {
