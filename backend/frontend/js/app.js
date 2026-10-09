@@ -1343,7 +1343,28 @@ const app = {
     document.getElementById('asignLavAutoIndicator').classList.remove('hidden');
     await this.loadWashers(); // refresca disponible_hoy antes de mostrar el picker
     this.renderAsignLavPills();
+    this.actualizarIndicadorAsignacionAuto();
     this.openModal('modalAsignarLavador');
+  },
+
+  /**
+   * Texto del modo automático: dice quién queda disponible ahora mismo o,
+   * si nadie lo está, por qué (sin entrada, ocupado) para que no parezca que
+   * el sistema ignoró a alguien. Solo los lavadores registrados se asignan:
+   * un empleado/administrador con asistencia no cuenta como lavador.
+   */
+  actualizarIndicadorAsignacionAuto() {
+    const indicador = document.getElementById('asignLavAutoIndicator');
+    if (!indicador) return;
+    const lavadores = this.washers || [];
+    const libres = lavadores.filter(w => w.disponible_hoy && !w.ocupado);
+    const ocupados = lavadores.filter(w => w.disponible_hoy && w.ocupado);
+    if (libres.length > 0) {
+      indicador.textContent = `El sistema asignará automáticamente al lavador disponible con menos carga actual. Disponibles ahora: ${libres.map(nombreCorto).join(', ')}.`;
+      return;
+    }
+    const detalleOcupados = ocupados.length > 0 ? ` Con entrada pero ocupados: ${ocupados.map(nombreCorto).join(', ')}.` : '';
+    indicador.textContent = `No hay lavadores libres ahora.${detalleOcupados} Para asignar, un lavador debe tener su entrada registrada hoy (como lavador, no como empleado) y no estar atendiendo otro servicio.`;
   },
 
   /**
@@ -1362,6 +1383,7 @@ const app = {
     document.getElementById('asignLavAutoIndicator').classList.remove('hidden');
     await this.loadWashers();
     this.renderAsignLavPills();
+    this.actualizarIndicadorAsignacionAuto();
     this.openModal('modalAsignarLavador');
   },
 
