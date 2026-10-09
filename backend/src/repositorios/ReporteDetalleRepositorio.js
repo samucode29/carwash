@@ -193,7 +193,7 @@ async function calcularReporteLavador(inicio, fin, lavadorId) {
     const propina = Number(f.propina || 0) / compartido;
     return {
       fecha: f.fecha_pago, inicio: f.fecha_hora_registro, ordenId: f.orden_id,
-      cliente: f.cliente_nombre || (f.es_venta_anonima ? 'Venta anónima' : 'Sin registrar'),
+      cliente: f.cliente_nombre || 'Venta anónima',
       placa: f.placa || '-', tipoVehiculo: f.tipo_vehiculo, servicio: f.servicio_nombre || 'Otros',
       companeros: f.companeros || '', compartido,
       valorServicio: Number(f.valor_servicio), cobrado: Number(f.monto),
@@ -248,10 +248,12 @@ async function calcularReporteLavador(inicio, fin, lavadorId) {
     const mapa = {};
     servicios.forEach(x => {
       const k = clave(x);
-      if (!mapa[k]) mapa[k] = { ...extra(x), cantidad: 0, cobrado: 0, ganado: 0 };
+      if (!mapa[k]) mapa[k] = { ...extra(x), cantidad: 0, cobrado: 0, ganado: 0, descuentos: 0, propinas: 0 };
       mapa[k].cantidad += 1;
       mapa[k].cobrado += x.cobradoParte;
       mapa[k].ganado += x.ganado;
+      mapa[k].descuentos += x.descuentoAsumido;
+      mapa[k].propinas += x.propina;
     });
     return Object.values(mapa).sort((a, b) => b.ganado - a.ganado);
   };
@@ -304,7 +306,7 @@ async function calcularReporteLavador(inicio, fin, lavadorId) {
     },
     porDia: porDia.map(d => ({ ...d, cobrado: redondear(d.cobrado), comisionBruta: redondear(d.comisionBruta), descuentos: redondear(d.descuentos), comisionNeta: redondear(d.comisionNeta), propinas: redondear(d.propinas), ganado: redondear(d.ganado) })),
     porServicio: agrupar(x => `${x.servicio}|${x.tipoVehiculo}`, x => ({ servicio: x.servicio, tipoVehiculo: x.tipoVehiculo })),
-    porCliente: agrupar(x => x.cliente, x => ({ cliente: x.cliente })).filter(c => c.cliente !== 'Venta anónima' && c.cliente !== 'Sin registrar').slice(0, 10),
+    porCliente: agrupar(x => x.cliente, x => ({ cliente: x.cliente })).slice(0, 10),
     porVehiculo: agrupar(x => x.tipoVehiculo, x => ({ tipoVehiculo: x.tipoVehiculo })),
     asistencia: asistencia.map(a => ({
       fecha: a.fecha, entrada: a.hora_entrada, salida: a.hora_salida,
@@ -313,7 +315,7 @@ async function calcularReporteLavador(inicio, fin, lavadorId) {
     abiertos: abiertos.map(o => ({
       ordenId: o.orden_id, estado: o.estado, fecha: o.fecha_hora_registro, total: Number(o.total), comision: Number(o.valor_comision),
       servicio: o.servicio_nombre || 'Otros', placa: o.placa || '-',
-      cliente: o.cliente_nombre || (o.es_venta_anonima ? 'Venta anónima' : 'Sin registrar')
+      cliente: o.cliente_nombre || 'Venta anónima'
     })),
     canceladas: canceladas.cantidad || 0,
     liquidaciones: liquidaciones.map(l => ({

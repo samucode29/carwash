@@ -137,7 +137,7 @@ async function obtenerServiciosPorLavador(lavadorId) {
     return {
       ordenId: f.orden_id,
       fecha: f.fecha,
-      cliente: f.cliente_nombre || (f.es_venta_anonima ? 'Venta Anónima' : 'Sin registrar'),
+      cliente: f.cliente_nombre || 'Venta anónima',
       servicio: f.servicio_nombre,
       valorServicio: Number(f.valor_servicio),
       comisionBruta,

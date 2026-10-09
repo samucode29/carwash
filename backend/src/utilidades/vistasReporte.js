@@ -378,8 +378,8 @@ function vistaVentas(r, periodo) {
   doc.secciones.push(tabla(
     'Mejores clientes (Top 10)',
     'Clientes registrados que más dinero dejaron en el período. Una venta anónima no aparece aquí.',
-    [col('#', 'der'), col('Cliente'), col('Servicios', 'der'), col('Total gastado', 'der'), col('Última visita')],
-    r.topClientes.map((c, i) => [String(i + 1), c.nombre, F.entero(c.cantidad), F.moneda(c.total), F.fecha(c.ultima)]),
+    [col('#', 'der'), col('Cliente'), col('Servicios', 'der'), col('Total gastado', 'der'), col('Descuentos', 'der'), col('Propinas', 'der'), col('Última visita')],
+    r.topClientes.map((c, i) => [String(i + 1), c.nombre, F.entero(c.cantidad), F.moneda(c.total), c.descuentos > 0 ? F.moneda(c.descuentos) : '-', c.propinas > 0 ? F.moneda(c.propinas) : '-', F.fecha(c.ultima)]),
     { vacio: 'Sin clientes registrados con compras en el período.' }
   ));
 
@@ -877,6 +877,9 @@ function vistaClientes(r, fechaCorte) {
   const conCompras = r.clientes.filter(c => c.totalCompras > 0);
   const totalGastado = r.clientes.reduce((s, c) => s + c.totalGastado, 0);
   const totalCompras = r.clientes.reduce((s, c) => s + c.totalCompras, 0);
+  const totalDescuentos = r.clientes.reduce((s, c) => s + c.descuentos, 0);
+  const totalPropinas = r.clientes.reduce((s, c) => s + c.propinas, 0);
+  const anon = r.ventasAnonimas;
   const ranking = [...conCompras].sort((a, b) => b.totalGastado - a.totalGastado);
   const inactivos = r.clientes.filter(c => c.estado === 'inactivo' && !c.desactivado).sort((a, b) => b.totalGastado - a.totalGastado);
 
@@ -887,7 +890,10 @@ function vistaClientes(r, fechaCorte) {
     kpi('Nunca han comprado', F.entero(r.nuncaCompraron), { tono: r.nuncaCompraron > 0 ? 'aviso' : undefined, detalle: 'Registrados sin ninguna compra' }),
     kpi('Desactivados', F.entero(r.desactivados), { detalle: 'Inactivados a mano; ya no se les agenda ni atiende' }),
     kpi('En lista negra', F.entero(r.enListaNegra), { tono: r.enListaNegra > 0 ? 'mal' : undefined, detalle: 'Con observaciones de riesgo' }),
-    kpi('Gasto promedio por cliente', conCompras.length ? F.moneda(totalGastado / conCompras.length) : '-', { detalle: 'Entre clientes con compras' })
+    kpi('Gasto promedio por cliente', conCompras.length ? F.moneda(totalGastado / conCompras.length) : '-', { detalle: 'Entre clientes con compras' }),
+    kpi('Descuentos a clientes', F.moneda(totalDescuentos), { tono: totalDescuentos > 0 ? 'aviso' : undefined, detalle: 'Lo descontado a clientes registrados en toda su historia' }),
+    kpi('Propinas de clientes', F.moneda(totalPropinas), { detalle: 'Dadas por clientes registrados (van a los lavadores)' }),
+    kpi('Ventas anónimas', F.entero(anon.totalCompras), { detalle: `${F.moneda(anon.totalGastado)} cobrados sin cliente registrado` })
   );
 
   if (r.totalClientes === 0) {
@@ -900,6 +906,10 @@ function vistaClientes(r, fechaCorte) {
       doc.hallazgos.push(`Los 5 mejores clientes aportan ${F.porcentaje(F.participacion(top5, totalGastado))} de todo lo vendido a clientes registrados.`);
     }
     if (inactivos.length) doc.hallazgos.push(`${F.entero(inactivos.length)} clientes dejaron de venir. Llamarlos con una promoción puede recuperar ventas (ver la lista "Clientes por recuperar").`);
+    if (anon.totalCompras > 0) {
+      const granTotal = totalGastado + anon.totalGastado;
+      doc.hallazgos.push(`${F.entero(anon.totalCompras)} ventas fueron anónimas (sin cliente registrado): ${F.moneda(anon.totalGastado)}, ${F.porcentaje(F.participacion(anon.totalGastado, granTotal))} de todo lo vendido. Registrar al cliente en esas ventas permite conocerlo y recuperarlo.`);
+    }
     if (r.enListaNegra > 0) doc.hallazgos.push(`${r.enListaNegra} clientes están en la lista negra; revisa sus observaciones antes de atenderlos a crédito o sin pago anticipado.`);
   }
 
@@ -929,13 +939,19 @@ function vistaClientes(r, fechaCorte) {
   doc.secciones.push(tabla(
     'Todos los clientes',
     'Cartera completa, de la compra más reciente a la más antigua.',
-    [col('Cliente'), col('Teléfono'), col('Vehículos', 'der'), col('Última compra'), col('Servicios', 'der'), col('Total gastado', 'der'), col('Promedio', 'der'), col('Estado')],
-    r.clientes.slice(0, 500).map(c => [
+    [col('Cliente'), col('Teléfono'), col('Vehículos', 'der'), col('Última compra'), col('Servicios', 'der'), col('Total gastado', 'der'), col('Promedio', 'der'), col('Descuentos', 'der'), col('Propinas', 'der'), col('Estado')],
+    [...r.clientes.slice(0, 500).map(c => [
       c.desactivado ? celda(`${c.nombre} (desactivado)`, 'aviso') : (c.enListaNegra ? celda(`${c.nombre} (lista negra)`, 'mal') : c.nombre), c.telefono || '-', F.entero(c.vehiculos), c.ultimaCompra || 'Nunca',
       F.entero(c.totalCompras), F.moneda(c.totalGastado), c.totalCompras > 0 ? F.moneda(c.totalGastado / c.totalCompras) : '-',
+      c.descuentos > 0 ? F.moneda(c.descuentos) : '-', c.propinas > 0 ? F.moneda(c.propinas) : '-',
       celda(ETIQUETA_ESTADO_CLIENTE[c.estado] || c.estado, TONO_ESTADO_CLIENTE[c.estado])
     ]),
-    { totales: ['Total', '', '', '', F.entero(totalCompras), F.moneda(totalGastado), '', ''], totalFilas: r.clientes.length, vacio: 'Sin clientes registrados.' }
+    // Las ventas sin cliente registrado van en su propia fila, como "Venta anónima".
+    ...(anon.totalCompras > 0 ? [[
+      celda('Venta anónima', 'aviso'), '-', '-', anon.ultimaCompra || '-', F.entero(anon.totalCompras), F.moneda(anon.totalGastado),
+      F.moneda(anon.totalGastado / anon.totalCompras), anon.descuentos > 0 ? F.moneda(anon.descuentos) : '-', anon.propinas > 0 ? F.moneda(anon.propinas) : '-', '-'
+    ]] : [])],
+    { totales: ['Total (con ventas anónimas)', '', '', '', F.entero(totalCompras + anon.totalCompras), F.moneda(totalGastado + anon.totalGastado), '', F.moneda(totalDescuentos + anon.descuentos), F.moneda(totalPropinas + anon.propinas), ''], totalFilas: r.clientes.length + (anon.totalCompras > 0 ? 1 : 0), vacio: 'Sin clientes registrados.' }
   ));
 
   return doc;

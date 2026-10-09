@@ -176,7 +176,7 @@ function vistaLavador(r, periodo) {
     if (mejorDia) doc.hallazgos.push(`Su mejor día fue el ${F.fecha(r.porDia[mejorDia.indice].fecha)}: ${F.entero(r.porDia[mejorDia.indice].servicios)} servicios y ${F.moneda(mejorDia.valor)} ganados.`);
     const s = r.porServicio[0];
     if (s) doc.hallazgos.push(`El servicio que más hace es "${s.servicio}" (${F.capitalizar(s.tipoVehiculo)}): ${F.entero(s.cantidad)} veces y ${F.moneda(s.ganado)} ganados.`);
-    const cl = r.porCliente[0];
+    const cl = r.porCliente.find(c => c.cliente !== 'Venta anónima');
     if (cl && cl.cantidad > 1) doc.hallazgos.push(`El cliente que más atendió fue ${cl.cliente}: ${F.entero(cl.cantidad)} servicios.`);
     if (t.descuentos > 0) doc.hallazgos.push(`Asumió ${F.moneda(t.descuentos)} en descuentos (se le restan de su comisión).`);
     const enEquipo = r.detalle.filter(x => x.compartido > 1).length;
@@ -220,9 +220,9 @@ function vistaLavador(r, periodo) {
 
   doc.secciones.push(tabla(
     'Clientes que más atendió (Top 10)',
-    'A quién le hizo más servicios en el período.',
-    [col('Cliente'), col('Servicios', 'der'), col('Vendido', 'der'), col('Ganado', 'der')],
-    r.porCliente.map(c => [c.cliente, F.entero(c.cantidad), F.moneda(c.cobrado), F.moneda(c.ganado)]),
+    'A quién le hizo más servicios en el período, con los descuentos que asumió y las propinas que recibió de cada cliente. Las ventas sin cliente registrado aparecen como "Venta anónima".',
+    [col('Cliente'), col('Servicios', 'der'), col('Vendido', 'der'), col('Descuento asumido', 'der'), col('Propinas', 'der'), col('Ganado', 'der')],
+    r.porCliente.map(c => [c.cliente, F.entero(c.cantidad), F.moneda(c.cobrado), c.descuentos > 0 ? F.moneda(-c.descuentos) : '-', guion(c.propinas), F.moneda(c.ganado)]),
     { vacio: 'Sin clientes en el período.' }
   ));
 

@@ -328,7 +328,8 @@ async function calcularReporteVentas(inicio, fin, filtros = {}) {
   };
 
   const [topClientes] = await pool.query(
-    `SELECT cl.nombre, COUNT(*) AS cantidad, SUM(p.monto) AS total, MAX(DATE(p.fecha_pago)) AS ultima
+    `SELECT cl.nombre, COUNT(*) AS cantidad, SUM(p.monto) AS total, MAX(DATE(p.fecha_pago)) AS ultima,
+            SUM(p.descuento_negocio + p.descuento_trabajador) AS descuentos, SUM(p.propina) AS propinas
      FROM pagos p
      INNER JOIN ordenes_servicio o ON o.id = p.orden_id
      INNER JOIN clientes cl ON cl.id = o.cliente_id
@@ -361,7 +362,7 @@ async function calcularReporteVentas(inicio, fin, filtros = {}) {
     fecha: f.fecha_pago,
     ordenId: f.orden_id,
     servicio: f.servicio_nombre || 'Otros',
-    cliente: f.cliente_nombre || (f.es_venta_anonima ? 'Venta Anónima' : 'Sin registrar'),
+    cliente: f.cliente_nombre || 'Venta anónima',
     lavador: f.lavador_nombre || 'Sin asignar',
     valor: Number((Number(f.propina) / (Number(f.lavadores_count) || 1)).toFixed(2))
   }));
@@ -390,13 +391,13 @@ async function calcularReporteVentas(inicio, fin, filtros = {}) {
     porServicio, serviciosDetalle, porMetodoPago, metodosDetalle, porVehiculo, cantidadPorVehiculo,
     serie, porDiaSemana, porHora,
     porLavador,
-    topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total), ultima: c.ultima })),
+    topClientes: topClientes.map(c => ({ nombre: c.nombre, cantidad: c.cantidad, total: Number(c.total), ultima: c.ultima, descuentos: Number(c.descuentos) || 0, propinas: Number(c.propinas) || 0 })),
     totalPropinas,
     detallePropinas,
     detalleTotal: pagos.length,
     detalle: pagos.slice(0, MAX_FILAS_DETALLE).map(p => ({
       fecha: p.fecha_pago, ordenId: p.orden_id,
-      cliente: p.cliente_nombre || (p.es_venta_anonima ? 'Venta anónima' : 'Sin registrar'),
+      cliente: p.cliente_nombre || 'Venta anónima',
       placa: p.placa || '-', servicio: p.servicio_nombre || 'Otros', tipoVehiculo: p.tipo_vehiculo,
       lavadores: p.lavadores || 'Sin asignar', metodo: p.metodo_pago, monto: Number(p.monto),
       descuentoNegocio: Number(p.descuento_negocio || 0), descuentoTrabajador: Number(p.descuento_trabajador || 0),
@@ -825,8 +826,12 @@ async function calcularReporteClientes() {
             (SELECT COUNT(*) FROM cliente_notas n WHERE n.cliente_id = cl.id AND n.tipo = 'lista_negra') AS en_lista_negra,
             (SELECT COUNT(*) FROM vehiculos v WHERE v.cliente_id = cl.id) AS vehiculos,
             MAX(DATE(p.fecha_pago)) AS ultima_compra,
+            MIN(DATE(p.fecha_pago)) AS primera_compra,
             COUNT(p.id) AS total_compras,
-            SUM(p.monto) AS total_gastado
+            SUM(p.monto) AS total_gastado,
+            SUM(p.descuento_negocio) AS desc_negocio,
+            SUM(p.descuento_trabajador) AS desc_trabajador,
+            SUM(p.propina) AS propinas
      FROM clientes cl
      LEFT JOIN ordenes_servicio o ON o.cliente_id = cl.id
      LEFT JOIN pagos p ON p.orden_id = o.id
@@ -851,13 +856,30 @@ async function calcularReporteClientes() {
       enListaNegra: Number(f.en_lista_negra) > 0,
       vehiculos: Number(f.vehiculos) || 0,
       ultimaCompra: f.ultima_compra,
+      primeraCompra: f.primera_compra,
       totalCompras: f.total_compras || 0,
       totalGastado: Number(f.total_gastado) || 0,
+      descuentos: (Number(f.desc_negocio) || 0) + (Number(f.desc_trabajador) || 0),
+      propinas: Number(f.propinas) || 0,
       estado
     };
   });
 
+  // Ventas sin cliente registrado (ventas rápidas/anónimas): no pertenecen a
+  // ningún cliente, pero también son dinero cobrado, con sus descuentos y propinas.
+  const [[anonimas]] = await pool.query(
+    `SELECT COUNT(*) AS compras, COALESCE(SUM(p.monto), 0) AS total, MAX(DATE(p.fecha_pago)) AS ultima, MIN(DATE(p.fecha_pago)) AS primera,
+            COALESCE(SUM(p.descuento_negocio + p.descuento_trabajador), 0) AS descuentos, COALESCE(SUM(p.propina), 0) AS propinas
+     FROM pagos p INNER JOIN ordenes_servicio o ON o.id = p.orden_id
+     WHERE o.cliente_id IS NULL`
+  );
+
   return {
+    ventasAnonimas: {
+      totalCompras: Number(anonimas.compras) || 0, totalGastado: Number(anonimas.total) || 0,
+      ultimaCompra: anonimas.ultima, primeraCompra: anonimas.primera,
+      descuentos: Number(anonimas.descuentos) || 0, propinas: Number(anonimas.propinas) || 0
+    },
     diasInactividad: DIAS_INACTIVIDAD_CLIENTE,
     totalClientes: clientes.length,
     activos: clientes.filter((c) => c.estado === 'activo').length,
