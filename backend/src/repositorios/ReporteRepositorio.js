@@ -180,11 +180,47 @@ async function calcularReporte(inicio, fin) {
 }
 
 /**
+ * Filtros opcionales de ventas (por cliente, por lavador que participó y por
+ * método de pago) como fragmento SQL para consultas con los alias `p` (pagos)
+ * y `o` (ordenes_servicio).
+ */
+function condicionesVenta(filtros = {}) {
+  const sql = [];
+  const params = [];
+  if (filtros.clienteId) { sql.push('o.cliente_id = ?'); params.push(filtros.clienteId); }
+  if (filtros.lavadorId) {
+    sql.push('EXISTS (SELECT 1 FROM orden_lavadores fl WHERE fl.orden_id = o.id AND fl.lavador_id = ?)');
+    params.push(filtros.lavadorId);
+  }
+  if (filtros.metodo) { sql.push('p.metodo_pago = ?'); params.push(filtros.metodo); }
+  return { sql: sql.length ? ` AND ${sql.join(' AND ')}` : '', params };
+}
+
+/** Ventas agrupadas por día (de la más reciente a la más antigua), con el total de cada método de pago. */
+function agruparVentasPorDia(pagos) {
+  const dias = {};
+  pagos.forEach(p => {
+    const dia = String(p.fecha_pago).substring(0, 10);
+    if (!dias[dia]) dias[dia] = { fecha: dia, ventas: 0, total: 0, descuentoNegocio: 0, descuentoTrabajador: 0, propinas: 0, efectivo: 0, tarjeta: 0, transferencia: 0, pse: 0 };
+    const d = dias[dia];
+    const monto = Number(p.monto);
+    d.ventas += 1;
+    d.total += monto;
+    d.descuentoNegocio += Number(p.descuento_negocio || 0);
+    d.descuentoTrabajador += Number(p.descuento_trabajador || 0);
+    d.propinas += Number(p.propina || 0);
+    if (d[p.metodo_pago] !== undefined) d[p.metodo_pago] += monto;
+  });
+  return Object.values(dias).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+}
+
+/**
  * Productividad de cada lavador en el período: servicios pagados que trabajó,
  * comisión bruta, la parte del descuento que asumió, comisión neta y propinas
  * (en partes iguales si atendieron varios).
  */
-async function calcularProductividadLavadores(inicio, fin) {
+async function calcularProductividadLavadores(inicio, fin, filtros = {}) {
+  const cond = condicionesVenta(filtros);
   const [filas] = await pool.query(
     `SELECT ol.orden_id, ol.lavador_id, l.nombre, ol.valor_comision, p.descuento_trabajador, p.propina,
             (SELECT COUNT(*) FROM orden_lavadores x WHERE x.orden_id = ol.orden_id) AS lavadores_count,
@@ -192,8 +228,9 @@ async function calcularProductividadLavadores(inicio, fin) {
      FROM orden_lavadores ol
      INNER JOIN lavadores l ON l.id = ol.lavador_id
      INNER JOIN pagos p ON p.orden_id = ol.orden_id
-     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?`,
-    [inicio, fin]
+     INNER JOIN ordenes_servicio o ON o.id = ol.orden_id
+     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?${cond.sql}${filtros.lavadorId ? ' AND ol.lavador_id = ?' : ''}`,
+    [inicio, fin, ...cond.params, ...(filtros.lavadorId ? [filtros.lavadorId] : [])]
   );
   const mapa = {};
   filas.forEach(f => {
@@ -220,7 +257,8 @@ async function calcularProductividadLavadores(inicio, fin) {
 }
 
 /** Ventas: por servicio, método de pago, vehículo, día/hora, lavador, clientes, propinas y detalle de cada venta. */
-async function calcularReporteVentas(inicio, fin) {
+async function calcularReporteVentas(inicio, fin, filtros = {}) {
+  const cond = condicionesVenta(filtros);
   const [pagos] = await pool.query(
     `SELECT p.id AS pago_id, p.fecha_pago, p.metodo_pago, p.monto, p.descuento_negocio, p.descuento_trabajador,
             p.propina, p.observacion, o.id AS orden_id, o.es_venta_anonima, s.nombre AS servicio_nombre,
@@ -235,9 +273,9 @@ async function calcularReporteVentas(inicio, fin) {
      LEFT JOIN servicios s ON s.id = o.servicio_id
      LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
      LEFT JOIN clientes cl ON cl.id = o.cliente_id
-     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?
+     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?${cond.sql}
      ORDER BY p.fecha_pago DESC`,
-    [inicio, fin]
+    [inicio, fin, ...cond.params]
   );
 
   const porServicio = {};
@@ -294,12 +332,12 @@ async function calcularReporteVentas(inicio, fin) {
      FROM pagos p
      INNER JOIN ordenes_servicio o ON o.id = p.orden_id
      INNER JOIN clientes cl ON cl.id = o.cliente_id
-     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?
+     WHERE DATE(p.fecha_pago) BETWEEN ? AND ?${cond.sql}
      GROUP BY cl.id ORDER BY total DESC LIMIT 10`,
-    [inicio, fin]
+    [inicio, fin, ...cond.params]
   );
 
-  const porLavador = await calcularProductividadLavadores(inicio, fin);
+  const porLavador = await calcularProductividadLavadores(inicio, fin, filtros);
 
   // Propinas del período: NO son ingreso del negocio (van 100% al lavador,
   // repartidas en partes iguales si atendieron varios), pero se reportan
@@ -307,7 +345,7 @@ async function calcularReporteVentas(inicio, fin) {
   // cada una — no solo el total agregado.
   const [propinasFilas] = await pool.query(
     `SELECT p.fecha_pago, p.propina, o.id AS orden_id, s.nombre AS servicio_nombre,
-            cl.nombre AS cliente_nombre, o.es_venta_anonima, l.nombre AS lavador_nombre,
+            cl.nombre AS cliente_nombre, o.es_venta_anonima, l.id AS lavador_id, l.nombre AS lavador_nombre,
             (SELECT COUNT(*) FROM orden_lavadores ol2 WHERE ol2.orden_id = o.id) AS lavadores_count
      FROM pagos p
      INNER JOIN ordenes_servicio o ON o.id = p.orden_id
@@ -315,11 +353,11 @@ async function calcularReporteVentas(inicio, fin) {
      LEFT JOIN clientes cl ON cl.id = o.cliente_id
      LEFT JOIN orden_lavadores ol ON ol.orden_id = o.id
      LEFT JOIN lavadores l ON l.id = ol.lavador_id
-     WHERE p.propina > 0 AND DATE(p.fecha_pago) BETWEEN ? AND ?
+     WHERE p.propina > 0 AND DATE(p.fecha_pago) BETWEEN ? AND ?${cond.sql}
      ORDER BY p.fecha_pago DESC`,
-    [inicio, fin]
+    [inicio, fin, ...cond.params]
   );
-  const detallePropinas = propinasFilas.map(f => ({
+  const detallePropinas = propinasFilas.filter(f => !filtros.lavadorId || f.lavador_id === filtros.lavadorId).map(f => ({
     fecha: f.fecha_pago,
     ordenId: f.orden_id,
     servicio: f.servicio_nombre || 'Otros',
@@ -329,8 +367,20 @@ async function calcularReporteVentas(inicio, fin) {
   }));
   const totalPropinas = detallePropinas.reduce((s, p) => s + p.valor, 0);
 
+  const filtrosAplicados = { cliente: null, lavador: null, metodo: filtros.metodo || null };
+  if (filtros.clienteId) {
+    const [[c]] = await pool.query(`SELECT nombre FROM clientes WHERE id = ?`, [filtros.clienteId]);
+    filtrosAplicados.cliente = c ? c.nombre : `#${filtros.clienteId}`;
+  }
+  if (filtros.lavadorId) {
+    const [[l]] = await pool.query(`SELECT nombre FROM lavadores WHERE id = ?`, [filtros.lavadorId]);
+    filtrosAplicados.lavador = l ? l.nombre : `#${filtros.lavadorId}`;
+  }
+
   return {
     rango: { inicio, fin },
+    filtros: filtrosAplicados,
+    porDia: agruparVentasPorDia(pagos),
     totalVentas: total,
     cantidadVentas: pagos.length,
     ticketPromedio: pagos.length > 0 ? Math.round(total / pagos.length) : 0,
@@ -821,6 +871,9 @@ async function calcularReporteClientes() {
 
 module.exports = {
   calcularRangoAnterior,
+  condicionesVenta,
+  agruparVentasPorDia,
+  MAX_FILAS_DETALLE,
   calcularReporte,
   calcularReporteVentas,
   calcularReporteCompras,

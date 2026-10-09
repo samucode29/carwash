@@ -2024,6 +2024,26 @@ body.pagina-login {
   flex-wrap: wrap;
 }
 
+/* Filtros de los reportes (cliente, lavador, método de pago) */
+.rep-filtros {
+  display: flex;
+  align-items: center;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.rep-filtro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rep-filtro input[type="text"] { min-width: 260px; }
+.rep-filtro select { min-width: 200px; }
+@media (max-width: 768px) {
+  .rep-filtro { flex-direction: column; align-items: stretch; width: 100%; }
+  .rep-filtro input[type="text"], .rep-filtro select { min-width: 0; width: 100%; }
+}
+
 /* ==========================================================================
    MODO MÓVIL/CELULAR
    En escritorio no cambia nada de lo anterior. Acá solo se ajusta cómo se

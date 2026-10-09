@@ -7,7 +7,9 @@
  * Clientes que son una foto del momento actual.
  */
 const ReporteRepositorio = require('../repositorios/ReporteRepositorio');
+const ReporteDetalleRepositorio = require('../repositorios/ReporteDetalleRepositorio');
 const VistasReporte = require('../utilidades/vistasReporte');
+const VistasReporteDetalle = require('../utilidades/vistasReporteDetalle');
 const { calcularRangoPorPeriodo, obtenerFechaHoy } = require('../utilidades/fechas');
 const { generarPdfDocumento } = require('../utilidades/generadorReportePdf');
 
@@ -17,6 +19,20 @@ const ETIQUETAS_PERIODO = {
 
 // Reportes que son una foto del momento (no usan período).
 const SIN_PERIODO = new Set(['inventario', 'clientes']);
+
+const METODOS_PAGO = ['efectivo', 'tarjeta', 'transferencia', 'pse'];
+
+function errorDeFiltro(texto) {
+  return Object.assign(new Error(texto), { codigoHttp: 400 });
+}
+
+/** Id numérico positivo recibido por query (o null si no vino). */
+function idDeQuery(valor, nombre) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  const id = Number(valor);
+  if (!Number.isInteger(id) || id <= 0) throw errorDeFiltro(`${nombre} no es válido.`);
+  return id;
+}
 
 function resolverRango(query) {
   const periodo = query.periodo || 'dia';
@@ -50,7 +66,22 @@ async function construirDocumento(tipoPedido, query) {
       const previo = await ReporteRepositorio.calcularReporte(anterior.inicio, anterior.fin);
       return VistasReporte.vistaResumen(actual, previo, per);
     }
-    case 'ventas': return VistasReporte.vistaVentas(await ReporteRepositorio.calcularReporteVentas(rango.inicio, rango.fin), per);
+    case 'ventas': {
+      const metodo = query.metodo || null;
+      if (metodo && !METODOS_PAGO.includes(metodo)) throw errorDeFiltro('El método de pago no es válido.');
+      const filtros = { clienteId: idDeQuery(query.cliente_id, 'El cliente'), lavadorId: idDeQuery(query.lavador_id, 'El lavador'), metodo };
+      return VistasReporte.vistaVentas(await ReporteRepositorio.calcularReporteVentas(rango.inicio, rango.fin, filtros), per);
+    }
+    case 'cliente': {
+      const clienteId = idDeQuery(query.cliente_id, 'El cliente');
+      if (!clienteId) throw errorDeFiltro('Elige el cliente del que quieres el reporte.');
+      return VistasReporteDetalle.vistaCliente(await ReporteDetalleRepositorio.calcularReporteCliente(rango.inicio, rango.fin, clienteId), per);
+    }
+    case 'lavador': {
+      const lavadorId = idDeQuery(query.lavador_id, 'El lavador');
+      if (!lavadorId) throw errorDeFiltro('Elige el lavador del que quieres el reporte.');
+      return VistasReporteDetalle.vistaLavador(await ReporteDetalleRepositorio.calcularReporteLavador(rango.inicio, rango.fin, lavadorId), per);
+    }
     case 'compras': return VistasReporte.vistaCompras(await ReporteRepositorio.calcularReporteCompras(rango.inicio, rango.fin), per);
     case 'nomina': return VistasReporte.vistaNomina(await ReporteRepositorio.calcularReporteNomina(rango.inicio, rango.fin), per);
     case 'comparativo': return VistasReporte.vistaComparativo(await ReporteRepositorio.calcularReporteComparativo(rango.inicio, rango.fin), per);

@@ -264,10 +264,19 @@ function vistaResumen(r, previo, periodo) {
 // ---------------------------------------------------------------------------
 // VENTAS
 // ---------------------------------------------------------------------------
+function textoFiltrosVentas(f) {
+  const partes = [];
+  if (f && f.cliente) partes.push(`cliente ${f.cliente}`);
+  if (f && f.lavador) partes.push(`lavador ${f.lavador}`);
+  if (f && f.metodo) partes.push(`pago en ${F.etiquetaMetodo(f.metodo).toLowerCase()}`);
+  return partes.join(', ');
+}
+
 function vistaVentas(r, periodo) {
+  const filtrado = textoFiltrosVentas(r.filtros);
   const doc = documento({
-    tipo: 'ventas', titulo: 'Reporte de Ventas', periodo,
-    descripcion: 'Todo lo vendido en el período: cuándo se vende más, qué servicios y vehículos dejan más dinero, cómo pagan los clientes, quién atiende y el detalle de cada venta cobrada.'
+    tipo: 'ventas', titulo: filtrado ? 'Reporte de Ventas (filtrado)' : 'Reporte de Ventas', periodo,
+    descripcion: (filtrado ? `Solo las ventas con: ${filtrado}. ` : '') + 'Todo lo vendido en el período: cuándo se vende más, qué servicios y vehículos dejan más dinero, cómo pagan los clientes, quién atiende y el detalle de cada venta cobrada, día por día.'
   });
   const descuentos = r.totalDescuentoNegocio + r.totalDescuentoTrabajador;
 
@@ -280,6 +289,7 @@ function vistaVentas(r, periodo) {
     kpi('Propinas', F.moneda(r.totalPropinas), { tono: 'ok', detalle: '100% de los lavadores, no es ingreso' })
   );
 
+  if (filtrado) doc.hallazgos.push(`Este reporte está filtrado: solo cuenta las ventas con ${filtrado}. Quita el filtro para ver todo el negocio.`);
   if (r.cantidadVentas === 0) {
     doc.hallazgos.push('No hay ventas cobradas en este período.');
   } else {
@@ -307,6 +317,20 @@ function vistaVentas(r, periodo) {
     `Ventas por ${GRAN_TEXTO[r.serie.gran]}`,
     'Dinero cobrado en cada momento del período. Pasa el mouse sobre una columna para ver el valor exacto.',
     r.serie.gran, r.serie.etiquetas, [{ nombre: 'Ventas', valores: r.serie.ingresos, color: PALETA[0] }]
+  ));
+
+  doc.secciones.push(tabla(
+    'Ventas día por día',
+    'Lo vendido en cada día del período, con cuántas ventas fueron, cómo se pagó, los descuentos dados y las propinas recibidas. Del día más reciente al más antiguo.',
+    [col('Día'), col('Ventas', 'der'), col('Total vendido', 'der'), col('Ticket promedio', 'der'), col('Efectivo', 'der'), col('Tarjeta', 'der'), col('Transferencia', 'der'), col('PSE', 'der'), col('Descuentos', 'der'), col('Propinas', 'der')],
+    r.porDia.map(d => [F.fecha(d.fecha), F.entero(d.ventas), F.moneda(d.total), F.moneda(d.total / d.ventas), d.efectivo > 0 ? F.moneda(d.efectivo) : '-', d.tarjeta > 0 ? F.moneda(d.tarjeta) : '-', d.transferencia > 0 ? F.moneda(d.transferencia) : '-', d.pse > 0 ? F.moneda(d.pse) : '-', d.descuentoNegocio + d.descuentoTrabajador > 0 ? F.moneda(d.descuentoNegocio + d.descuentoTrabajador) : '-', d.propinas > 0 ? F.moneda(d.propinas) : '-']),
+    {
+      totales: ['Total', F.entero(r.cantidadVentas), F.moneda(r.totalVentas), F.moneda(r.ticketPromedio),
+        F.moneda(r.porDia.reduce((s, d) => s + d.efectivo, 0)), F.moneda(r.porDia.reduce((s, d) => s + d.tarjeta, 0)),
+        F.moneda(r.porDia.reduce((s, d) => s + d.transferencia, 0)), F.moneda(r.porDia.reduce((s, d) => s + d.pse, 0)),
+        F.moneda(r.totalDescuentoNegocio + r.totalDescuentoTrabajador), F.moneda(r.porDia.reduce((s, d) => s + d.propinas, 0))],
+      vacio: 'No hay ventas en el período.'
+    }
   ));
 
   doc.secciones.push(barras(
@@ -919,5 +943,6 @@ function vistaClientes(r, fechaCorte) {
 
 module.exports = {
   vistaResumen, vistaVentas, vistaCompras, vistaInventario, vistaNomina,
-  vistaComparativo, vistaOperativo, vistaAsistencia, vistaClientes
+  vistaComparativo, vistaOperativo, vistaAsistencia, vistaClientes,
+  helpers: { documento, kpi, col, celda, tabla, serie, barras, dona, texto, maximo, frasePico, PALETA, GRAN_TEXTO }
 };

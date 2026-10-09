@@ -2591,7 +2591,86 @@ const app = {
     document.querySelector('#tab-dashboard .period-selector:not(#reporteTipoSelector)').classList.toggle('hidden', sinPeriodo);
     document.getElementById('reportePersonalizadoBox').classList.toggle('hidden', sinPeriodo || this.dashboardPeriod !== 'personalizado');
 
+    this.prepararFiltrosReporte(tipo).then(() => this.loadReporteActivo());
+  },
+
+  /**
+   * Muestra los filtros que aplican al reporte elegido (Ventas: cliente,
+   * lavador y método de pago; "Un cliente" y "Un lavador" piden a la persona)
+   * y carga las listas para elegir.
+   */
+  async prepararFiltrosReporte(tipo) {
+    this.reporteFiltros = this.reporteFiltros || { clienteId: '', clienteTexto: '', lavadorId: '', metodo: '' };
+    const usaCliente = tipo === 'ventas' || tipo === 'cliente';
+    const usaLavador = tipo === 'ventas' || tipo === 'lavador';
+    const usaMetodo = tipo === 'ventas';
+    document.getElementById('reporteFiltros').classList.toggle('hidden', !(usaCliente || usaLavador || usaMetodo));
+    document.getElementById('repFiltroClienteBox').classList.toggle('hidden', !usaCliente);
+    document.getElementById('repFiltroLavadorBox').classList.toggle('hidden', !usaLavador);
+    document.getElementById('repFiltroMetodoBox').classList.toggle('hidden', !usaMetodo);
+
+    if (usaCliente) {
+      try {
+        const clientes = await ApiCliente.get('/api/clientes');
+        this.repClientesMapa = {};
+        document.getElementById('repClientesLista').innerHTML = clientes.map(c => {
+          const etiqueta = `${c.nombre} · ${c.telefono || 'sin teléfono'}`;
+          this.repClientesMapa[etiqueta] = c.id;
+          return `<option value="${escapeHtml(etiqueta)}"></option>`;
+        }).join('');
+      } catch (err) { console.error(err); }
+    }
+    if (usaLavador) {
+      try {
+        const lavadores = await ApiCliente.get('/api/personal/lavadores');
+        const opciones = lavadores.map(l => `<option value="${l.id}">${escapeHtml(l.nombre)}${l.estado === 'inactivo' ? ' (inactivo)' : ''}</option>`).join('');
+        const selector = document.getElementById('repFiltroLavador');
+        selector.innerHTML = `<option value="">${tipo === 'lavador' ? 'Elige un lavador...' : 'Todos'}</option>${opciones}`;
+        selector.value = this.reporteFiltros.lavadorId || '';
+      } catch (err) { console.error(err); }
+    }
+    document.getElementById('repFiltroCliente').value = this.reporteFiltros.clienteTexto || '';
+    document.getElementById('repFiltroMetodo').value = this.reporteFiltros.metodo || '';
+    document.getElementById('btnQuitarFiltrosReporte').classList.toggle('hidden', tipo !== 'ventas');
+  },
+
+  cambiarFiltroReporte() {
+    const texto = document.getElementById('repFiltroCliente').value.trim();
+    const clienteId = texto ? (this.repClientesMapa || {})[texto] : '';
+    if (texto && !clienteId) this.toast('Elige el cliente de la lista que aparece al escribir.', 'warning');
+    this.reporteFiltros = {
+      clienteId: clienteId || '',
+      clienteTexto: clienteId ? texto : '',
+      lavadorId: document.getElementById('repFiltroLavador').value || '',
+      metodo: document.getElementById('repFiltroMetodo').value || ''
+    };
     this.loadReporteActivo();
+  },
+
+  limpiarFiltrosReporte() {
+    this.reporteFiltros = { clienteId: '', clienteTexto: '', lavadorId: '', metodo: '' };
+    document.getElementById('repFiltroCliente').value = '';
+    document.getElementById('repFiltroLavador').value = '';
+    document.getElementById('repFiltroMetodo').value = '';
+    this.loadReporteActivo();
+  },
+
+  /** Parte de la consulta con los filtros que aplican al reporte `tipo`. */
+  construirQueryFiltros(tipo) {
+    const f = this.reporteFiltros || {};
+    const partes = [];
+    if ((tipo === 'ventas' || tipo === 'cliente') && f.clienteId) partes.push(`cliente_id=${f.clienteId}`);
+    if ((tipo === 'ventas' || tipo === 'lavador') && f.lavadorId) partes.push(`lavador_id=${f.lavadorId}`);
+    if (tipo === 'ventas' && f.metodo) partes.push(`metodo=${f.metodo}`);
+    return partes.length ? `&${partes.join('&')}` : '';
+  },
+
+  /** Mensaje cuando el reporte necesita elegir a una persona y todavía no se eligió. */
+  faltaPersonaReporte(tipo) {
+    const f = this.reporteFiltros || {};
+    if (tipo === 'cliente' && !f.clienteId) return 'Elige un cliente (escribe su nombre o teléfono arriba) para ver todo lo que ha comprado.';
+    if (tipo === 'lavador' && !f.lavadorId) return 'Elige un lavador arriba para ver qué hizo, en qué fechas y cuánto ganó.';
+    return null;
   },
 
   /**
@@ -2604,6 +2683,12 @@ const app = {
     if (!contenedor) return;
 
     const sinPeriodo = tipo === 'inventario' || tipo === 'clientes';
+    const falta = this.faltaPersonaReporte(tipo);
+    if (falta) {
+      this.reporteIdPedido = (this.reporteIdPedido || 0) + 1;
+      contenedor.innerHTML = `<p class="rep-empty">${escapeHtml(falta)}</p>`;
+      return;
+    }
     if (!sinPeriodo && this.dashboardPeriod === 'personalizado') {
       const inicio = document.getElementById('reporteFechaInicio').value;
       const fin = document.getElementById('reporteFechaFin').value;
@@ -2620,7 +2705,7 @@ const app = {
     const idPedido = (this.reporteIdPedido = (this.reporteIdPedido || 0) + 1);
     contenedor.innerHTML = '<div class="rep-loading"><div class="rep-spinner"></div>Calculando el reporte...</div>';
     try {
-      const vista = await ApiCliente.get(`/api/reportes/${tipo}/vista${sinPeriodo ? '' : `?${this.construirQueryPeriodo()}`}`);
+      const vista = await ApiCliente.get(`/api/reportes/${tipo}/vista${sinPeriodo ? '' : `?${this.construirQueryPeriodo()}${this.construirQueryFiltros(tipo)}`}`);
       if (idPedido !== this.reporteIdPedido) return; // llegó una respuesta de una elección anterior
       this.renderReporteVista(vista);
     } catch (err) {
@@ -2697,7 +2782,7 @@ const app = {
     else if (s.tipo === 'barras') cuerpo = this.repBarrasHtml(s);
     else if (s.tipo === 'dona') cuerpo = this.repDonaHtml(s);
     else if (s.tipo === 'formula') cuerpo = this.repFormulaHtml(s);
-    else if (s.tipo === 'texto') cuerpo = `<p>${e(s.texto)}</p>`;
+    else if (s.tipo === 'texto') cuerpo = `<p style="white-space: pre-line">${e(s.texto)}</p>`;
     else if (s.tipo === 'tabla') {
       cuerpo = this.repTablaHtml(s, idx);
       const botones = [];
@@ -2884,8 +2969,10 @@ const app = {
    */
   async descargarReportePdf() {
     const tipo = this.reporteTipoActivo || 'resumen';
+    const falta = this.faltaPersonaReporte(tipo);
+    if (falta) { this.toast(falta, 'warning'); return; }
     const endpoint = tipo === 'resumen' ? 'dashboard' : tipo;
-    const query = (tipo === 'inventario' || tipo === 'clientes') ? '' : `?${this.construirQueryPeriodo()}`;
+    const query = (tipo === 'inventario' || tipo === 'clientes') ? '' : `?${this.construirQueryPeriodo()}${this.construirQueryFiltros(tipo)}`;
     const url = `/api/reportes/${endpoint}/pdf${query}`;
     try {
       const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${ApiCliente.obtenerToken()}` } });

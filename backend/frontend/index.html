@@ -734,6 +734,32 @@
             <button class="period-btn" data-reporte="operativo" onclick="app.setReporteTipo('operativo')">Operativo</button>
             <button class="period-btn" data-reporte="asistencia" onclick="app.setReporteTipo('asistencia')">Asistencia</button>
             <button class="period-btn" data-reporte="clientes" onclick="app.setReporteTipo('clientes')">Clientes</button>
+            <button class="period-btn" data-reporte="cliente" onclick="app.setReporteTipo('cliente')">Un cliente</button>
+            <button class="period-btn" data-reporte="lavador" onclick="app.setReporteTipo('lavador')">Un lavador</button>
+          </div>
+
+          <!-- Filtros del reporte activo: Ventas (cliente, lavador, método), Un cliente, Un lavador -->
+          <div id="reporteFiltros" class="rep-filtros hidden">
+            <div id="repFiltroClienteBox" class="rep-filtro hidden">
+              <label for="repFiltroCliente" class="text-sm text-muted">Cliente:</label>
+              <input type="text" id="repFiltroCliente" list="repClientesLista" placeholder="Escribe nombre o teléfono y elige..." autocomplete="off" onchange="app.cambiarFiltroReporte()">
+              <datalist id="repClientesLista"></datalist>
+            </div>
+            <div id="repFiltroLavadorBox" class="rep-filtro hidden">
+              <label for="repFiltroLavador" class="text-sm text-muted">Lavador:</label>
+              <select id="repFiltroLavador" onchange="app.cambiarFiltroReporte()"></select>
+            </div>
+            <div id="repFiltroMetodoBox" class="rep-filtro hidden">
+              <label for="repFiltroMetodo" class="text-sm text-muted">Método de pago:</label>
+              <select id="repFiltroMetodo" onchange="app.cambiarFiltroReporte()">
+                <option value="">Todos</option>
+                <option value="efectivo">Efectivo</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="pse">PSE</option>
+              </select>
+            </div>
+            <button class="btn btn-sm btn-outline" id="btnQuitarFiltrosReporte" onclick="app.limpiarFiltrosReporte()">Quitar filtros</button>
           </div>
 
           <!-- Rango de fechas personalizado + descarga de reporte en PDF -->
