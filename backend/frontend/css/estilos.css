@@ -2037,6 +2037,7 @@ body.pagina-login {
   align-items: center;
   gap: 8px;
 }
+.rep-filtro label { white-space: nowrap; }
 .rep-filtro input[type="text"] { min-width: 260px; }
 .rep-filtro select { min-width: 200px; }
 @media (max-width: 768px) {

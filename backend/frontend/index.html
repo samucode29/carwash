@@ -734,19 +734,17 @@
             <button class="period-btn" data-reporte="operativo" onclick="app.setReporteTipo('operativo')">Operativo</button>
             <button class="period-btn" data-reporte="asistencia" onclick="app.setReporteTipo('asistencia')">Asistencia</button>
             <button class="period-btn" data-reporte="clientes" onclick="app.setReporteTipo('clientes')">Clientes</button>
-            <button class="period-btn" data-reporte="cliente" onclick="app.setReporteTipo('cliente')">Un cliente</button>
-            <button class="period-btn" data-reporte="lavador" onclick="app.setReporteTipo('lavador')">Un lavador</button>
           </div>
 
-          <!-- Filtros del reporte activo: Ventas (cliente, lavador, método), Un cliente, Un lavador -->
+          <!-- Filtros del reporte activo: Ventas (cliente, lavador, método); Clientes (ver un cliente); Nómina (ver un lavador) -->
           <div id="reporteFiltros" class="rep-filtros hidden">
             <div id="repFiltroClienteBox" class="rep-filtro hidden">
-              <label for="repFiltroCliente" class="text-sm text-muted">Cliente:</label>
+              <label for="repFiltroCliente" id="repFiltroClienteLabel" class="text-sm text-muted">Cliente:</label>
               <input type="text" id="repFiltroCliente" list="repClientesLista" placeholder="Escribe nombre o teléfono y elige..." autocomplete="off" onchange="app.cambiarFiltroReporte()">
               <datalist id="repClientesLista"></datalist>
             </div>
             <div id="repFiltroLavadorBox" class="rep-filtro hidden">
-              <label for="repFiltroLavador" class="text-sm text-muted">Lavador:</label>
+              <label for="repFiltroLavador" id="repFiltroLavadorLabel" class="text-sm text-muted">Lavador:</label>
               <select id="repFiltroLavador" onchange="app.cambiarFiltroReporte()"></select>
             </div>
             <div id="repFiltroMetodoBox" class="rep-filtro hidden">

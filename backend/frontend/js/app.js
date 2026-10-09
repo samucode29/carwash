@@ -2582,32 +2582,62 @@ const app = {
   },
 
   /** Cambia cuál de los reportes se está viendo en pantalla. */
-  setReporteTipo(tipo) {
+  async setReporteTipo(tipo) {
     this.reporteTipoActivo = tipo;
     document.querySelectorAll('#reporteTipoSelector .period-btn').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-reporte') === tipo));
-
-    // Inventario y Clientes son una foto del momento: no aplica período.
-    const sinPeriodo = tipo === 'inventario' || tipo === 'clientes';
-    document.querySelector('#tab-dashboard .period-selector:not(#reporteTipoSelector)').classList.toggle('hidden', sinPeriodo);
-    document.getElementById('reportePersonalizadoBox').classList.toggle('hidden', sinPeriodo || this.dashboardPeriod !== 'personalizado');
-
-    this.prepararFiltrosReporte(tipo).then(() => this.loadReporteActivo());
+    await this.prepararFiltrosReporte(tipo);
+    this.actualizarSelectorPeriodoReporte();
+    this.loadReporteActivo();
   },
 
   /**
-   * Muestra los filtros que aplican al reporte elegido (Ventas: cliente,
-   * lavador y método de pago; "Un cliente" y "Un lavador" piden a la persona)
-   * y carga las listas para elegir.
+   * Filtros de cada pestaña de reportes (cada una guarda los suyos):
+   *  - Ventas: cliente, lavador y método de pago (todos opcionales).
+   *  - Clientes: "ver un cliente" abre el subreporte con todo lo de esa persona.
+   *  - Nómina: "ver un lavador" abre el subreporte con lo que hizo y ganó.
    */
-  async prepararFiltrosReporte(tipo) {
-    this.reporteFiltros = this.reporteFiltros || { clienteId: '', clienteTexto: '', lavadorId: '', metodo: '' };
-    const usaCliente = tipo === 'ventas' || tipo === 'cliente';
-    const usaLavador = tipo === 'ventas' || tipo === 'lavador';
-    const usaMetodo = tipo === 'ventas';
+  filtrosDeReporte(tab) {
+    this.reporteFiltrosPorTab = this.reporteFiltrosPorTab || {};
+    if (!this.reporteFiltrosPorTab[tab]) this.reporteFiltrosPorTab[tab] = { clienteId: '', clienteTexto: '', lavadorId: '', metodo: '' };
+    return this.reporteFiltrosPorTab[tab];
+  },
+
+  /** Reporte que realmente se pide: la pestaña, o su subreporte si se eligió una persona. */
+  tipoEfectivoReporte() {
+    const tab = this.reporteTipoActivo || 'resumen';
+    const f = this.filtrosDeReporte(tab);
+    if (tab === 'clientes' && f.clienteId) return 'cliente';
+    if (tab === 'nomina' && f.lavadorId) return 'lavador';
+    return tab;
+  },
+
+  /** Inventario y la lista general de Clientes son una foto del momento: no aplica período. */
+  reporteSinPeriodo() {
+    const tipo = this.tipoEfectivoReporte();
+    return tipo === 'inventario' || tipo === 'clientes';
+  },
+
+  actualizarSelectorPeriodoReporte() {
+    const sinPeriodo = this.reporteSinPeriodo();
+    document.querySelector('#tab-dashboard .period-selector:not(#reporteTipoSelector)').classList.toggle('hidden', sinPeriodo);
+    document.getElementById('reportePersonalizadoBox').classList.toggle('hidden', sinPeriodo || this.dashboardPeriod !== 'personalizado');
+  },
+
+  async prepararFiltrosReporte(tab) {
+    const f = this.filtrosDeReporte(tab);
+    const usaCliente = tab === 'ventas' || tab === 'clientes';
+    const usaLavador = tab === 'ventas' || tab === 'nomina';
+    const usaMetodo = tab === 'ventas';
     document.getElementById('reporteFiltros').classList.toggle('hidden', !(usaCliente || usaLavador || usaMetodo));
     document.getElementById('repFiltroClienteBox').classList.toggle('hidden', !usaCliente);
     document.getElementById('repFiltroLavadorBox').classList.toggle('hidden', !usaLavador);
     document.getElementById('repFiltroMetodoBox').classList.toggle('hidden', !usaMetodo);
+
+    document.getElementById('repFiltroClienteLabel').textContent = tab === 'clientes' ? 'Ver un cliente:' : 'Cliente:';
+    document.getElementById('repFiltroCliente').placeholder = tab === 'clientes'
+      ? 'Escribe nombre o teléfono y elígelo (vacío = todos)'
+      : 'Escribe nombre o teléfono y elige...';
+    document.getElementById('repFiltroLavadorLabel').textContent = tab === 'nomina' ? 'Ver un lavador:' : 'Lavador:';
 
     if (usaCliente) {
       try {
@@ -2625,39 +2655,53 @@ const app = {
         const lavadores = await ApiCliente.get('/api/personal/lavadores');
         const opciones = lavadores.map(l => `<option value="${l.id}">${escapeHtml(l.nombre)}${l.estado === 'inactivo' ? ' (inactivo)' : ''}</option>`).join('');
         const selector = document.getElementById('repFiltroLavador');
-        selector.innerHTML = `<option value="">${tipo === 'lavador' ? 'Elige un lavador...' : 'Todos'}</option>${opciones}`;
-        selector.value = this.reporteFiltros.lavadorId || '';
+        selector.innerHTML = `<option value="">${tab === 'nomina' ? 'Todos (reporte general)' : 'Todos'}</option>${opciones}`;
+        selector.value = f.lavadorId || '';
       } catch (err) { console.error(err); }
     }
-    document.getElementById('repFiltroCliente').value = this.reporteFiltros.clienteTexto || '';
-    document.getElementById('repFiltroMetodo').value = this.reporteFiltros.metodo || '';
-    document.getElementById('btnQuitarFiltrosReporte').classList.toggle('hidden', tipo !== 'ventas');
+    document.getElementById('repFiltroCliente').value = f.clienteTexto || '';
+    document.getElementById('repFiltroMetodo').value = f.metodo || '';
+    this.actualizarBotonQuitarFiltros(tab);
+  },
+
+  /** El botón de limpiar solo aparece cuando hay algo elegido. */
+  actualizarBotonQuitarFiltros(tab) {
+    const f = this.filtrosDeReporte(tab);
+    const boton = document.getElementById('btnQuitarFiltrosReporte');
+    boton.textContent = tab === 'ventas' ? 'Quitar filtros' : 'Volver al reporte general';
+    boton.classList.toggle('hidden', !(f.clienteId || f.lavadorId || f.metodo));
   },
 
   cambiarFiltroReporte() {
+    const tab = this.reporteTipoActivo || 'resumen';
     const texto = document.getElementById('repFiltroCliente').value.trim();
     const clienteId = texto ? (this.repClientesMapa || {})[texto] : '';
     if (texto && !clienteId) this.toast('Elige el cliente de la lista que aparece al escribir.', 'warning');
-    this.reporteFiltros = {
+    this.reporteFiltrosPorTab[tab] = {
       clienteId: clienteId || '',
       clienteTexto: clienteId ? texto : '',
       lavadorId: document.getElementById('repFiltroLavador').value || '',
       metodo: document.getElementById('repFiltroMetodo').value || ''
     };
+    this.actualizarBotonQuitarFiltros(tab);
+    this.actualizarSelectorPeriodoReporte();
     this.loadReporteActivo();
   },
 
   limpiarFiltrosReporte() {
-    this.reporteFiltros = { clienteId: '', clienteTexto: '', lavadorId: '', metodo: '' };
+    const tab = this.reporteTipoActivo || 'resumen';
+    this.reporteFiltrosPorTab[tab] = { clienteId: '', clienteTexto: '', lavadorId: '', metodo: '' };
     document.getElementById('repFiltroCliente').value = '';
     document.getElementById('repFiltroLavador').value = '';
     document.getElementById('repFiltroMetodo').value = '';
+    this.actualizarBotonQuitarFiltros(tab);
+    this.actualizarSelectorPeriodoReporte();
     this.loadReporteActivo();
   },
 
-  /** Parte de la consulta con los filtros que aplican al reporte `tipo`. */
+  /** Parte de la consulta con los filtros del reporte que se está pidiendo (`tipo`, ya sea la pestaña o su subreporte). */
   construirQueryFiltros(tipo) {
-    const f = this.reporteFiltros || {};
+    const f = this.filtrosDeReporte(this.reporteTipoActivo || 'resumen');
     const partes = [];
     if ((tipo === 'ventas' || tipo === 'cliente') && f.clienteId) partes.push(`cliente_id=${f.clienteId}`);
     if ((tipo === 'ventas' || tipo === 'lavador') && f.lavadorId) partes.push(`lavador_id=${f.lavadorId}`);
@@ -2665,30 +2709,16 @@ const app = {
     return partes.length ? `&${partes.join('&')}` : '';
   },
 
-  /** Mensaje cuando el reporte necesita elegir a una persona y todavía no se eligió. */
-  faltaPersonaReporte(tipo) {
-    const f = this.reporteFiltros || {};
-    if (tipo === 'cliente' && !f.clienteId) return 'Elige un cliente (escribe su nombre o teléfono arriba) para ver todo lo que ha comprado.';
-    if (tipo === 'lavador' && !f.lavadorId) return 'Elige un lavador arriba para ver qué hizo, en qué fechas y cuánto ganó.';
-    return null;
-  },
-
   /**
    * Pide al servidor el "documento" del reporte activo (indicadores, hallazgos,
    * gráficos y tablas ya calculados; es el mismo que se descarga en PDF) y lo dibuja.
    */
   async loadReporteActivo() {
-    const tipo = this.reporteTipoActivo || 'resumen';
+    const tipo = this.tipoEfectivoReporte();
     const contenedor = document.getElementById('reporteVista');
     if (!contenedor) return;
 
-    const sinPeriodo = tipo === 'inventario' || tipo === 'clientes';
-    const falta = this.faltaPersonaReporte(tipo);
-    if (falta) {
-      this.reporteIdPedido = (this.reporteIdPedido || 0) + 1;
-      contenedor.innerHTML = `<p class="rep-empty">${escapeHtml(falta)}</p>`;
-      return;
-    }
+    const sinPeriodo = this.reporteSinPeriodo();
     if (!sinPeriodo && this.dashboardPeriod === 'personalizado') {
       const inicio = document.getElementById('reporteFechaInicio').value;
       const fin = document.getElementById('reporteFechaFin').value;
@@ -2968,11 +2998,9 @@ const app = {
    * token JWT en el header Authorization, así que se pide como blob.
    */
   async descargarReportePdf() {
-    const tipo = this.reporteTipoActivo || 'resumen';
-    const falta = this.faltaPersonaReporte(tipo);
-    if (falta) { this.toast(falta, 'warning'); return; }
+    const tipo = this.tipoEfectivoReporte();
     const endpoint = tipo === 'resumen' ? 'dashboard' : tipo;
-    const query = (tipo === 'inventario' || tipo === 'clientes') ? '' : `?${this.construirQueryPeriodo()}${this.construirQueryFiltros(tipo)}`;
+    const query = this.reporteSinPeriodo() ? '' : `?${this.construirQueryPeriodo()}${this.construirQueryFiltros(tipo)}`;
     const url = `/api/reportes/${endpoint}/pdf${query}`;
     try {
       const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${ApiCliente.obtenerToken()}` } });
