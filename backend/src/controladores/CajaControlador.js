@@ -136,8 +136,24 @@ async function cerrarCaja(req, res) {
   res.status(201).json(cierre);
 }
 
+/**
+ * Reabre la caja de HOY (borra su cierre) para poder seguir cobrando y volver
+ * a cerrar con los totales actualizados. Solo la de hoy: los cierres de días
+ * anteriores quedan como historial definitivo.
+ */
+async function reabrirCaja(req, res) {
+  const hoy = obtenerFechaHoy();
+  const cierre = await CajaRepositorio.obtenerCierrePorFecha(hoy);
+  if (!cierre) {
+    return res.status(400).json({ error: 'La caja de hoy no está cerrada.' });
+  }
+  await CajaRepositorio.eliminarCierre(cierre.id);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'reabrir_caja', `Caja de ${hoy} reabierta (el cierre anterior era de $${cierre.total_general})`);
+  res.json({ mensaje: 'Caja reabierta.', fecha: hoy });
+}
+
 async function listarHistorialCierres(req, res) {
   res.json(await CajaRepositorio.listarHistorialCierres());
 }
 
-module.exports = { registrarPago, obtenerResumenCaja, cerrarCaja, listarHistorialCierres };
+module.exports = { registrarPago, obtenerResumenCaja, cerrarCaja, reabrirCaja, listarHistorialCierres };

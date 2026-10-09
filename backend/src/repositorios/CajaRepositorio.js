@@ -111,6 +111,10 @@ async function crearCierre({ fecha, usuarioId, resumen, observaciones }) {
   return filas[0];
 }
 
+async function eliminarCierre(id) {
+  await pool.query(`DELETE FROM cierres_caja WHERE id = ?`, [id]);
+}
+
 async function listarHistorialCierres() {
   const [filas] = await pool.query(
     `SELECT c.*, u.nombre AS usuario_nombre
@@ -123,5 +127,5 @@ async function listarHistorialCierres() {
 
 module.exports = {
   registrarPago, obtenerResumenPorFecha, contarPendientesPorFecha, listarCitasPendientes, cancelarCitasPendientes,
-  obtenerCierrePorFecha, crearCierre, listarHistorialCierres
+  obtenerCierrePorFecha, crearCierre, eliminarCierre, listarHistorialCierres
 };

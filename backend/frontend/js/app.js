@@ -2436,6 +2436,8 @@ const app = {
       const btnCerrar = document.getElementById('btnCerrarCaja');
       const avisoPendientes = document.getElementById('cajaAvisoPendientes');
       const pendientes = data.pendientes || { total: 0, turnos: 0, ordenes: 0 };
+      const btnReabrir = document.getElementById('btnReabrirCaja');
+      if (btnReabrir) btnReabrir.classList.toggle('hidden', !(data.esta_cerrada && this.currentUser.rol === 'administrador'));
       if (data.esta_cerrada) {
         btnCerrar.disabled = true;
         btnCerrar.textContent = 'Caja de Hoy Ya Cerrada';
@@ -2474,6 +2476,17 @@ const app = {
         `).join('');
       }
     } catch (err) { console.error(err); }
+  },
+
+  async reabrirCaja() {
+    if (!confirm('¿Reabrir la caja de hoy? Se elimina el cierre actual y podrá cobrar de nuevo y volver a cerrarla con los totales actualizados.')) return;
+    try {
+      await ApiCliente.post('/api/caja/reabrir', {});
+      this.toast('Caja de hoy reabierta.', 'success');
+      this.loadCaja();
+    } catch (err) {
+      this.toast(err.message || 'No se pudo reabrir la caja.', 'error');
+    }
   },
 
   abrirModalCerrarCaja() {
