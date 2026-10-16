@@ -76,62 +76,6 @@ async function aplicarMigraciones() {
   await separarNombresYApellidos();
   await prepararCuentasDeLavador();
   await corregirCitasDeOrdenesCanceladas();
-  await reiniciarDatosDelMes();
-}
-
-/**
- * Reinicio de una sola vez pedido por el administrador: borra TODO lo transaccional (ventas, compras, nómina,
- * gastos, caja, asistencia, citas...) y carga de nuevo solo lo mínimo en octubre 2026 (10 ventas y 2 compras,
- * ver reinicioMes.js). Antes de borrar guarda una copia de cada tabla (respaldo_2026_10_16_*), solo actúa si
- * existen los clientes, lavadores, servicios e insumos que usan los datos nuevos, y queda marcado para no
- * repetirse. Si algo falla, la transacción se deshace y no se toca nada.
- */
-async function reiniciarDatosDelMes() {
-  const CLAVE = 'reinicio_datos_2026_10_16';
-  await pool.query(`CREATE TABLE IF NOT EXISTS mantenimientos_unicos (clave VARCHAR(80) PRIMARY KEY, aplicado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
-  const [ya] = await pool.query(`SELECT 1 FROM mantenimientos_unicos WHERE clave = ?`, [CLAVE]);
-  if (ya.length > 0) return;
-
-  // Solo en la base que se revisó (mismos clientes, lavadores, servicios e insumos).
-  const [[huella]] = await pool.query(
-    `SELECT (SELECT COUNT(*) FROM clientes WHERE id IN (78, 70, 27, 65, 41, 43, 32)) AS clientes,
-            (SELECT COUNT(*) FROM vehiculos WHERE id IN (68, 60, 17, 55, 31, 33, 22)) AS vehiculos,
-            (SELECT COUNT(*) FROM lavadores WHERE id IN (1, 4, 5, 6, 10, 13, 14)) AS lavadores,
-            (SELECT COUNT(*) FROM servicios WHERE id IN (1, 2, 3, 4, 5, 6, 8, 10)) AS servicios,
-            (SELECT COUNT(*) FROM insumos WHERE id IN (1, 2, 3)) AS insumos,
-            (SELECT COUNT(*) FROM proveedores WHERE id = 1) AS proveedores,
-            (SELECT COUNT(*) FROM usuarios WHERE id = 1) AS usuarios,
-            (SELECT COUNT(*) FROM clientes WHERE id = 70 AND nombre = 'Adriana Salazar') AS cliente70,
-            (SELECT COUNT(*) FROM lavadores WHERE id = 1 AND nombre = 'Jorge Martínez') AS lavador1`
-  );
-  const completo = Number(huella.clientes) === 7 && Number(huella.vehiculos) === 7 && Number(huella.lavadores) === 7 && Number(huella.servicios) === 8
-    && Number(huella.insumos) === 3 && Number(huella.proveedores) === 1 && Number(huella.usuarios) === 1 && Number(huella.cliente70) === 1 && Number(huella.lavador1) === 1;
-  if (!completo) {
-    console.log('ℹ️  Reinicio de datos del mes: esta base no es la revisada (faltan clientes/lavadores/servicios); no se tocó nada.');
-    return;
-  }
-
-  const TABLAS = ['facturas', 'pagos', 'movimientos_inventario', 'insumos_entregados', 'ordenes_servicio', 'orden_lavadores', 'orden_servicios_extra',
-    'turno_servicios_extra', 'turnos', 'citas', 'cierres_caja', 'liquidaciones_lavador', 'pagos_salario', 'asistencia_sesiones', 'asistencia', 'gastos_operativos', 'insumos'];
-  for (const tabla of TABLAS) {
-    await pool.query(`CREATE TABLE IF NOT EXISTS respaldo_2026_10_16_${tabla} AS SELECT * FROM ${tabla}`);
-  }
-
-  const conexion = await pool.getConnection();
-  try {
-    await conexion.beginTransaction();
-    for (const sentencia of require('./reinicioMes')) {
-      await conexion.query(sentencia);
-    }
-    await conexion.query(`INSERT INTO mantenimientos_unicos (clave) VALUES (?)`, [CLAVE]);
-    await conexion.commit();
-    console.log('🛠  Reinicio aplicado: datos transaccionales borrados y cargados de nuevo (10 ventas y 2 compras); copia en las tablas respaldo_2026_10_16_*');
-  } catch (err) {
-    await conexion.rollback();
-    console.error('⚠️  No se pudo aplicar el reinicio de datos (no se cambió nada):', err.message);
-  } finally {
-    conexion.release();
-  }
 }
 
 /**
