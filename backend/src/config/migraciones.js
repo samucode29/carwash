@@ -76,6 +76,51 @@ async function aplicarMigraciones() {
   await separarNombresYApellidos();
   await prepararCuentasDeLavador();
   await corregirCitasDeOrdenesCanceladas();
+  await quitarCompraDeCepillosErronea();
+}
+
+/**
+ * Corrección de una sola vez pedida por el administrador: quita la compra de
+ * 1.000 cepillos por $10.000.000 (factura COMCE-151026-001) junto con las dos
+ * entregas de cepillo (950 y 265) que solo fueron posibles con esa compra, y
+ * deja las existencias como estaban antes de ella. Solo actúa si TODOS los
+ * registros siguen exactamente como se revisaron (mismos ids y valores); si
+ * algo no coincide no toca nada. Es seguro dejarla: después de aplicarse no
+ * encuentra la factura y no hace nada.
+ */
+async function quitarCompraDeCepillosErronea() {
+  const conexion = await pool.getConnection();
+  try {
+    await conexion.beginTransaction();
+    const [factura] = await conexion.query(
+      `SELECT id FROM facturas WHERE id = 1574 AND numero_factura = 'COMCE-151026-001' AND tipo = 'compra' AND total = 10000000 AND movimiento_id = 36 FOR UPDATE`
+    );
+    if (factura.length === 0) { await conexion.rollback(); return; }
+
+    const [entrada] = await conexion.query(`SELECT id FROM movimientos_inventario WHERE id = 36 AND insumo_id = 3 AND tipo = 'entrada' AND cantidad = 1000 FOR UPDATE`);
+    const [salidas] = await conexion.query(`SELECT id FROM movimientos_inventario WHERE id IN (37, 38) AND insumo_id = 3 AND tipo = 'salida' AND cantidad IN (950, 265) FOR UPDATE`);
+    const [entregas] = await conexion.query(`SELECT id FROM insumos_entregados WHERE id IN (3, 4) AND insumo_id = 3 AND cantidad IN (950, 265) FOR UPDATE`);
+    if (entrada.length !== 1 || salidas.length !== 2 || entregas.length !== 2) {
+      await conexion.rollback();
+      console.log('⚠️  Corrección de la compra de cepillos: los registros no coinciden con lo revisado; no se tocó nada.');
+      return;
+    }
+
+    await conexion.query(`DELETE FROM facturas WHERE id = 1574`);
+    await conexion.query(`DELETE FROM movimientos_inventario WHERE id IN (36, 37, 38)`);
+    await conexion.query(`DELETE FROM insumos_entregados WHERE id IN (3, 4)`);
+    // Se quita la entrada (-1000) y se devuelven las dos entregas (+1215): neto +215 sobre las existencias de hoy.
+    const [stock] = await conexion.query(`UPDATE insumos SET stock_actual = stock_actual - 1000 + 1215 WHERE id = 3 AND stock_actual - 1000 + 1215 >= 0`);
+    if (stock.affectedRows !== 1) throw new Error('no se pudo ajustar el stock de cepillos');
+
+    await conexion.commit();
+    console.log('🛠  Corrección aplicada: se quitó la compra de 1.000 cepillos ($10.000.000) y sus dos entregas; existencias de cepillo ajustadas');
+  } catch (err) {
+    await conexion.rollback();
+    console.error('⚠️  No se pudo aplicar la corrección de la compra de cepillos:', err.message);
+  } finally {
+    conexion.release();
+  }
 }
 
 /**
