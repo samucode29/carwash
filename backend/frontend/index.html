@@ -1391,9 +1391,10 @@
           </div>
         </div>
         <div class="form-group">
-          <label>Salario del período (<span id="pagSalPeriodicidad">--</span>):</label>
+          <label id="pagSalBaseLabel">Salario del período (<span id="pagSalPeriodicidad">--</span>):</label>
           <input type="text" id="pagSalBase" readonly class="input-readonly">
         </div>
+        <div id="pagSalBloqueAjustes">
         <div class="form-row">
           <div class="form-group flex-1">
             <label>Horas extra (escríbelas tú):</label>
@@ -1412,9 +1413,16 @@
           <label>Descuentos (inasistencias, anticipos, etc.):</label>
           <input type="number" id="pagSalDescuentos" value="0" min="0" oninput="app.recalcSalarioTotal()">
         </div>
+        </div>
         <div class="pay-summary">
-          <span class="pay-label">Neto a Pagar:</span>
+          <span class="pay-label" id="pagSalTotalLabel">Total del período:</span>
           <span class="pay-amount" id="pagSalNetoAPagar">$0</span>
+        </div>
+        <div class="form-group mt-2">
+          <label>Valor a pagar ahora (por defecto el total; puedes pagar solo una parte):</label>
+          <input type="number" id="pagSalValorPagar" min="1" step="any" oninput="app.onValorPagarInput()">
+          <p class="text-sm mt-1" id="pagSalSaldoInfo"></p>
+          <button type="button" class="btn btn-sm btn-outline" id="btnPagarTotalSalario" onclick="app.pagarTotalSalario()">Pagar el total</button>
         </div>
         <p class="text-sm text-muted">Al confirmar, el pago queda registrado y se abre el comprobante en PDF con espacio para la firma del empleado y la suya. Imprímalo, fírmenlo y guárdelo en físico.</p>
       </div>

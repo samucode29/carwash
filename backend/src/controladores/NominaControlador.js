@@ -147,13 +147,14 @@ async function calcularPagoEmpleado(req, res) {
 /**
  * Paga el salario de un empleado. A diferencia de los lavadores (a quienes se
  * liquida cuando se quiera), un empleado solo se paga en su fecha de pago o
- * después si se atrasó. El pago es el salario fijo del período más las horas
- * extra que el administrador escribe; el período lo define el calendario de
- * pago y la fecha de pago siempre es hoy.
+ * después si se atrasó. Se debe el salario fijo del período más las horas
+ * extra que el administrador escribe; se puede pagar solo una parte (por
+ * defecto se paga todo) y lo que falte queda como saldo pendiente, que se
+ * abona después. El período lo define el calendario de pago y la fecha de
+ * pago siempre es hoy.
  */
 async function pagarSalarioEmpleado(req, res) {
-  const { empleado_id, descuentos } = req.body;
-  const empleadoId = parseInt(empleado_id, 10);
+  const empleadoId = parseInt(req.body.empleado_id, 10);
   const info = await NominaRepositorio.estadoPagoDeEmpleado(empleadoId);
   if (!info) return res.status(404).json({ error: 'Empleado no encontrado.' });
   if (info.empleado.lavador_id) {
@@ -168,14 +169,36 @@ async function pagarSalarioEmpleado(req, res) {
     return res.status(400).json({ error: motivo });
   }
 
-  const horasExtra = parseFloat(req.body.horas_extra) || 0;
-  if (horasExtra < 0) return res.status(400).json({ error: 'Las horas extra no pueden ser negativas.' });
-  const valorDescuentos = parseFloat(descuentos) || 0;
-  if (valorDescuentos < 0) return res.status(400).json({ error: 'Los descuentos no pueden ser negativos.' });
+  // Si quedó un saldo de un pago parcial, este pago es un abono a ese saldo
+  // (sin nuevas horas extra ni descuentos); si no, es el pago del período.
+  const esAbono = estado.estado === 'parcial';
+  let calculo;
+  let horasExtra = 0;
+  let valorDescuentos = 0;
+  let adeudado;
+  if (esAbono) {
+    adeudado = Number(estado.saldo);
+    calculo = await NominaRepositorio.calcularPagoEmpleado(empleadoId, 0);
+  } else {
+    horasExtra = parseFloat(req.body.horas_extra) || 0;
+    if (horasExtra < 0) return res.status(400).json({ error: 'Las horas extra no pueden ser negativas.' });
+    valorDescuentos = parseFloat(req.body.descuentos) || 0;
+    if (valorDescuentos < 0) return res.status(400).json({ error: 'Los descuentos no pueden ser negativos.' });
+    calculo = await NominaRepositorio.calcularPagoEmpleado(empleadoId, horasExtra);
+    if (valorDescuentos > calculo.total) {
+      return res.status(400).json({ error: 'Los descuentos no pueden superar lo que se le va a pagar.' });
+    }
+    adeudado = Number((calculo.total - valorDescuentos).toFixed(2));
+  }
 
-  const calculo = await NominaRepositorio.calcularPagoEmpleado(empleadoId, horasExtra);
-  if (valorDescuentos > calculo.total) {
-    return res.status(400).json({ error: 'Los descuentos no pueden superar lo que se le va a pagar.' });
+  // Valor que se paga ahora: por defecto todo lo adeudado; puede ser solo una parte.
+  const crudo = req.body.valor_pagado;
+  const valorPagado = (crudo === undefined || crudo === null || crudo === '') ? adeudado : Number(parseFloat(crudo).toFixed(2));
+  if (!Number.isFinite(valorPagado) || valorPagado <= 0) {
+    return res.status(400).json({ error: 'El valor a pagar debe ser mayor que cero.' });
+  }
+  if (valorPagado > adeudado) {
+    return res.status(400).json({ error: `El valor a pagar no puede superar lo que se le debe (${formatearMoneda(adeudado)}).` });
   }
 
   const pago = await NominaRepositorio.crearPagoSalario({
@@ -183,22 +206,29 @@ async function pagarSalarioEmpleado(req, res) {
     periodicidad: calculo.periodicidadPago,
     periodoInicio: estado.periodoInicio,
     periodoFin: estado.periodoFin,
-    salarioBase: calculo.salarioBase,
-    horasExtra: calculo.horasExtra,
-    valorHorasExtra: calculo.montoExtra,
+    salarioBase: esAbono ? 0 : calculo.salarioBase,
+    horasExtra: esAbono ? 0 : calculo.horasExtra,
+    valorHorasExtra: esAbono ? 0 : calculo.montoExtra,
     descuentos: valorDescuentos,
+    valorAdeudado: adeudado,
+    valorPagado,
+    esAbono,
     fechaPago: obtenerFechaHoy()
   });
 
   const factura = await FacturaRepositorio.crearFactura({
     tipo: 'nomina',
-    concepto: `Salario - ${pago.empleado_nombre || 'Empleado'}`,
+    concepto: `${esAbono ? 'Abono a salario' : 'Salario'} - ${pago.empleado_nombre || 'Empleado'}`,
     total: pago.valor_a_pagar,
     fecha: pago.fecha_pago_real,
     creadoPor: req.usuarioAutenticado.id
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleadoId} ($${pago.valor_a_pagar}${horasExtra > 0 ? `, con ${horasExtra} h extra` : ''}) (Factura ${factura.numero_factura})`);
+  const saldo = Number(pago.saldo_pendiente) || 0;
+  await AuditoriaRepositorio.registrar(
+    req.usuarioAutenticado.id, 'pago_salario_empleado',
+    `${esAbono ? 'Abono' : 'Pago'} de salario a empleado ID ${empleadoId} ($${pago.valor_a_pagar}${horasExtra > 0 ? `, con ${horasExtra} h extra` : ''}${saldo > 0 ? `, queda saldo de $${saldo}` : ''}) (Factura ${factura.numero_factura})`
+  );
   res.status(201).json({ ...pago, factura });
 }
 
@@ -212,12 +242,22 @@ async function comprobantePagoSalario(req, res) {
   const horasExtra = Number(pago.horas_extra) || 0;
   const valorExtra = Number(pago.valor_horas_extra) || 0;
 
+  const esAbono = !!pago.es_abono;
+  const adeudado = Number(pago.valor_adeudado) || Number(pago.valor_a_pagar);
+  const saldo = Number(pago.saldo_pendiente) || 0;
+
   const filas = [];
-  filas.push([`Salario del período (${pago.periodicidad})`, formatearMoneda(pago.salario_base)]);
-  if (horasExtra > 0) {
-    filas.push([`Horas extra (${horasExtra} hrs a ${formatearMoneda(valorExtra / horasExtra)}/hr)`, formatearMoneda(valorExtra)]);
+  if (esAbono) {
+    filas.push([`Saldo pendiente de un pago anterior (período ${inicio} al ${fin})`, formatearMoneda(adeudado)]);
+  } else {
+    filas.push([`Salario del período (${pago.periodicidad})`, formatearMoneda(pago.salario_base)]);
+    if (horasExtra > 0) {
+      filas.push([`Horas extra (${horasExtra} hrs a ${formatearMoneda(valorExtra / horasExtra)}/hr)`, formatearMoneda(valorExtra)]);
+    }
+    filas.push(['Descuentos (inasistencias, anticipos, etc.)', descuentos > 0 ? `-${formatearMoneda(descuentos)}` : formatearMoneda(0)]);
+    if (saldo > 0) filas.push(['Total del período (salario + horas extra - descuentos)', formatearMoneda(adeudado)]);
   }
-  filas.push(['Descuentos (inasistencias, anticipos, etc.)', descuentos > 0 ? `-${formatearMoneda(descuentos)}` : formatearMoneda(0)]);
+  if (saldo > 0) filas.push(['Saldo que queda pendiente por pagar', formatearMoneda(saldo)]);
 
   generarPdfComprobanteNomina(res, {
     titulo: 'Comprobante de Pago de Salario',
@@ -226,8 +266,9 @@ async function comprobantePagoSalario(req, res) {
     fechaPago: pago.fecha_pago_real || pago.creado_en,
     persona: { etiqueta: 'Empleado', nombre: pago.empleado_nombre || 'Empleado', documento: pago.empleado_documento },
     periodo: `${inicio} al ${fin} (pago ${pago.periodicidad})`,
-    concepto: 'Salario del período' + (horasExtra > 0 ? ' con horas extra' : ''),
+    concepto: esAbono ? 'Abono al saldo pendiente del salario' : ('Salario del período' + (horasExtra > 0 ? ' con horas extra' : '') + (saldo > 0 ? ' (pago parcial)' : '')),
     valorNeto: Number(pago.valor_a_pagar),
+    saldoPendiente: saldo,
     filas
   });
 }

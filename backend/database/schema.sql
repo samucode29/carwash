@@ -451,7 +451,14 @@ CREATE TABLE pagos_salario (
     horas_extra            DECIMAL(6,2) NOT NULL DEFAULT 0,
     valor_horas_extra      DECIMAL(12,2) NOT NULL DEFAULT 0,
     descuentos             DECIMAL(12,2) NOT NULL DEFAULT 0,
+    -- valor_a_pagar = lo que se pagó realmente en este pago. Se puede pagar solo
+    -- una parte: valor_adeudado es lo que se debía en ese momento y
+    -- saldo_pendiente lo que queda por pagar (se abona después; es_abono marca
+    -- los pagos que solo saldan un saldo anterior).
     valor_a_pagar          DECIMAL(12,2) NOT NULL,
+    valor_adeudado         DECIMAL(12,2) NOT NULL DEFAULT 0,
+    saldo_pendiente        DECIMAL(12,2) NOT NULL DEFAULT 0,
+    es_abono               BOOLEAN NOT NULL DEFAULT FALSE,
     estado                 ENUM('pendiente','pagado') NOT NULL DEFAULT 'pendiente',
     fecha_pago_real        DATE NULL,
     soporte_pago_url    VARCHAR(255) NULL,

@@ -112,7 +112,7 @@ function generarPdfComprobanteNomina(res, datos) {
   doc.moveDown(0.8);
 
   doc.fontSize(10).fillColor('#333').text(
-    `Yo, ${datos.persona.nombre}${datos.persona.documento ? `, identificado(a) con documento ${datos.persona.documento}` : ''}, declaro que recibí a satisfacción de CarWash Pro la suma de ${formatearMoneda(datos.valorNeto)} (${letras}) por el concepto y período indicados, y que con este pago quedan saldados esos valores.`,
+    `Yo, ${datos.persona.nombre}${datos.persona.documento ? `, identificado(a) con documento ${datos.persona.documento}` : ''}, declaro que recibí a satisfacción de CarWash Pro la suma de ${formatearMoneda(datos.valorNeto)} (${letras}) por el concepto y período indicados${datos.saldoPendiente > 0 ? `; este pago es parcial y queda pendiente un saldo de ${formatearMoneda(datos.saldoPendiente)}.` : ', y que con este pago quedan saldados esos valores.'}`,
     izquierda, doc.y, { width: ancho, align: 'justify' }
   );
 

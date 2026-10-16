@@ -222,7 +222,7 @@ async function listarEmpleadosConUltimoPago() {
   const [lavadoresTodos] = await pool.query(`SELECT id, nombre FROM lavadores`);
   const [pagos] = await pool.query(
     `SELECT id, empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos,
-            valor_a_pagar, estado, fecha_pago_real, soporte_pago_url,
+            valor_a_pagar, saldo_pendiente, estado, fecha_pago_real, soporte_pago_url,
             (soporte_pago_datos IS NOT NULL) AS tiene_soporte, creado_en
      FROM pagos_salario ORDER BY fecha_pago_real ASC, id ASC`
   );
@@ -245,11 +245,11 @@ async function listarEmpleadosConUltimoPago() {
       // Día de pago que rige (el definido o, si no hay, el del día en que ingresó).
       dia_pago: diaPagoEfectivo({ periodicidad, diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso }),
       // Cuándo le toca el próximo pago (solo informa: se puede pagar en cualquier momento).
-      estado_pago: emp.lavador_id ? null : estadoDePago(
+      estado_pago: emp.lavador_id ? null : conSaldoPendiente(estadoDePago(
         { periodicidad, diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso },
         pagosDelEmpleado.map(p => String(p.fecha_pago_real || '').substring(0, 10)),
         hoy
-      ),
+      ), pagosDelEmpleado[pagosDelEmpleado.length - 1]),
       jornada_horas_dia: Number(emp.jornada_horas_dia) || 8,
       dias_descanso_semana: emp.dias_descanso_semana ?? 1,
       fecha_ingreso: emp.fecha_ingreso,
@@ -264,15 +264,19 @@ async function listarEmpleadosConUltimoPago() {
   });
 }
 
-async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, horasExtra = 0, valorHorasExtra = 0, descuentos, fechaPago }) {
-  const valorAPagar = Math.max(0, salarioBase + valorHorasExtra - descuentos);
+async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, horasExtra = 0, valorHorasExtra = 0, descuentos, valorAdeudado, valorPagado, esAbono = false, fechaPago }) {
+  // Lo adeudado es salario + horas extra - descuentos; lo pagado puede ser solo una parte (por defecto, todo).
+  const adeudado = valorAdeudado !== undefined ? valorAdeudado : Math.max(0, salarioBase + valorHorasExtra - descuentos);
+  const valorAPagar = valorPagado !== undefined ? valorPagado : adeudado;
+  const saldo = Number(Math.max(0, adeudado - valorAPagar).toFixed(2));
   const hoy = fechaPago || obtenerFechaHoy();
 
   const [resultado] = await pool.query(
     `INSERT INTO pagos_salario
-      (empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, horas_extra, valor_horas_extra, descuentos, valor_a_pagar, estado, fecha_pago_real)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?)`,
-    [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, horasExtra, valorHorasExtra, descuentos, valorAPagar, hoy]
+      (empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, horas_extra, valor_horas_extra, descuentos,
+       valor_a_pagar, valor_adeudado, saldo_pendiente, es_abono, estado, fecha_pago_real)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?)`,
+    [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, horasExtra, valorHorasExtra, descuentos, valorAPagar, adeudado, saldo, esAbono ? 1 : 0, hoy]
   );
   return obtenerPagoSalario(resultado.insertId);
 }
@@ -281,7 +285,7 @@ async function obtenerPagoSalario(id) {
   const [filas] = await pool.query(
     `SELECT ps.id, ps.empleado_id, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin, ps.salario_base,
             ps.horas_extra, ps.valor_horas_extra,
-            ps.descuentos, ps.valor_a_pagar, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
+            ps.descuentos, ps.valor_a_pagar, ps.valor_adeudado, ps.saldo_pendiente, ps.es_abono, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
             ps.soporte_pago_nombre, ps.soporte_pago_tipo,
             (ps.soporte_pago_datos IS NOT NULL) AS tiene_soporte, ps.creado_en,
             u.nombre AS empleado_nombre, u.documento AS empleado_documento
@@ -322,26 +326,45 @@ async function calcularPagoEmpleado(empleadoId, horasExtra = 0) {
   };
 }
 
+/**
+ * Si el último pago dejó un saldo sin pagar (se pagó solo una parte), el
+ * empleado queda en estado "parcial": lo que falta se puede abonar cuando se
+ * quiera, hasta saldarlo.
+ */
+function conSaldoPendiente(estado, ultimoPago) {
+  const saldo = ultimoPago ? Number(ultimoPago.saldo_pendiente) || 0 : 0;
+  if (saldo <= 0) return estado;
+  return {
+    estado: 'parcial', fecha: null, dias: null, puedePagar: true, saldo,
+    periodoInicio: String(ultimoPago.periodo_inicio).substring(0, 10),
+    periodoFin: String(ultimoPago.periodo_fin).substring(0, 10),
+    texto: `Pago parcial: faltan $${Math.round(saldo).toLocaleString('es-CO')} por pagar`
+  };
+}
+
 /** Cómo va el pago de un empleado (cuándo le toca, si se puede pagar hoy y qué período cubre). */
 async function estadoPagoDeEmpleado(empleadoId) {
   const [empFilas] = await pool.query(`SELECT id, nombre, periodicidad_pago, dia_pago, fecha_ingreso, lavador_id FROM usuarios WHERE id = ?`, [empleadoId]);
   const emp = empFilas[0];
   if (!emp) return null;
-  const [pagos] = await pool.query(`SELECT fecha_pago_real FROM pagos_salario WHERE empleado_id = ?`, [empleadoId]);
+  const [pagos] = await pool.query(
+    `SELECT fecha_pago_real, saldo_pendiente, periodo_inicio, periodo_fin FROM pagos_salario WHERE empleado_id = ? ORDER BY fecha_pago_real ASC, id ASC`,
+    [empleadoId]
+  );
   return {
     empleado: emp,
-    estado: estadoDePago(
+    estado: conSaldoPendiente(estadoDePago(
       { periodicidad: emp.periodicidad_pago || 'quincenal', diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso },
       pagos.map(p => String(p.fecha_pago_real || '').substring(0, 10)),
       obtenerFechaHoy()
-    )
+    ), pagos[pagos.length - 1])
   };
 }
 
 async function listarPagosSalario() {
   const [filas] = await pool.query(
     `SELECT ps.id, ps.empleado_id, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin, ps.salario_base, ps.horas_extra, ps.valor_horas_extra, ps.descuentos,
-            ps.valor_a_pagar, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
+            ps.valor_a_pagar, ps.valor_adeudado, ps.saldo_pendiente, ps.es_abono, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
             (ps.soporte_pago_datos IS NOT NULL) AS tiene_soporte, ps.creado_en,
             u.nombre AS empleado_nombre, u.documento AS empleado_documento
      FROM pagos_salario ps

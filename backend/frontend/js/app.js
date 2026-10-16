@@ -2004,7 +2004,7 @@ const app = {
               <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
               <td>${e.lavador_id ? '--' : (e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados')}</td>
               <td>
-                ${e.lavador_id ? '' : `<button class="btn btn-sm btn-primary" ${(e.estado_pago && e.estado_pago.puedePagar) ? '' : `disabled title="${escapeHtml((e.estado_pago && e.estado_pago.texto) || 'Aún no le toca')}"`} onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}')">Pagar Salario</button>
+                ${e.lavador_id ? '' : `<button class="btn btn-sm btn-primary" ${(e.estado_pago && e.estado_pago.puedePagar) ? '' : `disabled title="${escapeHtml((e.estado_pago && e.estado_pago.texto) || 'Aún no le toca')}"`} onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}')">${(e.estado_pago && e.estado_pago.estado === 'parcial') ? 'Abonar Saldo' : 'Pagar Salario'}</button>
                 <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id})">Editar</button>`}
                 ${(this.currentUser.esAdminPrincipal && e.empleado_id !== this.currentUser.id && !e.es_admin_principal)
                   ? `<button class="btn btn-sm btn-outline" onclick="app.cambiarRolUsuario(${e.empleado_id}, '${e.rol}', '${e.nombre.replace(/'/g, "\\'")}')">${e.rol === 'administrador' ? 'Pasar a Empleado' : 'Hacer Administrador'}</button>`
@@ -2033,7 +2033,9 @@ const app = {
                 <button class="btn btn-sm btn-outline" onclick="app.abrirComprobantePdf('pagos-salario', ${p.id})">Comprobante PDF</button>
                 ${p.tiene_soporte ? `<br><a href="#" onclick="app.verSoportePago('pagos-salario', ${p.id}); return false;">Ver soporte anterior</a>` : ''}
               </td>
-              <td><span class="role-badge" style="background: #10b981">PAGADO</span></td>
+              <td>${Number(p.saldo_pendiente) > 0
+                ? `<span class="role-badge" style="background: #f97316">PARCIAL</span><br><span class="text-sm text-muted">Saldo ${this.formatMoney(p.saldo_pendiente)}</span>`
+                : (p.es_abono ? '<span class="role-badge" style="background: #10b981">ABONO · SALDADO</span>' : '<span class="role-badge" style="background: #10b981">PAGADO</span>')}</td>
             </tr>
           `).join('');
         }
@@ -2214,15 +2216,17 @@ const app = {
   estadoPagoHtml(e) {
     const p = e.estado_pago;
     if (!p || p.estado === 'sin_dia') return '<span class="text-sm text-muted">Sin día de pago (edítalo para definirlo)</span>';
-    const colores = { vencido: '#ef4444', hoy: '#f59e0b', proximo: '#0077b6', al_dia: '#10b981' };
-    const etiquetas = { vencido: 'VENCIDO', hoy: 'TOCA HOY', proximo: 'PRÓXIMO', al_dia: 'AL DÍA' };
+    const colores = { vencido: '#ef4444', hoy: '#f59e0b', proximo: '#0077b6', al_dia: '#10b981', parcial: '#f97316' };
+    const etiquetas = { vencido: 'VENCIDO', hoy: 'TOCA HOY', proximo: 'PRÓXIMO', al_dia: 'AL DÍA', parcial: 'SALDO PENDIENTE' };
     return `<span class="role-badge" style="background: ${colores[p.estado] || '#64748b'}">${etiquetas[p.estado] || ''}</span><br><span class="text-sm text-muted">${escapeHtml(p.texto)}</span>`;
   },
 
   /**
    * Pago de salario: salario fijo del período + horas extra que se escriben a
-   * mano. Solo se abre cuando al empleado le toca (o está atrasado); los
-   * lavadores son distintos, a ellos se les liquida cuando se quiera.
+   * mano. Solo se abre cuando al empleado le toca (o está atrasado, o le quedó
+   * un saldo por pagar); los lavadores son distintos, a ellos se les liquida
+   * cuando se quiera. Se puede pagar solo una parte: lo que falte queda como
+   * saldo pendiente y luego se abona.
    */
   async abrirModalPagarSalario(empleadoId, nombre) {
     const emp = (this.empleadosNomina || []).find(x => x.empleado_id === empleadoId);
@@ -2232,20 +2236,32 @@ const app = {
       return;
     }
     this.payingEmpleadoId = empleadoId;
+    this.pagoEsAbono = estado.estado === 'parcial';
+    this.pagoValorEditado = false;
     document.getElementById('pagSalEmpleadoNombre').textContent = nombre;
     document.getElementById('pagSalEstadoInfo').textContent = estado.texto;
     document.getElementById('pagSalPeriodoInicio').value = estado.periodoInicio || '';
     document.getElementById('pagSalPeriodoFin').value = estado.periodoFin || '';
     document.getElementById('pagSalHorasExtra').value = 0;
     document.getElementById('pagSalDescuentos').value = 0;
+    // Un abono solo salda lo que faltó: no lleva horas extra ni descuentos nuevos.
+    document.getElementById('pagSalBloqueAjustes').classList.toggle('hidden', this.pagoEsAbono);
 
     try {
       const c = await ApiCliente.get(`/api/nomina/empleados/${empleadoId}/calculo-pago`);
-      this.pagoSalarioBase = c.salarioBase;
       this.pagoValorHoraExtra = c.valorHoraExtra;
-      document.getElementById('pagSalPeriodicidad').textContent = c.periodicidadPago;
-      document.getElementById('pagSalBase').value = this.formatMoney(c.salarioBase);
-      document.getElementById('pagSalValorHoraExtra').value = this.formatMoney(c.valorHoraExtra);
+      if (this.pagoEsAbono) {
+        this.pagoSalarioBase = estado.saldo;
+        document.getElementById('pagSalBaseLabel').textContent = 'Saldo pendiente de este período:';
+        document.getElementById('pagSalTotalLabel').textContent = 'Saldo por pagar:';
+        document.getElementById('pagSalBase').value = this.formatMoney(estado.saldo);
+      } else {
+        this.pagoSalarioBase = c.salarioBase;
+        document.getElementById('pagSalBaseLabel').innerHTML = `Salario del período (<span id="pagSalPeriodicidad">${escapeHtml(c.periodicidadPago)}</span>):`;
+        document.getElementById('pagSalTotalLabel').textContent = 'Total del período:';
+        document.getElementById('pagSalBase').value = this.formatMoney(c.salarioBase);
+        document.getElementById('pagSalValorHoraExtra').value = this.formatMoney(c.valorHoraExtra);
+      }
     } catch (err) {
       this.toast(err.message || 'No se pudo calcular el pago.', 'error');
       return;
@@ -2254,22 +2270,70 @@ const app = {
     this.openModal('modalPagarSalarioEmpleado');
   },
 
-  recalcSalarioTotal() {
+  /** Total que se le debe en este pago: salario + horas extra - descuentos (o el saldo, si es un abono). */
+  totalSalarioAdeudado() {
+    if (this.pagoEsAbono) return this.pagoSalarioBase || 0;
     const horas = Math.max(0, parseFloat(document.getElementById('pagSalHorasExtra').value) || 0);
     const desc = Math.max(0, parseFloat(document.getElementById('pagSalDescuentos').value) || 0);
-    const extra = horas * (this.pagoValorHoraExtra || 0);
-    document.getElementById('pagSalMontoExtra').value = this.formatMoney(extra);
-    document.getElementById('pagSalNetoAPagar').textContent = this.formatMoney(Math.max(0, (this.pagoSalarioBase || 0) + extra - desc));
+    return Math.max(0, (this.pagoSalarioBase || 0) + horas * (this.pagoValorHoraExtra || 0) - desc);
+  },
+
+  recalcSalarioTotal() {
+    const horas = Math.max(0, parseFloat(document.getElementById('pagSalHorasExtra').value) || 0);
+    document.getElementById('pagSalMontoExtra').value = this.formatMoney(horas * (this.pagoValorHoraExtra || 0));
+    const total = this.totalSalarioAdeudado();
+    document.getElementById('pagSalNetoAPagar').textContent = this.formatMoney(total);
+    // Mientras no se escriba otro valor, se paga el total.
+    if (!this.pagoValorEditado) document.getElementById('pagSalValorPagar').value = Math.round(total * 100) / 100;
+    this.actualizarSaldoInfo();
+  },
+
+  onValorPagarInput() {
+    this.pagoValorEditado = true;
+    this.actualizarSaldoInfo();
+  },
+
+  pagarTotalSalario() {
+    this.pagoValorEditado = false;
+    this.recalcSalarioTotal();
+  },
+
+  actualizarSaldoInfo() {
+    const total = this.totalSalarioAdeudado();
+    const valor = parseFloat(document.getElementById('pagSalValorPagar').value) || 0;
+    const info = document.getElementById('pagSalSaldoInfo');
+    document.getElementById('btnPagarTotalSalario').classList.toggle('hidden', !this.pagoValorEditado);
+    if (valor > total + 0.005) {
+      info.textContent = `No puedes pagar más de lo que se le debe (${this.formatMoney(total)}).`;
+      info.style.color = '#ef4444';
+    } else if (valor > 0 && valor < total - 0.005) {
+      info.textContent = `Pago parcial: quedarán ${this.formatMoney(total - valor)} pendientes por pagar (se abonan después).`;
+      info.style.color = '#f59e0b';
+    } else {
+      info.textContent = valor > 0 ? 'Se paga el total.' : '';
+      info.style.color = '';
+    }
   },
 
   async confirmarPagoSalario() {
+    const total = this.totalSalarioAdeudado();
+    const valor = parseFloat(document.getElementById('pagSalValorPagar').value) || 0;
+    if (valor <= 0) { this.toast('Escribe el valor a pagar (mayor que cero).', 'warning'); return; }
+    if (valor > total + 0.005) { this.toast(`No puedes pagar más de lo que se le debe (${this.formatMoney(total)}).`, 'warning'); return; }
+
+    const cuerpo = {
+      empleado_id: this.payingEmpleadoId,
+      horas_extra: document.getElementById('pagSalHorasExtra').value,
+      descuentos: document.getElementById('pagSalDescuentos').value
+    };
+    // Solo se envía el valor si se cambió; si no, el servidor paga el total.
+    if (this.pagoValorEditado) cuerpo.valor_pagado = valor;
     try {
-      const pago = await ApiCliente.post('/api/nomina/pagar-empleado', {
-        empleado_id: this.payingEmpleadoId,
-        horas_extra: document.getElementById('pagSalHorasExtra').value,
-        descuentos: document.getElementById('pagSalDescuentos').value
-      });
-      this.toast('Salario pagado y registrado. Imprima el comprobante para las firmas.', 'success');
+      const pago = await ApiCliente.post('/api/nomina/pagar-empleado', cuerpo);
+      const saldo = Number(pago.saldo_pendiente) || 0;
+      this.toast(saldo > 0
+        ? `Pago parcial registrado. Quedan ${this.formatMoney(saldo)} por pagar.`
+        : 'Salario pagado y registrado. Imprima el comprobante para las firmas.', 'success');
       this.closeModal('modalPagarSalarioEmpleado');
       this.loadNomina();
       this.abrirComprobantePdf('pagos-salario', pago.id);

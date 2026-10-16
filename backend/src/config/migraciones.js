@@ -64,6 +64,15 @@ async function aplicarMigraciones() {
     await pool.query(`ALTER TABLE pagos_salario ADD COLUMN horas_extra DECIMAL(6,2) NOT NULL DEFAULT 0 AFTER salario_base, ADD COLUMN valor_horas_extra DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER horas_extra`);
     console.log('🛠  Migración aplicada: pagos_salario.horas_extra');
   }
+  // Pagos de salario parciales: lo adeudado, el saldo que queda y si el pago es un abono.
+  if (!(await existeColumna('pagos_salario', 'saldo_pendiente'))) {
+    await pool.query(`ALTER TABLE pagos_salario
+      ADD COLUMN valor_adeudado DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER valor_a_pagar,
+      ADD COLUMN saldo_pendiente DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER valor_adeudado,
+      ADD COLUMN es_abono BOOLEAN NOT NULL DEFAULT FALSE AFTER saldo_pendiente`);
+    await pool.query(`UPDATE pagos_salario SET valor_adeudado = valor_a_pagar`);
+    console.log('🛠  Migración aplicada: pagos_salario.saldo_pendiente (pagos parciales)');
+  }
   await separarNombresYApellidos();
   await prepararCuentasDeLavador();
   await corregirCitasDeOrdenesCanceladas();
