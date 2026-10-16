@@ -2229,17 +2229,18 @@ const app = {
     // Rango por defecto según la periodicidad de pago del empleado; el
     // administrador puede ajustarlo antes de calcular.
     // Se puede pagar en cualquier momento: por defecto el período va desde el
-    // día siguiente al último período pagado hasta hoy (si no hay pagos previos,
-    // desde el largo normal de su periodicidad).
+    // día siguiente al último período pagado hasta hoy; si no hay pagos previos
+    // se propone el último mes (las fechas se pueden ajustar).
     const diasAtras = { semanal: 6, quincenal: 14, mensual: 29 }[periodicidadPago] ?? 14;
-    let inicio = fechaLocalHaceDias(diasAtras);
+    // Quien nunca ha cobrado: el último mes (puede ajustar las fechas).
+    let inicio = fechaLocalHaceDias(29);
     const emp = (this.empleadosNomina || []).find(x => x.empleado_id === empleadoId);
     const finUltimo = emp && emp.ultimo_pago && emp.ultimo_pago.periodo_fin ? String(emp.ultimo_pago.periodo_fin).substring(0, 10) : null;
     if (finUltimo) {
       const siguiente = new Date(`${finUltimo}T00:00:00`);
       siguiente.setDate(siguiente.getDate() + 1);
       const sig = `${siguiente.getFullYear()}-${String(siguiente.getMonth() + 1).padStart(2, '0')}-${String(siguiente.getDate()).padStart(2, '0')}`;
-      if (sig <= fechaLocalHoy()) inicio = sig;
+      inicio = sig <= fechaLocalHoy() ? sig : fechaLocalHaceDias(diasAtras);
     }
     document.getElementById('pagSalPeriodoInicio').value = inicio;
     document.getElementById('pagSalPeriodoFin').value = fechaLocalHoy();
