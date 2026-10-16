@@ -222,7 +222,7 @@ async function listarEmpleadosConUltimoPago() {
   const [lavadoresTodos] = await pool.query(`SELECT id, nombre FROM lavadores`);
   const [pagos] = await pool.query(
     `SELECT id, empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos,
-            valor_a_pagar, saldo_pendiente, estado, fecha_pago_real, soporte_pago_url,
+            valor_a_pagar, saldo_pendiente, es_abono, estado, fecha_pago_real, soporte_pago_url,
             (soporte_pago_datos IS NOT NULL) AS tiene_soporte, creado_en
      FROM pagos_salario ORDER BY fecha_pago_real ASC, id ASC`
   );
@@ -247,7 +247,8 @@ async function listarEmpleadosConUltimoPago() {
       // Cuándo le toca el próximo pago (solo informa: se puede pagar en cualquier momento).
       estado_pago: emp.lavador_id ? null : conSaldoPendiente(estadoDePago(
         { periodicidad, diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso },
-        pagosDelEmpleado.map(p => String(p.fecha_pago_real || '').substring(0, 10)),
+        // Un abono solo salda un saldo anterior: no cuenta como el pago de un ciclo nuevo.
+        pagosDelEmpleado.filter(p => !p.es_abono).map(p => String(p.fecha_pago_real || '').substring(0, 10)),
         hoy
       ), pagosDelEmpleado[pagosDelEmpleado.length - 1]),
       jornada_horas_dia: Number(emp.jornada_horas_dia) || 8,
@@ -348,14 +349,14 @@ async function estadoPagoDeEmpleado(empleadoId) {
   const emp = empFilas[0];
   if (!emp) return null;
   const [pagos] = await pool.query(
-    `SELECT fecha_pago_real, saldo_pendiente, periodo_inicio, periodo_fin FROM pagos_salario WHERE empleado_id = ? ORDER BY fecha_pago_real ASC, id ASC`,
+    `SELECT fecha_pago_real, saldo_pendiente, es_abono, periodo_inicio, periodo_fin FROM pagos_salario WHERE empleado_id = ? ORDER BY fecha_pago_real ASC, id ASC`,
     [empleadoId]
   );
   return {
     empleado: emp,
     estado: conSaldoPendiente(estadoDePago(
       { periodicidad: emp.periodicidad_pago || 'quincenal', diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso },
-      pagos.map(p => String(p.fecha_pago_real || '').substring(0, 10)),
+      pagos.filter(p => !p.es_abono).map(p => String(p.fecha_pago_real || '').substring(0, 10)),
       obtenerFechaHoy()
     ), pagos[pagos.length - 1])
   };
