@@ -119,8 +119,11 @@ async function calcularReporte(inicio, fin) {
   const NominaRepositorio = require('./NominaRepositorio');
   const porPagarLavadores = (await NominaRepositorio.resumenComisionesLavadores()).reduce((s, l) => s + (Number(l.comision_pendiente) || 0), 0);
 
-  const gananciaNeta = totalIngresos - (costoInsumos + totalGastos + comisionesPagadas + salariosPagados);
-  const margenPorcentaje = totalIngresos > 0 ? Number(((gananciaNeta / totalIngresos) * 100).toFixed(1)) : 0;
+  // Ingresos del negocio = TODA la plata que entra: lo cobrado por servicios + las propinas (que luego salen
+  // 100% hacia los lavadores dentro de las liquidaciones). De ahí se descuenta lo que sale, cuando sale.
+  const ingresosTotales = totalIngresos + totalPropinas;
+  const gananciaNeta = ingresosTotales - (costoInsumos + totalGastos + comisionesPagadas + salariosPagados);
+  const margenPorcentaje = ingresosTotales > 0 ? Number(((gananciaNeta / ingresosTotales) * 100).toFixed(1)) : 0;
 
   // Todo se discrimina por tipo de vehículo: cantidad de servicios e ingresos
   // de cada tipo, y por servicio (cada servicio ya es de un solo tipo).
@@ -158,7 +161,7 @@ async function calcularReporte(inicio, fin) {
   const serieIngresos = {
     gran: plan.gran,
     etiquetas: plan.etiquetas,
-    ingresos: acumularSerie(plan, ordenesPagadas, o => o.fecha_pago, montoDe),
+    ingresos: acumularSerie(plan, ordenesPagadas, o => o.fecha_pago, o => montoDe(o) + Number(o.propina || 0)),
     servicios: acumularSerie(plan, ordenesPagadas, o => o.fecha_pago, () => 1)
   };
   const porMetodoPago = {};
@@ -183,7 +186,7 @@ async function calcularReporte(inicio, fin) {
     ticketPromedio: ordenesPagadas.length > 0 ? Math.round(totalIngresos / ordenesPagadas.length) : 0,
     serieIngresos, porMetodoPago,
     gastosDetalle: gastosDetalle.map(g => ({ id: g.id, fecha: g.fecha, concepto: g.concepto, monto: Number(g.monto), registradoPor: g.registrado_por || '-' })),
-    totalIngresos, totalComisionesLavadores, costoInsumos, totalGastos, gananciaNeta, margenPorcentaje,
+    totalIngresos, ingresosTotales, totalComisionesLavadores, costoInsumos, totalGastos, gananciaNeta, margenPorcentaje,
     comisionesPagadas, comisionesPagadasCantidad: comisionesPagadasFila[0].cantidad || 0,
     salariosPagados, salariosPagadosCantidad: salariosPagadosFila[0].cantidad || 0,
     porPagarLavadores,
@@ -630,7 +633,8 @@ async function calcularReporteComparativo(inicio, fin) {
   const variacion = (actualVal, previoVal) => previoVal > 0 ? Number((((actualVal - previoVal) / previoVal) * 100).toFixed(1)) : null;
   const resumir = (r) => ({
     rango: r.rango,
-    totalIngresos: r.totalIngresos,
+    totalIngresos: r.ingresosTotales,
+    ingresosServicios: r.totalIngresos,
     costoInsumos: r.costoInsumos,
     totalComisionesLavadores: r.totalComisionesLavadores,
     comisionesPagadas: r.comisionesPagadas,
