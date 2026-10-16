@@ -110,10 +110,10 @@ function tonoVariacion(v, mejorSiSube = true) {
 function vistaResumen(r, previo, periodo) {
   const doc = documento({
     tipo: 'resumen', titulo: 'Resumen General del Negocio', periodo,
-    descripcion: 'Foto completa del período: cuánto entró, en qué se fue el dinero y cuánto quedó de ganancia. La ganancia neta es lo que ingresa menos las compras de insumos, las comisiones de los lavadores y los gastos operativos.'
+    descripcion: 'Foto completa del período: cuánto entró, en qué se fue el dinero y cuánto quedó de ganancia. La ganancia neta es lo que ingresó menos lo que realmente salió en el período: compras de insumos, gastos operativos y los pagos de comisiones y salarios (se restan cuando se pagan, no cuando se genera el servicio).'
   });
   const v = (act, ant) => (ant > 0 ? Number((((act - ant) / ant) * 100).toFixed(1)) : null);
-  const totalCostos = r.costoInsumos + r.totalComisionesLavadores + r.totalGastos;
+  const totalCostos = r.costoInsumos + r.comisionesPagadas + r.salariosPagados + r.totalGastos;
   const sinVentas = r.serviciosAtendidos === 0;
 
   doc.kpis.push(
@@ -122,7 +122,9 @@ function vistaResumen(r, previo, periodo) {
     kpi('Servicios atendidos', F.entero(r.serviciosAtendidos), { detalle: 'Órdenes cobradas', variacion: previo ? v(r.serviciosAtendidos, previo.serviciosAtendidos) : null }),
     kpi('Ticket promedio', F.moneda(r.ticketPromedio), { detalle: 'Ingreso medio por servicio', variacion: previo ? v(r.ticketPromedio, previo.ticketPromedio) : null }),
     kpi('Compras de insumos', F.moneda(r.costoInsumos), { tono: 'mal', detalle: `${F.porcentaje(F.participacion(r.costoInsumos, r.totalIngresos))} de los ingresos`, mejorSiSube: false }),
-    kpi('Comisiones de lavadores', F.moneda(r.totalComisionesLavadores), { tono: 'mal', detalle: `${F.porcentaje(F.participacion(r.totalComisionesLavadores, r.totalIngresos))} de los ingresos (netas de descuentos)` }),
+    kpi('Comisiones pagadas', F.moneda(r.comisionesPagadas), { tono: 'mal', detalle: `${F.entero(r.comisionesPagadasCantidad)} liquidaciones pagadas en el período (incluyen las propinas que se les entregaron)` }),
+    kpi('Salarios pagados', F.moneda(r.salariosPagados), { tono: 'mal', detalle: `${F.entero(r.salariosPagadosCantidad)} pagos a empleados en el período` }),
+    kpi('Por pagar a lavadores', F.moneda(r.porPagarLavadores), { tono: r.porPagarLavadores > 0 ? 'aviso' : undefined, detalle: 'Comisiones generadas y aún sin liquidar (hoy): no restan de la ganancia hasta que se paguen' }),
     kpi('Gastos operativos', F.moneda(r.totalGastos), { tono: 'mal', detalle: `${F.porcentaje(F.participacion(r.totalGastos, r.totalIngresos))} de los ingresos` }),
     kpi('Descuentos del negocio', F.moneda(r.totalDescuentoNegocio), { tono: 'aviso', detalle: 'Ya restados de los ingresos' }),
     kpi('Descuentos a lavadores', F.moneda(r.totalDescuentoTrabajador), { tono: 'aviso', detalle: 'Ya restados de sus comisiones' }),
@@ -161,7 +163,7 @@ function vistaResumen(r, previo, periodo) {
   if (r.totalIngresos > 0) {
     const pc = F.participacion;
     doc.hallazgos.push(r.gananciaNeta >= 0
-      ? `De cada $100 que entran: $${F.decimal(pc(r.totalComisionesLavadores, r.totalIngresos), 0)} van a comisiones, $${F.decimal(pc(r.costoInsumos, r.totalIngresos), 0)} a insumos, $${F.decimal(pc(r.totalGastos, r.totalIngresos), 0)} a gastos y $${F.decimal(pc(r.gananciaNeta, r.totalIngresos), 0)} quedan de ganancia.`
+      ? `De cada $100 que entran: $${F.decimal(pc(r.comisionesPagadas + r.salariosPagados, r.totalIngresos), 0)} salen en pagos de nómina (comisiones y salarios), $${F.decimal(pc(r.costoInsumos, r.totalIngresos), 0)} en insumos, $${F.decimal(pc(r.totalGastos, r.totalIngresos), 0)} a gastos y $${F.decimal(pc(r.gananciaNeta, r.totalIngresos), 0)} quedan de ganancia.`
       : `Los costos (${F.moneda(totalCostos)}) superan los ingresos: el período cierra con una pérdida de ${F.moneda(Math.abs(r.gananciaNeta))}.`);
   } else if (totalCostos > 0) {
     doc.hallazgos.push(`Hubo ${F.moneda(totalCostos)} en costos y gastos sin ingresos que los respalden en este período.`);
@@ -173,12 +175,13 @@ function vistaResumen(r, previo, periodo) {
   // --- Secciones
   doc.secciones.push({
     tipo: 'formula', titulo: '¿Cómo se calcula la ganancia?',
-    explicacion: 'Se parte de lo cobrado y se restan los tres costos del negocio. Las propinas y los descuentos a lavadores no alteran esta cuenta.',
+    explicacion: 'Se parte de TODO lo cobrado y solo se resta lo que realmente salió en el período: las compras cuando se hacen, los gastos y las comisiones y salarios cuando se pagan. Lo que aún se les debe a los lavadores no resta hasta que se liquide.',
     pasos: [
       { etiqueta: 'Ingresos', valor: F.moneda(r.totalIngresos), tono: 'ok' },
       { operador: '−', etiqueta: 'Insumos', valor: F.moneda(r.costoInsumos), tono: 'mal' },
-      { operador: '−', etiqueta: 'Comisiones', valor: F.moneda(r.totalComisionesLavadores), tono: 'mal' },
       { operador: '−', etiqueta: 'Gastos', valor: F.moneda(r.totalGastos), tono: 'mal' },
+      { operador: '−', etiqueta: 'Comisiones pagadas', valor: F.moneda(r.comisionesPagadas), tono: 'mal' },
+      { operador: '−', etiqueta: 'Salarios pagados', valor: F.moneda(r.salariosPagados), tono: 'mal' },
       { operador: '=', etiqueta: 'Ganancia neta', valor: F.moneda(r.gananciaNeta), tono: r.gananciaNeta >= 0 ? 'destacado' : 'mal', detalle: `Margen ${F.porcentaje(r.margenPorcentaje)}` }
     ]
   });
@@ -192,7 +195,8 @@ function vistaResumen(r, previo, periodo) {
   ));
 
   const itemsReparto = [
-    { etiqueta: 'Comisiones lavadores', valor: r.totalComisionesLavadores, texto: F.moneda(r.totalComisionesLavadores) },
+    { etiqueta: 'Comisiones pagadas', valor: r.comisionesPagadas, texto: F.moneda(r.comisionesPagadas) },
+    { etiqueta: 'Salarios pagados', valor: r.salariosPagados, texto: F.moneda(r.salariosPagados) },
     { etiqueta: 'Compras de insumos', valor: r.costoInsumos, texto: F.moneda(r.costoInsumos) },
     { etiqueta: 'Gastos operativos', valor: r.totalGastos, texto: F.moneda(r.totalGastos) }
   ];
@@ -233,7 +237,7 @@ function vistaResumen(r, previo, periodo) {
   const totServLav = filasLav.reduce((s, [, st]) => s + st.servicios, 0);
   doc.secciones.push(tabla(
     'Productividad por lavador',
-    'Cuántos servicios atendió cada lavador y cuánto ganó. La comisión ya descuenta la parte que el lavador asumió en descuentos; la propina es 100% suya.',
+    'Cuántos servicios atendió cada lavador y cuánto generó de comisión (es lo que se le debe; solo resta de la ganancia cuando se le liquida). La comisión ya descuenta la parte que el lavador asumió en descuentos; la propina es 100% suya.',
     [col('Lavador'), col('Servicios', 'der'), col('% de servicios', 'der'), col('Comisión neta', 'der'), col('Propinas', 'der'), col('Total para el lavador', 'der')],
     filasLav.map(([nombre, st]) => [nombre, F.entero(st.servicios), F.porcentaje(F.participacion(st.servicios, totServLav)), F.moneda(st.comision), F.moneda(st.propinas), F.moneda(st.comision + st.propinas)]),
     {
@@ -654,7 +658,7 @@ function vistaComparativo(r, periodo) {
     if (vr.servicios !== null) doc.hallazgos.push(`Se atendieron ${F.entero(a.serviciosAtendidos)} servicios, ${a.serviciosAtendidos >= b.serviciosAtendidos ? 'frente a' : 'contra'} ${F.entero(b.serviciosAtendidos)} del período anterior.`);
     const dm = a.margenPorcentaje - b.margenPorcentaje;
     if (b.totalIngresos > 0 && a.totalIngresos > 0) doc.hallazgos.push(`El margen de rentabilidad ${dm >= 0 ? 'mejoró' : 'empeoró'} ${F.decimal(Math.abs(dm), 1)} puntos (de ${F.porcentaje(b.margenPorcentaje)} a ${F.porcentaje(a.margenPorcentaje)}).`);
-    const crecioCosto = [['insumos', a.costoInsumos, b.costoInsumos], ['comisiones', a.totalComisionesLavadores, b.totalComisionesLavadores], ['gastos operativos', a.totalGastos, b.totalGastos]]
+    const crecioCosto = [['insumos', a.costoInsumos, b.costoInsumos], ['comisiones pagadas', a.comisionesPagadas, b.comisionesPagadas], ['salarios pagados', a.salariosPagados, b.salariosPagados], ['gastos operativos', a.totalGastos, b.totalGastos]]
       .filter(([, x, y]) => y > 0 && x > y).sort((p, q) => (q[1] / q[2]) - (p[1] / p[2]))[0];
     if (crecioCosto) doc.hallazgos.push(`El costo que más creció fue ${crecioCosto[0]}: ${F.porcentaje(((crecioCosto[1] - crecioCosto[2]) / crecioCosto[2]) * 100)} más que antes.`);
   }
@@ -670,10 +674,10 @@ function vistaComparativo(r, periodo) {
   doc.secciones.push(serie(
     'Ingresos, costos y ganancia',
     'Cada grupo compara el período actual con el anterior en las cuentas principales del negocio.',
-    'grupo', ['Ingresos', 'Insumos', 'Comisiones', 'Gastos', 'Ganancia'],
+    'grupo', ['Ingresos', 'Insumos', 'Comisiones pagadas', 'Salarios pagados', 'Gastos', 'Ganancia'],
     [
-      { nombre: 'Período actual', valores: [a.totalIngresos, a.costoInsumos, a.totalComisionesLavadores, a.totalGastos, Math.max(0, a.gananciaNeta)], color: PALETA[0] },
-      { nombre: 'Período anterior', valores: [b.totalIngresos, b.costoInsumos, b.totalComisionesLavadores, b.totalGastos, Math.max(0, b.gananciaNeta)], color: '#94a3b8' }
+      { nombre: 'Período actual', valores: [a.totalIngresos, a.costoInsumos, a.comisionesPagadas, a.salariosPagados, a.totalGastos, Math.max(0, a.gananciaNeta)], color: PALETA[0] },
+      { nombre: 'Período anterior', valores: [b.totalIngresos, b.costoInsumos, b.comisionesPagadas, b.salariosPagados, b.totalGastos, Math.max(0, b.gananciaNeta)], color: '#94a3b8' }
     ]
   ));
 
@@ -694,7 +698,8 @@ function vistaComparativo(r, periodo) {
     [
       fila('Ingresos', a.totalIngresos, b.totalIngresos, F.moneda),
       fila('Compras de insumos', a.costoInsumos, b.costoInsumos, F.moneda, false),
-      fila('Comisiones de lavadores', a.totalComisionesLavadores, b.totalComisionesLavadores, F.moneda, false),
+      fila('Comisiones pagadas a lavadores', a.comisionesPagadas, b.comisionesPagadas, F.moneda, false),
+      fila('Salarios pagados', a.salariosPagados, b.salariosPagados, F.moneda, false),
       fila('Gastos operativos', a.totalGastos, b.totalGastos, F.moneda, false),
       fila('Ganancia neta', a.gananciaNeta, b.gananciaNeta, F.moneda),
       fila('Margen de rentabilidad (%)', a.margenPorcentaje, b.margenPorcentaje, (x) => F.porcentaje(x)),

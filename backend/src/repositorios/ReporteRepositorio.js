@@ -102,7 +102,24 @@ async function calcularReporte(inicio, fin) {
   const [gastos] = await pool.query(`SELECT SUM(monto) AS total FROM gastos_operativos WHERE fecha BETWEEN ? AND ?`, [inicio, fin]);
   const totalGastos = Number(gastos[0].total) || 0;
 
-  const gananciaNeta = totalIngresos - (costoInsumos + totalGastos + totalComisionesLavadores);
+  // Lo que realmente salió por nómina en el período: las comisiones y los salarios se restan
+  // cuando se PAGAN (liquidación pagada / pago de salario), no cuando se genera el servicio.
+  const [comisionesPagadasFila] = await pool.query(
+    `SELECT COALESCE(SUM(valor_a_pagar), 0) AS total, COUNT(*) AS cantidad FROM liquidaciones_lavador WHERE estado = 'pagado' AND fecha_pago BETWEEN ? AND ?`,
+    [inicio, fin]
+  );
+  const [salariosPagadosFila] = await pool.query(
+    `SELECT COALESCE(SUM(valor_a_pagar), 0) AS total, COUNT(*) AS cantidad FROM pagos_salario WHERE fecha_pago_real BETWEEN ? AND ?`,
+    [inicio, fin]
+  );
+  const comisionesPagadas = Number(comisionesPagadasFila[0].total) || 0;
+  const salariosPagados = Number(salariosPagadosFila[0].total) || 0;
+
+  // Lo que hoy se les debe a los lavadores (comisión + propinas - descuentos - lo ya liquidado): informativo, aún no resta.
+  const NominaRepositorio = require('./NominaRepositorio');
+  const porPagarLavadores = (await NominaRepositorio.resumenComisionesLavadores()).reduce((s, l) => s + (Number(l.comision_pendiente) || 0), 0);
+
+  const gananciaNeta = totalIngresos - (costoInsumos + totalGastos + comisionesPagadas + salariosPagados);
   const margenPorcentaje = totalIngresos > 0 ? Number(((gananciaNeta / totalIngresos) * 100).toFixed(1)) : 0;
 
   // Todo se discrimina por tipo de vehículo: cantidad de servicios e ingresos
@@ -167,6 +184,9 @@ async function calcularReporte(inicio, fin) {
     serieIngresos, porMetodoPago,
     gastosDetalle: gastosDetalle.map(g => ({ id: g.id, fecha: g.fecha, concepto: g.concepto, monto: Number(g.monto), registradoPor: g.registrado_por || '-' })),
     totalIngresos, totalComisionesLavadores, costoInsumos, totalGastos, gananciaNeta, margenPorcentaje,
+    comisionesPagadas, comisionesPagadasCantidad: comisionesPagadasFila[0].cantidad || 0,
+    salariosPagados, salariosPagadosCantidad: salariosPagadosFila[0].cantidad || 0,
+    porPagarLavadores,
     totalDescuentoNegocio, totalDescuentoTrabajador, totalPropinas,
     serviciosAtendidos: ordenesPagadas.length,
     serviciosCancelados: {
@@ -613,6 +633,8 @@ async function calcularReporteComparativo(inicio, fin) {
     totalIngresos: r.totalIngresos,
     costoInsumos: r.costoInsumos,
     totalComisionesLavadores: r.totalComisionesLavadores,
+    comisionesPagadas: r.comisionesPagadas,
+    salariosPagados: r.salariosPagados,
     totalGastos: r.totalGastos,
     gananciaNeta: r.gananciaNeta,
     margenPorcentaje: r.margenPorcentaje,
