@@ -54,8 +54,28 @@ async function aplicarMigraciones() {
     await pool.query(`ALTER TABLE clientes ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo'`);
     console.log('🛠  Migración aplicada: clientes.estado');
   }
+  // Día de pago del empleado (para saber cuándo le toca el pago de salario).
+  if (!(await existeColumna('usuarios', 'dia_pago'))) {
+    await pool.query(`ALTER TABLE usuarios ADD COLUMN dia_pago TINYINT NULL AFTER periodicidad_pago`);
+    console.log('🛠  Migración aplicada: usuarios.dia_pago');
+  }
   await separarNombresYApellidos();
   await prepararCuentasDeLavador();
+  await corregirCitasDeOrdenesCanceladas();
+}
+
+/**
+ * Citas que quedaron como "atendidas" porque su orden se canceló después:
+ * pasan a "canceladas" (solo si la cita no tiene ninguna otra orden vigente).
+ */
+async function corregirCitasDeOrdenesCanceladas() {
+  const [resultado] = await pool.query(
+    `UPDATE citas c SET c.estado = 'cancelada'
+     WHERE c.estado = 'atendida'
+       AND EXISTS (SELECT 1 FROM ordenes_servicio o WHERE o.cita_id = c.id AND o.estado = 'cancelado')
+       AND NOT EXISTS (SELECT 1 FROM ordenes_servicio o WHERE o.cita_id = c.id AND o.estado <> 'cancelado')`
+  );
+  if (resultado.affectedRows) console.log(`🛠  Citas con orden cancelada marcadas como canceladas: ${resultado.affectedRows}`);
 }
 
 /**

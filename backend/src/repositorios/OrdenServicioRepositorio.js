@@ -159,6 +159,16 @@ async function actualizarEstado(id, estado) {
   if (estado === 'entregado') campos.push('fecha_hora_entrega = NOW()');
 
   await pool.query(`UPDATE ordenes_servicio SET ${campos.join(', ')} WHERE id = ?`, [...valores, id]);
+
+  // Al crear la orden la cita quedó "atendida"; si la orden se cancela, la cita
+  // también debe verse como cancelada (no como atendida).
+  if (estado === 'cancelado') {
+    await pool.query(
+      `UPDATE citas c INNER JOIN ordenes_servicio o ON o.cita_id = c.id
+       SET c.estado = 'cancelada' WHERE o.id = ? AND c.estado = 'atendida'`,
+      [id]
+    );
+  }
 }
 
 async function reemplazarLavadoresAsignados(ordenId, lavadoresAsignados) {

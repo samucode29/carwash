@@ -717,11 +717,27 @@ const app = {
     try {
       this.washers = await ApiCliente.get('/api/personal/lavadores?activos=true');
 
-      const entregaSelect = document.getElementById('entregaLavadorSelect');
-      if (entregaSelect) {
-        entregaSelect.innerHTML = this.washers.map(w => `<option value="${w.id}">${w.nombre}</option>`).join('');
-      }
+      this.llenarLavadoresEntrega();
     } catch (err) { console.error(err); }
+  },
+
+  /**
+   * El material solo se le entrega a un lavador presente (con entrada de hoy y
+   * sin salida): el selector de "Entregar insumo" lista solo a esos.
+   */
+  llenarLavadoresEntrega() {
+    const entregaSelect = document.getElementById('entregaLavadorSelect');
+    if (!entregaSelect) return;
+    const presentes = (this.washers || []).filter(w => w.disponible_hoy);
+    entregaSelect.innerHTML = presentes.length
+      ? presentes.map(w => `<option value="${w.id}">${escapeHtml(w.nombre)}</option>`).join('')
+      : '<option value="">Ningún lavador presente hoy</option>';
+    const aviso = document.getElementById('entregaAvisoPresencia');
+    if (aviso) {
+      aviso.textContent = presentes.length
+        ? 'Solo aparecen los lavadores que registraron su entrada hoy y no han marcado salida.'
+        : 'Ningún lavador ha registrado su entrada hoy. Registra su asistencia en Nómina > Asistencia para poder entregarle material.';
+    }
   },
 
   /**
@@ -1637,8 +1653,9 @@ const app = {
     }
   },
 
-  abrirModalEntregaInsumo() {
+  async abrirModalEntregaInsumo() {
     document.getElementById('entregaCantidad').value = '';
+    await this.loadWashers(); // refresca quién está presente antes de mostrar el selector
     this.openModal('modalEntregaInsumo');
   },
 
@@ -1647,6 +1664,7 @@ const app = {
     const insumo_id = document.getElementById('entregaInsumoSelect').value;
     const cantidad = document.getElementById('entregaCantidad').value;
 
+    if (!lavador_id) { this.toast('No hay un lavador presente al que entregarle el material.', 'warning'); return; }
     if (!cantidad || cantidad <= 0) { this.toast('Ingrese una cantidad válida.', 'warning'); return; }
 
     try {
@@ -1982,6 +2000,7 @@ const app = {
               <td><span class="role-badge">${e.rol.toUpperCase()}</span></td>
               <td>${e.lavador_id ? '<span class="text-muted">--</span>' : `<strong>${this.formatMoney(e.salario_fijo)}</strong>`}</td>
               <td>${e.lavador_id ? '--' : (e.periodicidad_pago || '').toUpperCase()}</td>
+              <td>${e.lavador_id ? '--' : this.estadoPagoHtml(e)}</td>
               <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
               <td>${e.lavador_id ? '--' : (e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados')}</td>
               <td>
@@ -2191,6 +2210,15 @@ const app = {
     }
   },
 
+  /** Cuándo le toca el próximo pago al empleado (solo informa: se puede pagar en cualquier momento). */
+  estadoPagoHtml(e) {
+    const p = e.estado_pago;
+    if (!p || p.estado === 'sin_dia') return '<span class="text-sm text-muted">Sin día de pago (edítalo para definirlo)</span>';
+    const colores = { vencido: '#ef4444', hoy: '#f59e0b', proximo: '#0077b6', al_dia: '#10b981' };
+    const etiquetas = { vencido: 'VENCIDO', hoy: 'TOCA HOY', proximo: 'PRÓXIMO', al_dia: 'AL DÍA' };
+    return `<span class="role-badge" style="background: ${colores[p.estado] || '#64748b'}">${etiquetas[p.estado] || ''}</span><br><span class="text-sm text-muted">${escapeHtml(p.texto)}</span>`;
+  },
+
   abrirModalPagarSalario(empleadoId, nombre, periodicidadPago) {
     this.payingEmpleadoId = empleadoId;
     this.payingPeriodicidad = periodicidadPago;
@@ -2200,8 +2228,20 @@ const app = {
 
     // Rango por defecto según la periodicidad de pago del empleado; el
     // administrador puede ajustarlo antes de calcular.
+    // Se puede pagar en cualquier momento: por defecto el período va desde el
+    // día siguiente al último período pagado hasta hoy (si no hay pagos previos,
+    // desde el largo normal de su periodicidad).
     const diasAtras = { semanal: 6, quincenal: 14, mensual: 29 }[periodicidadPago] ?? 14;
-    document.getElementById('pagSalPeriodoInicio').value = fechaLocalHaceDias(diasAtras);
+    let inicio = fechaLocalHaceDias(diasAtras);
+    const emp = (this.empleadosNomina || []).find(x => x.empleado_id === empleadoId);
+    const finUltimo = emp && emp.ultimo_pago && emp.ultimo_pago.periodo_fin ? String(emp.ultimo_pago.periodo_fin).substring(0, 10) : null;
+    if (finUltimo) {
+      const siguiente = new Date(`${finUltimo}T00:00:00`);
+      siguiente.setDate(siguiente.getDate() + 1);
+      const sig = `${siguiente.getFullYear()}-${String(siguiente.getMonth() + 1).padStart(2, '0')}-${String(siguiente.getDate()).padStart(2, '0')}`;
+      if (sig <= fechaLocalHoy()) inicio = sig;
+    }
+    document.getElementById('pagSalPeriodoInicio').value = inicio;
     document.getElementById('pagSalPeriodoFin').value = fechaLocalHoy();
 
     this.openModal('modalPagarSalarioEmpleado');
@@ -3256,6 +3296,7 @@ const app = {
     document.getElementById('usrPeriodicidad').value = 'quincenal';
     document.getElementById('usrJornadaHoras').value = 8;
     document.getElementById('usrDiasDescanso').value = 1;
+    document.getElementById('usrDiaPago').value = '';
     this.onUsrRolChange();
     this.openModal('modalNuevoUsuario');
   },
@@ -3296,8 +3337,9 @@ const app = {
         const periodicidadPago = document.getElementById('usrPeriodicidad').value;
         const jornadaHorasDia = document.getElementById('usrJornadaHoras').value;
         const diasDescansoSemana = document.getElementById('usrDiasDescanso').value;
+        const diaPago = document.getElementById('usrDiaPago').value;
 
-        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombres, apellidos, documento, telefono, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
+        const nuevo = await ApiCliente.post('/api/personal/usuarios', { nombres, apellidos, documento, telefono, rol, salarioFijo, periodicidadPago, diaPago, jornadaHorasDia, diasDescansoSemana });
         alert(`Cuenta creada para ${nombre}.\n\nUsuario: ${nuevo.username}\nContraseña temporal: ${nuevo.passwordAsignada}\n\nCompártela con la persona; puede cambiarla desde "Mi Perfil" -> "Cambiar Contraseña".`);
         this.toast(`Personal ${nombre} creado con éxito.`, 'success');
       }
@@ -3388,6 +3430,7 @@ const app = {
     document.getElementById('editEmpPeriodicidad').value = e.periodicidad_pago;
     document.getElementById('editEmpJornadaHoras').value = e.jornada_horas_dia || 8;
     document.getElementById('editEmpDiasDescanso').value = e.dias_descanso_semana ?? 1;
+    document.getElementById('editEmpDiaPago').value = e.dia_pago || '';
     this.openModal('modalEditarEmpleado');
   },
 
@@ -3400,13 +3443,14 @@ const app = {
     const periodicidadPago = document.getElementById('editEmpPeriodicidad').value;
     const jornadaHorasDia = document.getElementById('editEmpJornadaHoras').value;
     const diasDescansoSemana = document.getElementById('editEmpDiasDescanso').value;
+    const diaPago = document.getElementById('editEmpDiaPago').value;
     if (!nombres || !apellidos) { this.toast('Nombres y apellidos son obligatorios.', 'warning'); return; }
     if (!esNombreValido(nombres) || !esNombreValido(apellidos)) { this.toast('Nombres y apellidos deben tener solo letras y espacios, mínimo 3 caracteres.', 'warning'); return; }
     if (telefono && !esTelefonoValido(telefono)) { this.toast('El teléfono debe tener solo números (7 a 10 dígitos).', 'warning'); return; }
     if (correo && !esCorreoValido(correo)) { this.toast('El correo electrónico no tiene un formato válido.', 'warning'); return; }
 
     try {
-      await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombres, apellidos, telefono, correo, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana });
+      await ApiCliente.put(`/api/personal/usuarios/${this.editingEmpleadoId}`, { nombres, apellidos, telefono, correo, salarioFijo, periodicidadPago, diaPago, jornadaHorasDia, diasDescansoSemana });
       this.toast('Datos del empleado actualizados.', 'success');
       this.closeModal('modalEditarEmpleado');
       this.loadNomina();

@@ -4,6 +4,7 @@
  */
 const { pool } = require('../config/baseDeDatos');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
+const { estadoDePago } = require('../utilidades/calendarioPago');
 const { calcularValorHora, calcularHorasEsperadasPorPeriodo, calcularHorasEsperadasSemana } = require('../utilidades/jornada');
 
 // ---------------------------------------------------------------------------
@@ -223,11 +224,13 @@ async function listarEmpleadosConUltimoPago() {
     `SELECT id, empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos,
             valor_a_pagar, estado, fecha_pago_real, soporte_pago_url,
             (soporte_pago_datos IS NOT NULL) AS tiene_soporte, creado_en
-     FROM pagos_salario ORDER BY creado_en ASC`
+     FROM pagos_salario ORDER BY fecha_pago_real ASC, id ASC`
   );
 
+  const hoy = obtenerFechaHoy();
   return empleados.map(emp => {
     const pagosDelEmpleado = pagos.filter(p => p.empleado_id === emp.id);
+    const periodicidad = emp.periodicidad_pago || 'quincenal';
     return {
       empleado_id: emp.id,
       nombre: emp.nombre,
@@ -238,7 +241,14 @@ async function listarEmpleadosConUltimoPago() {
       telefono: emp.telefono || '',
       correo: emp.correo || '',
       salario_fijo: emp.salario_fijo || 0,
-      periodicidad_pago: emp.periodicidad_pago || 'quincenal',
+      periodicidad_pago: periodicidad,
+      dia_pago: emp.dia_pago || null,
+      // Cuándo le toca el próximo pago (solo informa: se puede pagar en cualquier momento).
+      estado_pago: emp.lavador_id ? null : estadoDePago(
+        { periodicidad, diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso },
+        pagosDelEmpleado.map(p => String(p.fecha_pago_real || '').substring(0, 10)),
+        hoy
+      ),
       jornada_horas_dia: Number(emp.jornada_horas_dia) || 8,
       dias_descanso_semana: emp.dias_descanso_semana ?? 1,
       fecha_ingreso: emp.fecha_ingreso,

@@ -11,6 +11,7 @@ const { normalizarParaUsername } = require('../utilidades/texto');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
 const { esDocumentoValido, esTelefonoValido, esCorreoValido } = require('../utilidades/validadores');
 const { interpretarNombre, traeNombre, exigirCelularUnico } = require('../utilidades/personas');
+const { normalizarDiaPago } = require('../utilidades/calendarioPago');
 
 /**
  * Genera un nombre de usuario único: "primernombre.primerapellido", y si ya
@@ -84,6 +85,10 @@ async function darAccesoLavador(req, res) {
 
 async function crearUsuario(req, res) {
   const { documento, telefono, correo, rol, salarioFijo, periodicidadPago, jornadaHorasDia, diasDescansoSemana } = req.body;
+  const diaPago = normalizarDiaPago(req.body.diaPago, periodicidadPago || 'quincenal');
+  if (diaPago === undefined) {
+    return res.status(400).json({ error: (periodicidadPago === 'semanal') ? 'El día de pago semanal es un número de 1 (lunes) a 7 (domingo).' : 'El día de pago debe ser un día del mes entre 1 y 31.' });
+  }
 
   const persona = interpretarNombre(req.body);
   if (persona.error) return res.status(400).json({ error: persona.error });
@@ -137,6 +142,7 @@ async function crearUsuario(req, res) {
     rol,
     salarioFijo: salarioFijo ? parseFloat(salarioFijo) : 1400000,
     periodicidadPago: periodicidadPago || 'quincenal',
+    diaPago,
     jornadaHorasDia: jornadaHorasDia ? parseFloat(jornadaHorasDia) : 8,
     diasDescansoSemana: diasDescansoSemana !== undefined ? parseInt(diasDescansoSemana, 10) : 1
   });
@@ -206,6 +212,13 @@ async function actualizarUsuario(req, res) {
   if (estado) cambios.estado = estado;
   if (salarioFijo !== undefined) cambios.salario_fijo = parseFloat(salarioFijo);
   if (periodicidadPago) cambios.periodicidad_pago = periodicidadPago;
+  if (req.body.diaPago !== undefined) {
+    const diaPago = normalizarDiaPago(req.body.diaPago, periodicidadPago || actual.periodicidad_pago || 'quincenal');
+    if (diaPago === undefined) {
+      return res.status(400).json({ error: ((periodicidadPago || actual.periodicidad_pago) === 'semanal') ? 'El día de pago semanal es un número de 1 (lunes) a 7 (domingo).' : 'El día de pago debe ser un día del mes entre 1 y 31.' });
+    }
+    cambios.dia_pago = diaPago;
+  }
   if (jornadaHorasDia !== undefined) cambios.jornada_horas_dia = parseFloat(jornadaHorasDia);
   if (diasDescansoSemana !== undefined) cambios.dias_descanso_semana = parseInt(diasDescansoSemana, 10);
   if (password) cambios.password_hash = hashearContrasena(password);

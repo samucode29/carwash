@@ -5,6 +5,8 @@
 const InsumoRepositorio = require('../repositorios/InsumoRepositorio');
 const AuditoriaRepositorio = require('../repositorios/AuditoriaRepositorio');
 const FacturaRepositorio = require('../repositorios/FacturaRepositorio');
+const LavadorRepositorio = require('../repositorios/LavadorRepositorio');
+const AsistenciaRepositorio = require('../repositorios/AsistenciaRepositorio');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
 
 async function listarInsumos(req, res) {
@@ -102,6 +104,15 @@ async function registrarEntrega(req, res) {
   const { lavador_id, insumo_id, cantidad } = req.body;
   if (!lavador_id || !insumo_id || !cantidad) {
     return res.status(400).json({ error: 'Lavador, insumo y cantidad son obligatorios.' });
+  }
+
+  // Solo se le entrega material a un lavador activo que está presente hoy
+  // (registró su entrada y todavía no marcó salida).
+  const lavador = await LavadorRepositorio.obtenerActivoPorId(parseInt(lavador_id, 10));
+  if (!lavador) return res.status(400).json({ error: 'El lavador no existe o está inactivo.' });
+  const presentes = await AsistenciaRepositorio.listarIdsPresentesHoy('lavador', obtenerFechaHoy());
+  if (!presentes.includes(lavador.id)) {
+    return res.status(400).json({ error: `${lavador.nombre} no está presente: debe registrar su entrada de hoy (y no haber marcado salida) para recibir material.` });
   }
 
   const entrega = await InsumoRepositorio.registrarEntrega({

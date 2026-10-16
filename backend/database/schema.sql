@@ -48,6 +48,10 @@ CREATE TABLE usuarios (
     fecha_ingreso       DATE NOT NULL,
     salario_fijo        DECIMAL(12,2),
     periodicidad_pago   ENUM('semanal','quincenal','mensual') DEFAULT 'quincenal',
+    -- Día de pago: mensual = día del mes; quincenal = ese día y 15 días después;
+    -- semanal = día de la semana (1 lunes ... 7 domingo). Solo avisa cuándo toca
+    -- pagar: el pago se puede registrar en cualquier momento.
+    dia_pago            TINYINT NULL,
     -- Jornada laboral y descanso: el pago de nómina se calcula por hora
     -- (salario_fijo entre las horas esperadas de la jornada) multiplicado
     -- por las horas realmente trabajadas (ver asistencia), no como un

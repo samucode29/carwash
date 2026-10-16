@@ -503,6 +503,7 @@
                     <th>Rol</th>
                     <th>Salario Base</th>
                     <th>Periodicidad</th>
+                    <th>Próximo pago</th>
                     <th>Estado</th>
                     <th>Último Pago</th>
                     <th>Acciones</th>
@@ -1181,6 +1182,7 @@
         <div class="form-group">
           <label>Lavador Beneficiario:</label>
           <select id="entregaLavadorSelect"></select>
+          <p id="entregaAvisoPresencia" class="text-sm text-muted mt-1"></p>
         </div>
         <div class="form-group">
           <label>Insumo a entregar:</label>
@@ -1355,6 +1357,11 @@
             <input type="number" id="editEmpDiasDescanso" min="0" max="7">
           </div>
         </div>
+        <div class="form-group">
+          <label>Día de pago:</label>
+          <input type="number" id="editEmpDiaPago" min="1" max="31" placeholder="Ej: 16 (vacío = sin día definido)">
+          <p class="text-sm text-muted mt-1">Día de pago: en mensual es el día del mes (ej. 16); en quincenal es ese día y 15 días después (16 = el 1 y el 16; 15 = el 15 y el 30); en semanal va de 1 (lunes) a 7 (domingo). Solo avisa cuándo toca: se le puede pagar en cualquier momento.</p>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modalEditarEmpleado')">Cancelar</button>
@@ -1520,6 +1527,11 @@
               <label>Días de Descanso a la Semana:</label>
               <input type="number" id="usrDiasDescanso" value="1" min="0" max="7">
             </div>
+          </div>
+          <div class="form-group">
+            <label>Día de pago:</label>
+            <input type="number" id="usrDiaPago" min="1" max="31" placeholder="Ej: 16 (vacío = sin día definido)">
+            <p class="text-sm text-muted mt-1">Día de pago: en mensual es el día del mes (ej. 16); en quincenal es ese día y 15 días después (16 = el 1 y el 16; 15 = el 15 y el 30); en semanal va de 1 (lunes) a 7 (domingo). Solo avisa cuándo toca: se le puede pagar en cualquier momento.</p>
           </div>
           <p class="text-sm text-muted mb-2">El pago de nómina se calcula por hora: el salario base se divide entre las horas esperadas de la jornada, y se paga según las horas que realmente marque en asistencia.</p>
         </div>

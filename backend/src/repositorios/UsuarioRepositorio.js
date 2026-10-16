@@ -7,7 +7,7 @@ const { pool } = require('../config/baseDeDatos');
 
 const COLUMNAS_PUBLICAS = `
   id, nombre, nombres, apellidos, documento, telefono, correo, username, rol, es_admin_principal, estado,
-  fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, lavador_id, creado_en
+  fecha_ingreso, salario_fijo, periodicidad_pago, dia_pago, jornada_horas_dia, dias_descanso_semana, lavador_id, creado_en
 `;
 
 async function buscarPorUsernameOCorreo(identificador) {
@@ -51,11 +51,11 @@ async function listar(rol) {
 async function crear(datos) {
   const [resultado] = await pool.query(
     `INSERT INTO usuarios
-      (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, jornada_horas_dia, dias_descanso_semana, lavador_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?, ?)`,
+      (nombre, nombres, apellidos, documento, telefono, correo, username, password_hash, rol, estado, fecha_ingreso, salario_fijo, periodicidad_pago, dia_pago, jornada_horas_dia, dias_descanso_semana, lavador_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo', CURDATE(), ?, ?, ?, ?, ?, ?)`,
     [
       datos.nombre, datos.nombres, datos.apellidos, datos.documento, datos.telefono || '', datos.correo, datos.username,
-      datos.passwordHash, datos.rol, datos.salarioFijo || null, datos.periodicidadPago || 'quincenal',
+      datos.passwordHash, datos.rol, datos.salarioFijo || null, datos.periodicidadPago || 'quincenal', datos.diaPago ?? null,
       datos.jornadaHorasDia || 8, datos.diasDescansoSemana ?? 1, datos.lavadorId || null
     ]
   );
