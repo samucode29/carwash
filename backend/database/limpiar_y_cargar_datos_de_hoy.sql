@@ -1,0 +1,76 @@
+-- =====================================================================================
+-- REINICIO: se borra TODO lo transaccional y se carga de nuevo solo lo mínimo, en octubre 2026:
+--   10 ventas (con su comisión, descuentos y propinas) y 2 compras de insumos. Todo lo demás queda en cero.
+-- Se CONSERVA: clientes, vehículos, notas, lavadores, empleados/usuarios, servicios, tipos de vehículo,
+--   horario, insumos (catálogo), proveedores y auditoría.
+-- Se BORRA: órdenes, pagos, facturas, citas, turnos, cierres de caja, asistencia, compras, movimientos y
+--   entregas de inventario, gastos, liquidaciones y pagos de salario.
+-- Es IRREVERSIBLE: haz una copia de seguridad antes de correrlo. Se puede volver a correr completo.
+-- Reglas: el lavador cobra su % del precio (60% casi siempre, el resto es del negocio); en equipo el 60% total
+--   se reparte en partes iguales; el descuento del negocio no toca la comisión; la propina es 100% del lavador.
+-- =====================================================================================
+START TRANSACTION;
+DELETE FROM facturas;
+DELETE FROM pagos;
+DELETE FROM movimientos_inventario;
+DELETE FROM insumos_entregados;
+DELETE FROM ordenes_servicio;
+DELETE FROM turno_servicios_extra;
+DELETE FROM turnos;
+DELETE FROM citas;
+DELETE FROM cierres_caja;
+DELETE FROM liquidaciones_lavador;
+DELETE FROM pagos_salario;
+DELETE FROM asistencia_sesiones;
+DELETE FROM asistencia;
+DELETE FROM gastos_operativos;
+INSERT INTO movimientos_inventario (id, insumo_id, tipo, cantidad, orden_id, proveedor_id, usuario_id, observacion, fecha) VALUES (1, 1, 'entrada', 3000, NULL, 1, 1, 'Compra a Químicos del Caribe S.A.S.', '2026-10-01 07:40:00');
+INSERT INTO movimientos_inventario (id, insumo_id, tipo, cantidad, orden_id, proveedor_id, usuario_id, observacion, fecha) VALUES (2, 2, 'entrada', 10, NULL, 1, 1, 'Compra a Químicos del Caribe S.A.S.', '2026-10-08 08:00:00');
+UPDATE insumos SET stock_actual = 3000 WHERE id = 1;
+UPDATE insumos SET stock_actual = 10 WHERE id = 2;
+UPDATE insumos SET stock_actual = 0 WHERE id = 3;
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (1, NULL, NULL, NULL, NULL, 1, 1, 'KLM482', 'carro', 'entregado', 18000, NULL, 1, '2026-10-02 08:30:00', '2026-10-02 08:55:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (1, 1, 1, 60, 10800.0, '2026-10-02 08:30:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (1, 1, 'efectivo', 18000, 0, 0, 0, NULL, 'confirmado', '2026-10-02 08:55:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (2, NULL, NULL, 78, 68, 6, 0, NULL, NULL, 'entregado', 50000, NULL, 1, '2026-10-03 09:15:00', '2026-10-03 10:05:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (2, 5, 1, 60, 30000.0, '2026-10-03 09:15:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (2, 2, 'transferencia', 50000, 0, 0, 5000, NULL, 'confirmado', '2026-10-03 10:05:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (3, NULL, NULL, 70, 60, 2, 0, NULL, NULL, 'entregado', 32000, NULL, 1, '2026-10-05 10:00:00', '2026-10-05 10:45:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (3, 10, 1, 60, 19200.0, '2026-10-05 10:00:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (3, 3, 'efectivo', 28800, 3200, 0, 0, 'Descuento del 10% por cliente frecuente (lo asume el negocio)', 'confirmado', '2026-10-05 10:45:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (4, NULL, NULL, 65, 55, 10, 0, NULL, NULL, 'entregado', 18000, NULL, 1, '2026-10-07 08:45:00', '2026-10-07 09:15:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (4, 4, 1, 60, 5400.0, '2026-10-07 08:45:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (4, 13, 1, 60, 5400.0, '2026-10-07 08:45:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (4, 4, 'tarjeta', 18000, 0, 0, 0, NULL, 'confirmado', '2026-10-07 09:15:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (5, NULL, NULL, NULL, NULL, 3, 1, 'RNP71D', 'moto', 'entregado', 10000, NULL, 1, '2026-10-09 11:00:00', '2026-10-09 11:20:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (5, 14, 1, 50, 5000.0, '2026-10-09 11:00:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (5, 5, 'efectivo', 10000, 0, 0, 0, NULL, 'confirmado', '2026-10-09 11:20:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (6, NULL, NULL, 27, 17, 5, 0, NULL, NULL, 'entregado', 50000, NULL, 1, '2026-10-10 09:30:00', '2026-10-10 10:30:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (6, 1, 1, 60, 30000.0, '2026-10-10 09:30:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (6, 6, 'efectivo', 50000, 0, 0, 0, NULL, 'confirmado', '2026-10-10 10:30:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (7, NULL, NULL, 41, 31, 8, 0, NULL, NULL, 'entregado', 32000, NULL, 1, '2026-10-13 14:00:00', '2026-10-13 14:55:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (7, 6, 1, 55, 17600.0, '2026-10-13 14:00:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (7, 7, 'transferencia', 32000, 0, 0, 2000, NULL, 'confirmado', '2026-10-13 14:55:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (8, NULL, NULL, NULL, NULL, 2, 1, 'DEF456', 'carro', 'entregado', 32000, NULL, 1, '2026-10-14 10:20:00', '2026-10-14 11:05:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (8, 5, 1, 60, 19200.0, '2026-10-14 10:20:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (8, 8, 'efectivo', 32000, 0, 0, 0, NULL, 'confirmado', '2026-10-14 11:05:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (9, NULL, NULL, 43, 33, 1, 0, NULL, NULL, 'entregado', 18000, NULL, 1, '2026-10-15 09:00:00', '2026-10-15 09:25:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (9, 10, 1, 60, 10800.0, '2026-10-15 09:00:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (9, 9, 'transferencia', 18000, 0, 0, 0, NULL, 'confirmado', '2026-10-15 09:25:00');
+INSERT INTO ordenes_servicio (id, cita_id, turno_id, cliente_id, vehiculo_id, servicio_id, es_venta_anonima, placa_anonima, tipo_vehiculo_anonimo, estado, total, observacion, registrado_por, fecha_hora_registro, fecha_hora_entrega) VALUES (10, NULL, NULL, 32, 22, 4, 0, NULL, NULL, 'entregado', 18000, NULL, 1, '2026-10-16 09:10:00', '2026-10-16 09:45:00');
+INSERT INTO orden_lavadores (orden_id, lavador_id, asignacion_automatica, porcentaje_comision, valor_comision, asignado_en) VALUES (10, 1, 1, 60, 10800.0, '2026-10-16 09:10:00');
+INSERT INTO pagos (id, orden_id, metodo_pago, monto, descuento_negocio, descuento_trabajador, propina, observacion, estado, fecha_pago) VALUES (10, 10, 'efectivo', 18000, 0, 0, 0, NULL, 'confirmado', '2026-10-16 09:45:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (1, 'COMSH-011026-001', 'compra', NULL, 1, NULL, 1, 'Shampoo pH Neutro Concentrado', 54000, '2026-10-01', 1, '2026-10-01 07:40:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (2, 'VENLA-021026-001', 'venta', 1, NULL, NULL, NULL, 'Lavado Básico Carro', 18000, '2026-10-02', 1, '2026-10-02 08:55:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (3, 'VENPO-031026-001', 'venta', 2, NULL, 78, NULL, 'Polichado & Encerado Diamante Moto', 50000, '2026-10-03', 1, '2026-10-03 10:05:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (4, 'VENLA-051026-001', 'venta', 3, NULL, 70, NULL, 'Lavado Completo Carro', 28800, '2026-10-05', 1, '2026-10-05 10:45:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (5, 'VENLA-071026-001', 'venta', 4, NULL, 65, NULL, 'Lavado Básico Buseta', 18000, '2026-10-07', 1, '2026-10-07 09:15:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (6, 'COMES-081026-001', 'compra', NULL, 2, NULL, 1, 'estopa', 60000, '2026-10-08', 1, '2026-10-08 08:00:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (7, 'VENLA-091026-001', 'venta', 5, NULL, NULL, NULL, 'Lavado Básico Moto', 10000, '2026-10-09', 1, '2026-10-09 11:20:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (8, 'VENPO-101026-001', 'venta', 6, NULL, 27, NULL, 'Polichado & Encerado Diamante Carro', 50000, '2026-10-10', 1, '2026-10-10 10:30:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (9, 'VENLA-131026-001', 'venta', 7, NULL, 41, NULL, 'Lavado Completo Camioneta', 32000, '2026-10-13', 1, '2026-10-13 14:55:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (10, 'VENLA-141026-001', 'venta', 8, NULL, NULL, NULL, 'Lavado Completo Carro', 32000, '2026-10-14', 1, '2026-10-14 11:05:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (11, 'VENLA-151026-001', 'venta', 9, NULL, 43, NULL, 'Lavado Básico Carro', 18000, '2026-10-15', 1, '2026-10-15 09:25:00');
+INSERT INTO facturas (id, numero_factura, tipo, orden_id, movimiento_id, cliente_id, proveedor_id, concepto, total, fecha, creado_por, creado_en) VALUES (12, 'VENLA-161026-001', 'venta', 10, NULL, 32, NULL, 'Lavado Especial Moto + Cera', 18000, '2026-10-16', 1, '2026-10-16 09:45:00');
+COMMIT;
+SELECT (SELECT COUNT(*) FROM ordenes_servicio) AS ventas, (SELECT COUNT(*) FROM movimientos_inventario) AS compras, (SELECT COUNT(*) FROM facturas) AS facturas, (SELECT COUNT(*) FROM pagos_salario) AS pagos_salario, (SELECT COUNT(*) FROM liquidaciones_lavador) AS liquidaciones, (SELECT COUNT(*) FROM gastos_operativos) AS gastos, (SELECT COUNT(*) FROM asistencia) AS asistencias;
