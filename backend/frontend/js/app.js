@@ -2004,7 +2004,7 @@ const app = {
               <td><span class="role-badge" style="background: ${e.estado === 'activo' ? '#10b981' : '#ef4444'}">${(e.estado || 'activo').toUpperCase()}</span></td>
               <td>${e.lavador_id ? '--' : (e.ultimo_pago ? e.ultimo_pago.fecha_pago_real : 'Sin pagos registrados')}</td>
               <td>
-                ${e.lavador_id ? '' : `<button class="btn btn-sm btn-primary" onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}', '${e.periodicidad_pago || 'quincenal'}')">Pagar Salario</button>
+                ${e.lavador_id ? '' : `<button class="btn btn-sm btn-primary" ${(e.estado_pago && e.estado_pago.puedePagar) ? '' : `disabled title="${escapeHtml((e.estado_pago && e.estado_pago.texto) || 'Aún no le toca')}"`} onclick="app.abrirModalPagarSalario(${e.empleado_id}, '${e.nombre.replace(/'/g, "\\'")}')">Pagar Salario</button>
                 <button class="btn btn-sm btn-outline" onclick="app.abrirModalEditarEmpleado(${e.empleado_id})">Editar</button>`}
                 ${(this.currentUser.esAdminPrincipal && e.empleado_id !== this.currentUser.id && !e.es_admin_principal)
                   ? `<button class="btn btn-sm btn-outline" onclick="app.cambiarRolUsuario(${e.empleado_id}, '${e.rol}', '${e.nombre.replace(/'/g, "\\'")}')">${e.rol === 'administrador' ? 'Pasar a Empleado' : 'Hacer Administrador'}</button>`
@@ -2219,78 +2219,55 @@ const app = {
     return `<span class="role-badge" style="background: ${colores[p.estado] || '#64748b'}">${etiquetas[p.estado] || ''}</span><br><span class="text-sm text-muted">${escapeHtml(p.texto)}</span>`;
   },
 
-  abrirModalPagarSalario(empleadoId, nombre, periodicidadPago) {
-    this.payingEmpleadoId = empleadoId;
-    this.payingPeriodicidad = periodicidadPago;
-    document.getElementById('pagSalEmpleadoNombre').textContent = nombre;
-    document.getElementById('pagSalDescuentos').value = 0;
-    document.getElementById('pagSalFecha').value = fechaLocalHoy();
-
-    // Rango por defecto según la periodicidad de pago del empleado; el
-    // administrador puede ajustarlo antes de calcular.
-    // Se puede pagar en cualquier momento: por defecto el período va desde el
-    // día siguiente al último período pagado hasta hoy; si no hay pagos previos
-    // se propone el último mes (las fechas se pueden ajustar).
-    const diasAtras = { semanal: 6, quincenal: 14, mensual: 29 }[periodicidadPago] ?? 14;
-    // Quien nunca ha cobrado: el último mes (puede ajustar las fechas).
-    let inicio = fechaLocalHaceDias(29);
+  /**
+   * Pago de salario: salario fijo del período + horas extra que se escriben a
+   * mano. Solo se abre cuando al empleado le toca (o está atrasado); los
+   * lavadores son distintos, a ellos se les liquida cuando se quiera.
+   */
+  async abrirModalPagarSalario(empleadoId, nombre) {
     const emp = (this.empleadosNomina || []).find(x => x.empleado_id === empleadoId);
-    const finUltimo = emp && emp.ultimo_pago && emp.ultimo_pago.periodo_fin ? String(emp.ultimo_pago.periodo_fin).substring(0, 10) : null;
-    if (finUltimo) {
-      const siguiente = new Date(`${finUltimo}T00:00:00`);
-      siguiente.setDate(siguiente.getDate() + 1);
-      const sig = `${siguiente.getFullYear()}-${String(siguiente.getMonth() + 1).padStart(2, '0')}-${String(siguiente.getDate()).padStart(2, '0')}`;
-      inicio = sig <= fechaLocalHoy() ? sig : fechaLocalHaceDias(diasAtras);
+    const estado = emp && emp.estado_pago;
+    if (!estado || !estado.puedePagar) {
+      this.toast(estado ? estado.texto : 'No se pudo comprobar el día de pago.', 'warning');
+      return;
     }
-    document.getElementById('pagSalPeriodoInicio').value = inicio;
-    document.getElementById('pagSalPeriodoFin').value = fechaLocalHoy();
-
-    this.openModal('modalPagarSalarioEmpleado');
-    this.recalcularPagoPorHoras();
-  },
-
-  async recalcularPagoPorHoras() {
-    const inicio = document.getElementById('pagSalPeriodoInicio').value;
-    const fin = document.getElementById('pagSalPeriodoFin').value;
-    if (!inicio || !fin) return;
+    this.payingEmpleadoId = empleadoId;
+    document.getElementById('pagSalEmpleadoNombre').textContent = nombre;
+    document.getElementById('pagSalEstadoInfo').textContent = estado.texto;
+    document.getElementById('pagSalPeriodoInicio').value = estado.periodoInicio || '';
+    document.getElementById('pagSalPeriodoFin').value = estado.periodoFin || '';
+    document.getElementById('pagSalHorasExtra').value = 0;
+    document.getElementById('pagSalDescuentos').value = 0;
 
     try {
-      const c = await ApiCliente.get(`/api/nomina/empleados/${this.payingEmpleadoId}/calculo-pago?periodo_inicio=${inicio}&periodo_fin=${fin}`);
-      document.getElementById('pagSalValorHora').value = this.formatMoney(c.valorHora);
-      document.getElementById('pagSalHorasTrabajadas').value = `${c.horasTrabajadas} hrs (jornada esperada: ${c.horasEsperadasPeriodo} hrs)`;
-      document.getElementById('pagSalMontoNormal').value = `${this.formatMoney(c.montoNormal)} (${c.horasNormales} hrs)`;
-      document.getElementById('pagSalMontoExtra').value = `${this.formatMoney(c.montoExtra)} (${c.horasExtra} hrs a ${this.formatMoney(c.valorHoraExtra)}/hr)`;
-      const infoExtra = document.getElementById('pagSalHorasExtraInfo');
-      infoExtra.textContent = c.horasExtra > 0
-        ? `⚠ La jornada semanal esperada es de ${c.horasEsperadasSemana} hrs. Este empleado superó ese límite en al menos una semana del período, por eso ${c.horasExtra} hrs se pagan al doble.`
-        : `Jornada semanal esperada: ${c.horasEsperadasSemana} hrs. No hubo horas extra en el período.`;
-      document.getElementById('pagSalBase').value = c.montoCalculado;
-      this.recalcSalarioTotal();
+      const c = await ApiCliente.get(`/api/nomina/empleados/${empleadoId}/calculo-pago`);
+      this.pagoSalarioBase = c.salarioBase;
+      this.pagoValorHoraExtra = c.valorHoraExtra;
+      document.getElementById('pagSalPeriodicidad').textContent = c.periodicidadPago;
+      document.getElementById('pagSalBase').value = this.formatMoney(c.salarioBase);
+      document.getElementById('pagSalValorHoraExtra').value = this.formatMoney(c.valorHoraExtra);
     } catch (err) {
-      this.toast(err.message || 'No se pudo calcular el pago por horas.', 'error');
+      this.toast(err.message || 'No se pudo calcular el pago.', 'error');
+      return;
     }
+    this.recalcSalarioTotal();
+    this.openModal('modalPagarSalarioEmpleado');
   },
 
   recalcSalarioTotal() {
-    const base = parseFloat(document.getElementById('pagSalBase').value) || 0;
-    const desc = parseFloat(document.getElementById('pagSalDescuentos').value) || 0;
-    document.getElementById('pagSalNetoAPagar').textContent = this.formatMoney(Math.max(0, base - desc));
+    const horas = Math.max(0, parseFloat(document.getElementById('pagSalHorasExtra').value) || 0);
+    const desc = Math.max(0, parseFloat(document.getElementById('pagSalDescuentos').value) || 0);
+    const extra = horas * (this.pagoValorHoraExtra || 0);
+    document.getElementById('pagSalMontoExtra').value = this.formatMoney(extra);
+    document.getElementById('pagSalNetoAPagar').textContent = this.formatMoney(Math.max(0, (this.pagoSalarioBase || 0) + extra - desc));
   },
 
   async confirmarPagoSalario() {
-    const salarioBase = document.getElementById('pagSalBase').value;
-    const descuentos = document.getElementById('pagSalDescuentos').value;
-    const fecha = document.getElementById('pagSalFecha').value;
-
     try {
       const pago = await ApiCliente.post('/api/nomina/pagar-empleado', {
         empleado_id: this.payingEmpleadoId,
-        periodicidad: this.payingPeriodicidad,
-        salario_base: salarioBase,
-        descuentos,
-        fecha_pago: fecha,
-        periodo_inicio: document.getElementById('pagSalPeriodoInicio').value,
-        periodo_fin: document.getElementById('pagSalPeriodoFin').value
+        horas_extra: document.getElementById('pagSalHorasExtra').value,
+        descuentos: document.getElementById('pagSalDescuentos').value
       });
       this.toast('Salario pagado y registrado. Imprima el comprobante para las firmas.', 'success');
       this.closeModal('modalPagarSalarioEmpleado');

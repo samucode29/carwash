@@ -59,6 +59,11 @@ async function aplicarMigraciones() {
     await pool.query(`ALTER TABLE usuarios ADD COLUMN dia_pago TINYINT NULL AFTER periodicidad_pago`);
     console.log('🛠  Migración aplicada: usuarios.dia_pago');
   }
+  // Horas extra escritas a mano en el pago de salario.
+  if (!(await existeColumna('pagos_salario', 'horas_extra'))) {
+    await pool.query(`ALTER TABLE pagos_salario ADD COLUMN horas_extra DECIMAL(6,2) NOT NULL DEFAULT 0 AFTER salario_base, ADD COLUMN valor_horas_extra DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER horas_extra`);
+    console.log('🛠  Migración aplicada: pagos_salario.horas_extra');
+  }
   await separarNombresYApellidos();
   await prepararCuentasDeLavador();
   await corregirCitasDeOrdenesCanceladas();

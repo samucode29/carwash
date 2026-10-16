@@ -445,6 +445,11 @@ CREATE TABLE pagos_salario (
     periodo_inicio         DATE NOT NULL,
     periodo_fin            DATE NOT NULL,
     salario_base           DECIMAL(12,2) NOT NULL,
+    -- Horas extra que el administrador escribe a mano al pagar (se pagan al
+    -- doble del valor-hora) y lo que suman: valor_a_pagar = salario_base +
+    -- valor_horas_extra - descuentos.
+    horas_extra            DECIMAL(6,2) NOT NULL DEFAULT 0,
+    valor_horas_extra      DECIMAL(12,2) NOT NULL DEFAULT 0,
     descuentos             DECIMAL(12,2) NOT NULL DEFAULT 0,
     valor_a_pagar          DECIMAL(12,2) NOT NULL,
     estado                 ENUM('pendiente','pagado') NOT NULL DEFAULT 'pendiente',

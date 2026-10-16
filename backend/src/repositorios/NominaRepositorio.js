@@ -4,8 +4,8 @@
  */
 const { pool } = require('../config/baseDeDatos');
 const { obtenerFechaHoy } = require('../utilidades/fechas');
-const { estadoDePago } = require('../utilidades/calendarioPago');
-const { calcularValorHora, calcularHorasEsperadasPorPeriodo, calcularHorasEsperadasSemana } = require('../utilidades/jornada');
+const { estadoDePago, diaPagoEfectivo } = require('../utilidades/calendarioPago');
+const { calcularValorHora } = require('../utilidades/jornada');
 
 // ---------------------------------------------------------------------------
 // Comisiones de lavadores
@@ -242,7 +242,8 @@ async function listarEmpleadosConUltimoPago() {
       correo: emp.correo || '',
       salario_fijo: emp.salario_fijo || 0,
       periodicidad_pago: periodicidad,
-      dia_pago: emp.dia_pago || null,
+      // Día de pago que rige (el definido o, si no hay, el del día en que ingresó).
+      dia_pago: diaPagoEfectivo({ periodicidad, diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso }),
       // Cuándo le toca el próximo pago (solo informa: se puede pagar en cualquier momento).
       estado_pago: emp.lavador_id ? null : estadoDePago(
         { periodicidad, diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso },
@@ -263,15 +264,15 @@ async function listarEmpleadosConUltimoPago() {
   });
 }
 
-async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, fechaPago }) {
-  const valorAPagar = Math.max(0, salarioBase - descuentos);
+async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, horasExtra = 0, valorHorasExtra = 0, descuentos, fechaPago }) {
+  const valorAPagar = Math.max(0, salarioBase + valorHorasExtra - descuentos);
   const hoy = fechaPago || obtenerFechaHoy();
 
   const [resultado] = await pool.query(
     `INSERT INTO pagos_salario
-      (empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, valor_a_pagar, estado, fecha_pago_real)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pagado', ?)`,
-    [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, descuentos, valorAPagar, hoy]
+      (empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, horas_extra, valor_horas_extra, descuentos, valor_a_pagar, estado, fecha_pago_real)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?)`,
+    [empleadoId, periodicidad, periodoInicio, periodoFin, salarioBase, horasExtra, valorHorasExtra, descuentos, valorAPagar, hoy]
   );
   return obtenerPagoSalario(resultado.insertId);
 }
@@ -279,6 +280,7 @@ async function crearPagoSalario({ empleadoId, periodicidad, periodoInicio, perio
 async function obtenerPagoSalario(id) {
   const [filas] = await pool.query(
     `SELECT ps.id, ps.empleado_id, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin, ps.salario_base,
+            ps.horas_extra, ps.valor_horas_extra,
             ps.descuentos, ps.valor_a_pagar, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
             ps.soporte_pago_nombre, ps.soporte_pago_tipo,
             (ps.soporte_pago_datos IS NOT NULL) AS tiene_soporte, ps.creado_en,
@@ -292,83 +294,53 @@ async function obtenerPagoSalario(id) {
 }
 
 /**
- * El pago no es el salario fijo completo sin importar nada: se calcula un
- * valor-hora (salario_fijo entre las horas esperadas de la jornada) y se
- * multiplica por las horas realmente trabajadas (asistencia) en el rango.
- * Las horas que en una misma semana calendario (lunes a domingo) excedan la
- * jornada semanal esperada del empleado se pagan al doble del valor-hora.
+ * El salario es FIJO: se paga el salario del período completo (el que se le
+ * definió al empleado según su periodicidad) y a eso se suman las horas extra
+ * que el administrador escribe a mano al pagar. Cada hora extra se paga al
+ * doble del valor-hora (salario / horas esperadas de la jornada del período).
  */
-async function calcularPagoEmpleado(empleadoId, periodoInicio, periodoFin) {
+async function calcularPagoEmpleado(empleadoId, horasExtra = 0) {
   const [empFilas] = await pool.query(`SELECT * FROM usuarios WHERE id = ?`, [empleadoId]);
   const emp = empFilas[0];
   if (!emp) return null;
 
-  const [resumenFilas] = await pool.query(
-    `SELECT SUM(CASE WHEN inasistencia = FALSE THEN 1 ELSE 0 END) AS presentes,
-            SUM(CASE WHEN inasistencia = TRUE THEN 1 ELSE 0 END) AS inasistencias
-     FROM asistencia WHERE persona_tipo = 'usuario' AND persona_id = ? AND fecha BETWEEN ? AND ?`,
-    [empleadoId, periodoInicio, periodoFin]
-  );
-
-  const [semanas] = await pool.query(
-    `SELECT YEARWEEK(fecha, 3) AS semana, MIN(fecha) AS desde, MAX(fecha) AS hasta, SUM(horas_trabajadas) AS horas
-     FROM asistencia
-     WHERE persona_tipo = 'usuario' AND persona_id = ? AND fecha BETWEEN ? AND ?
-     GROUP BY YEARWEEK(fecha, 3)
-     ORDER BY semana`,
-    [empleadoId, periodoInicio, periodoFin]
-  );
-
-  const valorHora = calcularValorHora(emp.salario_fijo, emp.jornada_horas_dia, emp.dias_descanso_semana, emp.periodicidad_pago);
-  const horasEsperadasPeriodo = calcularHorasEsperadasPorPeriodo(emp.jornada_horas_dia, emp.dias_descanso_semana, emp.periodicidad_pago);
-  const horasEsperadasSemana = calcularHorasEsperadasSemana(emp.jornada_horas_dia, emp.dias_descanso_semana);
-
-  let horasNormales = 0;
-  let horasExtra = 0;
-  const desgloseSemanas = semanas.map((s) => {
-    const horasSemana = Number(s.horas) || 0;
-    const normales = Math.min(horasSemana, horasEsperadasSemana);
-    const extra = Math.max(0, horasSemana - horasEsperadasSemana);
-    horasNormales += normales;
-    horasExtra += extra;
-    return {
-      desde: s.desde,
-      hasta: s.hasta,
-      horas: Number(horasSemana.toFixed(2)),
-      horasNormales: Number(normales.toFixed(2)),
-      horasExtra: Number(extra.toFixed(2))
-    };
-  });
-
-  const horasTrabajadas = Number((horasNormales + horasExtra).toFixed(2));
-  const montoNormal = Number((valorHora * horasNormales).toFixed(2));
-  const montoExtra = Number((valorHora * 2 * horasExtra).toFixed(2));
+  const salarioBase = Number(emp.salario_fijo) || 0;
+  const valorHora = calcularValorHora(salarioBase, emp.jornada_horas_dia, emp.dias_descanso_semana, emp.periodicidad_pago);
+  const valorHoraExtra = Number((valorHora * 2).toFixed(2));
+  const horas = Math.max(0, Number(horasExtra) || 0);
+  const montoExtra = Number((valorHoraExtra * horas).toFixed(2));
 
   return {
     empleadoId,
-    salarioFijo: Number(emp.salario_fijo) || 0,
-    jornadaHorasDia: Number(emp.jornada_horas_dia),
-    diasDescansoSemana: emp.dias_descanso_semana,
-    periodicidadPago: emp.periodicidad_pago,
+    periodicidadPago: emp.periodicidad_pago || 'quincenal',
+    salarioBase,
     valorHora,
-    valorHoraExtra: Number((valorHora * 2).toFixed(2)),
-    horasEsperadasPeriodo,
-    horasEsperadasSemana,
-    horasTrabajadas,
-    horasNormales: Number(horasNormales.toFixed(2)),
-    horasExtra: Number(horasExtra.toFixed(2)),
-    montoNormal,
+    valorHoraExtra,
+    horasExtra: horas,
     montoExtra,
-    desgloseSemanas,
-    diasPresentes: Number(resumenFilas[0].presentes) || 0,
-    inasistencias: Number(resumenFilas[0].inasistencias) || 0,
-    montoCalculado: Number((montoNormal + montoExtra).toFixed(2))
+    total: Number((salarioBase + montoExtra).toFixed(2))
+  };
+}
+
+/** Cómo va el pago de un empleado (cuándo le toca, si se puede pagar hoy y qué período cubre). */
+async function estadoPagoDeEmpleado(empleadoId) {
+  const [empFilas] = await pool.query(`SELECT id, nombre, periodicidad_pago, dia_pago, fecha_ingreso, lavador_id FROM usuarios WHERE id = ?`, [empleadoId]);
+  const emp = empFilas[0];
+  if (!emp) return null;
+  const [pagos] = await pool.query(`SELECT fecha_pago_real FROM pagos_salario WHERE empleado_id = ?`, [empleadoId]);
+  return {
+    empleado: emp,
+    estado: estadoDePago(
+      { periodicidad: emp.periodicidad_pago || 'quincenal', diaPago: emp.dia_pago, fechaIngreso: emp.fecha_ingreso },
+      pagos.map(p => String(p.fecha_pago_real || '').substring(0, 10)),
+      obtenerFechaHoy()
+    )
   };
 }
 
 async function listarPagosSalario() {
   const [filas] = await pool.query(
-    `SELECT ps.id, ps.empleado_id, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin, ps.salario_base, ps.descuentos,
+    `SELECT ps.id, ps.empleado_id, ps.periodicidad, ps.periodo_inicio, ps.periodo_fin, ps.salario_base, ps.horas_extra, ps.valor_horas_extra, ps.descuentos,
             ps.valor_a_pagar, ps.estado, ps.fecha_pago_real, ps.soporte_pago_url,
             (ps.soporte_pago_datos IS NOT NULL) AS tiene_soporte, ps.creado_en,
             u.nombre AS empleado_nombre, u.documento AS empleado_documento
@@ -397,6 +369,7 @@ module.exports = {
   obtenerSoporteLiquidacion,
   listarEmpleadosConUltimoPago,
   calcularPagoEmpleado,
+  estadoPagoDeEmpleado,
   crearPagoSalario,
   obtenerPagoSalario,
   listarPagosSalario,

@@ -137,32 +137,57 @@ async function listarEmpleados(req, res) {
 }
 
 /** Cuánto le corresponde a un empleado en un rango, según horas realmente trabajadas. */
+/** Salario del período + horas extra escritas a mano (vista previa del pago). */
 async function calcularPagoEmpleado(req, res) {
-  const { periodo_inicio, periodo_fin } = req.query;
-  if (!periodo_inicio || !periodo_fin) {
-    return res.status(400).json({ error: 'periodo_inicio y periodo_fin son obligatorios.' });
-  }
-  const calculo = await NominaRepositorio.calcularPagoEmpleado(Number(req.params.id), periodo_inicio, periodo_fin);
+  const calculo = await NominaRepositorio.calcularPagoEmpleado(Number(req.params.id), req.query.horas_extra);
   if (!calculo) return res.status(404).json({ error: 'Empleado no encontrado.' });
   res.json(calculo);
 }
 
+/**
+ * Paga el salario de un empleado. A diferencia de los lavadores (a quienes se
+ * liquida cuando se quiera), un empleado solo se paga en su fecha de pago o
+ * después si se atrasó. El pago es el salario fijo del período más las horas
+ * extra que el administrador escribe; el período lo define el calendario de
+ * pago y la fecha de pago siempre es hoy.
+ */
 async function pagarSalarioEmpleado(req, res) {
-  const { empleado_id, periodicidad, periodo_inicio, periodo_fin, salario_base, descuentos, fecha_pago } = req.body;
-  const beneficiario = await UsuarioRepositorio.obtenerPorId(parseInt(empleado_id, 10));
-  if (beneficiario && beneficiario.lavador_id) {
+  const { empleado_id, descuentos } = req.body;
+  const empleadoId = parseInt(empleado_id, 10);
+  const info = await NominaRepositorio.estadoPagoDeEmpleado(empleadoId);
+  if (!info) return res.status(404).json({ error: 'Empleado no encontrado.' });
+  if (info.empleado.lavador_id) {
     return res.status(400).json({ error: 'Esta cuenta es el acceso de un lavador: a él se le paga por comisiones (Nómina > Lavadores), no salario.' });
   }
 
-  const hoy = obtenerFechaHoy();
+  const { empleado, estado } = info;
+  if (!estado.puedePagar) {
+    const motivo = estado.estado === 'al_dia'
+      ? `${empleado.nombre} ya está al día: su próximo pago es el ${estado.fecha}.`
+      : `Todavía no es el día de pago de ${empleado.nombre}: le toca el ${estado.fecha}. Los empleados solo se pagan en su fecha de pago.`;
+    return res.status(400).json({ error: motivo });
+  }
+
+  const horasExtra = parseFloat(req.body.horas_extra) || 0;
+  if (horasExtra < 0) return res.status(400).json({ error: 'Las horas extra no pueden ser negativas.' });
+  const valorDescuentos = parseFloat(descuentos) || 0;
+  if (valorDescuentos < 0) return res.status(400).json({ error: 'Los descuentos no pueden ser negativos.' });
+
+  const calculo = await NominaRepositorio.calcularPagoEmpleado(empleadoId, horasExtra);
+  if (valorDescuentos > calculo.total) {
+    return res.status(400).json({ error: 'Los descuentos no pueden superar lo que se le va a pagar.' });
+  }
+
   const pago = await NominaRepositorio.crearPagoSalario({
-    empleadoId: parseInt(empleado_id, 10),
-    periodicidad: ['semanal', 'quincenal', 'mensual'].includes(periodicidad) ? periodicidad : 'quincenal',
-    periodoInicio: periodo_inicio || hoy,
-    periodoFin: periodo_fin || hoy,
-    salarioBase: parseFloat(salario_base) || 0,
-    descuentos: parseFloat(descuentos) || 0,
-    fechaPago: fecha_pago || hoy
+    empleadoId,
+    periodicidad: calculo.periodicidadPago,
+    periodoInicio: estado.periodoInicio,
+    periodoFin: estado.periodoFin,
+    salarioBase: calculo.salarioBase,
+    horasExtra: calculo.horasExtra,
+    valorHorasExtra: calculo.montoExtra,
+    descuentos: valorDescuentos,
+    fechaPago: obtenerFechaHoy()
   });
 
   const factura = await FacturaRepositorio.crearFactura({
@@ -173,7 +198,7 @@ async function pagarSalarioEmpleado(req, res) {
     creadoPor: req.usuarioAutenticado.id
   });
 
-  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleado_id} ($${pago.valor_a_pagar}) (Factura ${factura.numero_factura})`);
+  await AuditoriaRepositorio.registrar(req.usuarioAutenticado.id, 'pago_salario_empleado', `Pago de salario a empleado ID ${empleadoId} ($${pago.valor_a_pagar}${horasExtra > 0 ? `, con ${horasExtra} h extra` : ''}) (Factura ${factura.numero_factura})`);
   res.status(201).json({ ...pago, factura });
 }
 
@@ -183,17 +208,15 @@ async function comprobantePagoSalario(req, res) {
   if (!pago) return res.status(404).json({ error: 'Pago no encontrado.' });
   const inicio = String(pago.periodo_inicio).substring(0, 10);
   const fin = String(pago.periodo_fin).substring(0, 10);
-  const calculo = await NominaRepositorio.calcularPagoEmpleado(pago.empleado_id, inicio, fin);
   const descuentos = Number(pago.descuentos) || 0;
+  const horasExtra = Number(pago.horas_extra) || 0;
+  const valorExtra = Number(pago.valor_horas_extra) || 0;
 
   const filas = [];
-  if (calculo && calculo.horasTrabajadas > 0) {
-    filas.push([`Horas normales (${calculo.horasNormales} hrs a ${formatearMoneda(calculo.valorHora)}/hr)`, formatearMoneda(calculo.montoNormal)]);
-    if (calculo.horasExtra > 0) {
-      filas.push([`Horas extra (${calculo.horasExtra} hrs a ${formatearMoneda(calculo.valorHoraExtra)}/hr)`, formatearMoneda(calculo.montoExtra)]);
-    }
+  filas.push([`Salario del período (${pago.periodicidad})`, formatearMoneda(pago.salario_base)]);
+  if (horasExtra > 0) {
+    filas.push([`Horas extra (${horasExtra} hrs a ${formatearMoneda(valorExtra / horasExtra)}/hr)`, formatearMoneda(valorExtra)]);
   }
-  filas.push(['Salario del período (según horas trabajadas)', formatearMoneda(pago.salario_base)]);
   filas.push(['Descuentos (inasistencias, anticipos, etc.)', descuentos > 0 ? `-${formatearMoneda(descuentos)}` : formatearMoneda(0)]);
 
   generarPdfComprobanteNomina(res, {
@@ -203,7 +226,7 @@ async function comprobantePagoSalario(req, res) {
     fechaPago: pago.fecha_pago_real || pago.creado_en,
     persona: { etiqueta: 'Empleado', nombre: pago.empleado_nombre || 'Empleado', documento: pago.empleado_documento },
     periodo: `${inicio} al ${fin} (pago ${pago.periodicidad})`,
-    concepto: 'Salario por horas trabajadas en el período',
+    concepto: 'Salario del período' + (horasExtra > 0 ? ' con horas extra' : ''),
     valorNeto: Number(pago.valor_a_pagar),
     filas
   });

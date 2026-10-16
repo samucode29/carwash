@@ -1335,7 +1335,7 @@
         </div>
         <div class="form-row">
           <div class="form-group flex-1">
-            <label>Salario Base:</label>
+            <label>Salario del período:</label>
             <input type="number" id="editEmpSalario" min="0">
           </div>
           <div class="form-group flex-1">
@@ -1359,8 +1359,8 @@
         </div>
         <div class="form-group">
           <label>Día de pago:</label>
-          <input type="number" id="editEmpDiaPago" min="1" max="31" placeholder="Ej: 16 (vacío = sin día definido)">
-          <p class="text-sm text-muted mt-1">Día de pago: en mensual es el día del mes (ej. 16); en quincenal es ese día y 15 días después (16 = el 1 y el 16; 15 = el 15 y el 30); en semanal va de 1 (lunes) a 7 (domingo). Solo avisa cuándo toca: se le puede pagar en cualquier momento.</p>
+          <input type="number" id="editEmpDiaPago" min="1" max="31" placeholder="Ej: 16 (vacío = el día en que ingresó)">
+          <p class="text-sm text-muted mt-1">Día de pago: en mensual es el día del mes (ej. 16); en quincenal es ese día y 15 días después (16 = el 1 y el 16; 15 = el 15 y el 30); en semanal va de 1 (lunes) a 7 (domingo). Si lo dejas vacío, se usa el día en que ingresó. Al empleado solo se le puede pagar en su día de pago (o después, si se atrasó).</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -1379,40 +1379,34 @@
       </div>
       <div class="modal-body">
         <p>Empleado: <strong id="pagSalEmpleadoNombre">--</strong></p>
+        <p class="text-sm text-muted" id="pagSalEstadoInfo"></p>
         <div class="form-row">
           <div class="form-group flex-1">
-            <label>Período Inicio:</label>
-            <input type="date" id="pagSalPeriodoInicio" onchange="app.recalcularPagoPorHoras()">
+            <label>Período que se paga - desde:</label>
+            <input type="date" id="pagSalPeriodoInicio" readonly class="input-readonly">
           </div>
           <div class="form-group flex-1">
-            <label>Período Fin:</label>
-            <input type="date" id="pagSalPeriodoFin" onchange="app.recalcularPagoPorHoras()">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label>Valor Hora:</label>
-            <input type="text" id="pagSalValorHora" readonly class="input-readonly">
-          </div>
-          <div class="form-group flex-1">
-            <label>Horas Trabajadas (según asistencia):</label>
-            <input type="text" id="pagSalHorasTrabajadas" readonly class="input-readonly">
-          </div>
-        </div>
-        <p class="text-sm text-muted" id="pagSalHorasExtraInfo"></p>
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label>Monto Horas Normales:</label>
-            <input type="text" id="pagSalMontoNormal" readonly class="input-readonly">
-          </div>
-          <div class="form-group flex-1">
-            <label>Monto Horas Extra (doble):</label>
-            <input type="text" id="pagSalMontoExtra" readonly class="input-readonly">
+            <label>hasta:</label>
+            <input type="date" id="pagSalPeriodoFin" readonly class="input-readonly">
           </div>
         </div>
         <div class="form-group">
-          <label>Monto Calculado (Normal + Extra):</label>
-          <input type="number" id="pagSalBase" readonly class="input-readonly">
+          <label>Salario del período (<span id="pagSalPeriodicidad">--</span>):</label>
+          <input type="text" id="pagSalBase" readonly class="input-readonly">
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Horas extra (escríbelas tú):</label>
+            <input type="number" id="pagSalHorasExtra" value="0" min="0" step="0.5" oninput="app.recalcSalarioTotal()">
+          </div>
+          <div class="form-group flex-1">
+            <label>Valor de cada hora extra (el doble de la hora normal):</label>
+            <input type="text" id="pagSalValorHoraExtra" readonly class="input-readonly">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Total por horas extra:</label>
+          <input type="text" id="pagSalMontoExtra" readonly class="input-readonly">
         </div>
         <div class="form-group">
           <label>Descuentos (inasistencias, anticipos, etc.):</label>
@@ -1421,10 +1415,6 @@
         <div class="pay-summary">
           <span class="pay-label">Neto a Pagar:</span>
           <span class="pay-amount" id="pagSalNetoAPagar">$0</span>
-        </div>
-        <div class="form-group mt-2">
-          <label>Fecha de Pago:</label>
-          <input type="date" id="pagSalFecha">
         </div>
         <p class="text-sm text-muted">Al confirmar, el pago queda registrado y se abre el comprobante en PDF con espacio para la firma del empleado y la suya. Imprímalo, fírmenlo y guárdelo en físico.</p>
       </div>
@@ -1506,7 +1496,7 @@
         <div id="usrEmpleadoFields" class="hidden">
           <div class="form-row">
             <div class="form-group flex-1">
-              <label>Salario Base (por la jornada completa del período):</label>
+              <label>Salario del período (se paga completo cada vez que le toca):</label>
               <input type="number" id="usrSalario" value="1400000">
             </div>
             <div class="form-group flex-1">
@@ -1530,10 +1520,10 @@
           </div>
           <div class="form-group">
             <label>Día de pago:</label>
-            <input type="number" id="usrDiaPago" min="1" max="31" placeholder="Ej: 16 (vacío = sin día definido)">
-            <p class="text-sm text-muted mt-1">Día de pago: en mensual es el día del mes (ej. 16); en quincenal es ese día y 15 días después (16 = el 1 y el 16; 15 = el 15 y el 30); en semanal va de 1 (lunes) a 7 (domingo). Solo avisa cuándo toca: se le puede pagar en cualquier momento.</p>
+            <input type="number" id="usrDiaPago" min="1" max="31" placeholder="Ej: 16 (vacío = el día en que ingresó)">
+            <p class="text-sm text-muted mt-1">Día de pago: en mensual es el día del mes (ej. 16); en quincenal es ese día y 15 días después (16 = el 1 y el 16; 15 = el 15 y el 30); en semanal va de 1 (lunes) a 7 (domingo). Si lo dejas vacío, se usa el día en que ingresó. Al empleado solo se le puede pagar en su día de pago (o después, si se atrasó).</p>
           </div>
-          <p class="text-sm text-muted mb-2">El pago de nómina se calcula por hora: el salario base se divide entre las horas esperadas de la jornada, y se paga según las horas que realmente marque en asistencia.</p>
+          <p class="text-sm text-muted mb-2">El salario es fijo según la periodicidad que elijas (semanal, quincenal o mensual) y se paga solo en su día de pago. Las horas extra las escribes tú al pagar; la jornada y los días de descanso sirven para calcular cuánto vale cada hora extra.</p>
         </div>
         <p class="text-sm text-muted mt-2">
           El usuario y la contraseña de acceso se asignan automáticamente
