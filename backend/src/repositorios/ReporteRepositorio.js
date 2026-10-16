@@ -29,6 +29,19 @@ function calcularRangoAnterior(inicio, fin) {
   return { inicio: formatearFechaLocal(inicioAnt), fin: formatearFechaLocal(finAnt) };
 }
 
+/**
+ * Plata real acumulada hasta una fecha (inclusive): todo lo que ha entrado (servicios cobrados + propinas)
+ * menos todo lo que ha salido (compras, gastos, comisiones pagadas y salarios pagados), desde el comienzo.
+ */
+async function plataAcumuladaHasta(fecha) {
+  const [[entradas]] = await pool.query(`SELECT COALESCE(SUM(monto + propina), 0) AS total FROM pagos WHERE DATE(fecha_pago) <= ?`, [fecha]);
+  const [[compras]] = await pool.query(`SELECT COALESCE(SUM(total), 0) AS total FROM facturas WHERE tipo = 'compra' AND fecha <= ?`, [fecha]);
+  const [[gastos]] = await pool.query(`SELECT COALESCE(SUM(monto), 0) AS total FROM gastos_operativos WHERE fecha <= ?`, [fecha]);
+  const [[comisiones]] = await pool.query(`SELECT COALESCE(SUM(valor_a_pagar), 0) AS total FROM liquidaciones_lavador WHERE estado = 'pagado' AND fecha_pago <= ?`, [fecha]);
+  const [[salarios]] = await pool.query(`SELECT COALESCE(SUM(valor_a_pagar), 0) AS total FROM pagos_salario WHERE fecha_pago_real <= ?`, [fecha]);
+  return Number((Number(entradas.total) - Number(compras.total) - Number(gastos.total) - Number(comisiones.total) - Number(salarios.total)).toFixed(2));
+}
+
 /** Resumen general (Ingresos - Compras de insumos - Gastos - Comisiones = Ganancia neta). */
 async function calcularReporte(inicio, fin) {
   const [ordenesPagadas] = await pool.query(
@@ -125,6 +138,10 @@ async function calcularReporte(inicio, fin) {
   const gananciaNeta = ingresosTotales - (costoInsumos + totalGastos + comisionesPagadas + salariosPagados);
   const margenPorcentaje = ingresosTotales > 0 ? Number(((gananciaNeta / ingresosTotales) * 100).toFixed(1)) : 0;
 
+  // La plata del negocio se acumula día tras día: lo que había + lo que entró - lo que salió.
+  const plataReal = await plataAcumuladaHasta(fin);
+  const plataAnterior = Number((plataReal - gananciaNeta).toFixed(2));
+
   // Todo se discrimina por tipo de vehículo: cantidad de servicios e ingresos
   // de cada tipo, y por servicio (cada servicio ya es de un solo tipo).
   const distribucionVehiculos = {};
@@ -186,7 +203,7 @@ async function calcularReporte(inicio, fin) {
     ticketPromedio: ordenesPagadas.length > 0 ? Math.round(totalIngresos / ordenesPagadas.length) : 0,
     serieIngresos, porMetodoPago,
     gastosDetalle: gastosDetalle.map(g => ({ id: g.id, fecha: g.fecha, concepto: g.concepto, monto: Number(g.monto), registradoPor: g.registrado_por || '-' })),
-    totalIngresos, ingresosTotales, totalComisionesLavadores, costoInsumos, totalGastos, gananciaNeta, margenPorcentaje,
+    totalIngresos, ingresosTotales, totalComisionesLavadores, costoInsumos, totalGastos, gananciaNeta, margenPorcentaje, plataReal, plataAnterior,
     comisionesPagadas, comisionesPagadasCantidad: comisionesPagadasFila[0].cantidad || 0,
     salariosPagados, salariosPagadosCantidad: salariosPagadosFila[0].cantidad || 0,
     porPagarLavadores,

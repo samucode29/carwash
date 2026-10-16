@@ -118,7 +118,8 @@ function vistaResumen(r, previo, periodo) {
 
   doc.kpis.push(
     kpi('Ingresos del negocio', F.moneda(r.ingresosTotales), { tono: 'ok', detalle: `Servicios ${F.moneda(r.totalIngresos)} + propinas ${F.moneda(r.totalPropinas)}`, variacion: previo ? v(r.ingresosTotales, previo.ingresosTotales) : null }),
-    kpi('Plata real del negocio', F.moneda(r.gananciaNeta), { tono: r.gananciaNeta >= 0 ? 'ok' : 'mal', detalle: `Ingresos menos lo que se pagó: queda el ${F.porcentaje(r.margenPorcentaje)} de los ingresos`, variacion: previo ? v(r.gananciaNeta, previo.gananciaNeta) : null }),
+    kpi('Plata real del negocio', F.moneda(r.plataReal), { tono: r.plataReal >= 0 ? 'ok' : 'mal', detalle: `Acumulada: tenías ${F.moneda(r.plataAnterior)} antes de este período` }),
+    kpi('Resultado del período', F.moneda(r.gananciaNeta), { tono: r.gananciaNeta >= 0 ? 'ok' : 'mal', detalle: 'Lo que entró menos lo que salió solo en este período', variacion: previo ? v(r.gananciaNeta, previo.gananciaNeta) : null }),
     kpi('Servicios atendidos', F.entero(r.serviciosAtendidos), { detalle: 'Órdenes cobradas', variacion: previo ? v(r.serviciosAtendidos, previo.serviciosAtendidos) : null }),
     kpi('Ticket promedio', F.moneda(r.ticketPromedio), { detalle: 'Ingreso medio por servicio', variacion: previo ? v(r.ticketPromedio, previo.ticketPromedio) : null }),
     kpi('Compras de insumos', F.moneda(r.costoInsumos), { tono: 'mal', detalle: `${F.porcentaje(F.participacion(r.costoInsumos, r.ingresosTotales))} de los ingresos`, mejorSiSube: false }),
@@ -172,17 +173,20 @@ function vistaResumen(r, previo, periodo) {
   if (r.serviciosCancelados.total > 0) doc.hallazgos.push(`Se cancelaron ${r.serviciosCancelados.total} servicios (no suman ingresos). Revisa el reporte Operativo para ver el detalle.`);
   if (r.alertasStockCount > 0) doc.hallazgos.push(`Hay ${r.alertasStockCount} insumos en bajo stock; revisa el reporte de Inventario.`);
 
+  doc.hallazgos.unshift(`La plata real del negocio es ${F.moneda(r.plataReal)}: tenías ${F.moneda(r.plataAnterior)}, en este período entraron ${F.moneda(r.ingresosTotales)} y salieron ${F.moneda(r.ingresosTotales - r.gananciaNeta)}.`);
+
   // --- Secciones
   doc.secciones.push({
     tipo: 'formula', titulo: '¿Cómo se calcula la ganancia?',
-    explicacion: 'Los ingresos del negocio son TODO lo que entra (servicios cobrados y propinas). De ahí solo se resta lo que realmente salió: las compras cuando se hacen, los gastos cuando se registran y las comisiones (con las propinas que se entregan a los lavadores) y los salarios cuando se pagan. Lo que aún se les debe no resta hasta que se pague.',
+    explicacion: 'La plata del negocio se va acumulando: lo que ya había, más todo lo que entra (servicios cobrados y propinas), menos lo que realmente sale: las compras cuando se hacen, los gastos cuando se registran y las comisiones (con las propinas que se entregan a los lavadores) y los salarios cuando se pagan. Lo que aún se les debe no resta hasta que se pague.',
     pasos: [
-      { etiqueta: 'Ingresos del negocio', valor: F.moneda(r.ingresosTotales), tono: 'ok', detalle: `Servicios ${F.moneda(r.totalIngresos)} + propinas ${F.moneda(r.totalPropinas)}` },
+      { etiqueta: 'Plata que había antes', valor: F.moneda(r.plataAnterior), tono: r.plataAnterior >= 0 ? 'ok' : 'mal' },
+      { operador: '+', etiqueta: 'Ingresos del negocio', valor: F.moneda(r.ingresosTotales), tono: 'ok', detalle: `Servicios ${F.moneda(r.totalIngresos)} + propinas ${F.moneda(r.totalPropinas)}` },
       { operador: '−', etiqueta: 'Insumos', valor: F.moneda(r.costoInsumos), tono: 'mal' },
       { operador: '−', etiqueta: 'Gastos', valor: F.moneda(r.totalGastos), tono: 'mal' },
       { operador: '−', etiqueta: 'Comisiones pagadas', valor: F.moneda(r.comisionesPagadas), tono: 'mal' },
       { operador: '−', etiqueta: 'Salarios pagados', valor: F.moneda(r.salariosPagados), tono: 'mal' },
-      { operador: '=', etiqueta: 'Plata real del negocio', valor: F.moneda(r.gananciaNeta), tono: r.gananciaNeta >= 0 ? 'destacado' : 'mal', detalle: `Margen ${F.porcentaje(r.margenPorcentaje)}` }
+      { operador: '=', etiqueta: 'Plata real del negocio', valor: F.moneda(r.plataReal), tono: r.plataReal >= 0 ? 'destacado' : 'mal', detalle: `Este período ${r.gananciaNeta >= 0 ? 'sumó' : 'restó'} ${F.moneda(Math.abs(r.gananciaNeta))}` }
     ]
   });
 
@@ -200,7 +204,7 @@ function vistaResumen(r, previo, periodo) {
     { etiqueta: 'Compras de insumos', valor: r.costoInsumos, texto: F.moneda(r.costoInsumos) },
     { etiqueta: 'Gastos operativos', valor: r.totalGastos, texto: F.moneda(r.totalGastos) }
   ];
-  if (r.gananciaNeta > 0) itemsReparto.push({ etiqueta: 'Plata que queda', valor: r.gananciaNeta, texto: F.moneda(r.gananciaNeta), color: '#10b981' });
+  if (r.gananciaNeta > 0) itemsReparto.push({ etiqueta: 'Queda del período', valor: r.gananciaNeta, texto: F.moneda(r.gananciaNeta), color: '#10b981' });
   doc.secciones.push(dona(
     '¿A dónde se va cada peso que entra?',
     r.gananciaNeta >= 0
@@ -644,7 +648,7 @@ function vistaComparativo(r, periodo) {
 
   doc.kpis.push(
     kpi('Ingresos', F.moneda(a.totalIngresos), { tono: 'ok', detalle: `Antes: ${F.moneda(b.totalIngresos)}`, variacion: vr.ingresos }),
-    kpi('Plata real del negocio', F.moneda(a.gananciaNeta), { tono: a.gananciaNeta >= 0 ? 'ok' : 'mal', detalle: `Antes: ${F.moneda(b.gananciaNeta)}`, variacion: vr.ganancia }),
+    kpi('Resultado del período', F.moneda(a.gananciaNeta), { tono: a.gananciaNeta >= 0 ? 'ok' : 'mal', detalle: `Antes: ${F.moneda(b.gananciaNeta)}`, variacion: vr.ganancia }),
     kpi('Servicios atendidos', F.entero(a.serviciosAtendidos), { detalle: `Antes: ${F.entero(b.serviciosAtendidos)}`, variacion: vr.servicios }),
     kpi('Ticket promedio', F.moneda(a.ticketPromedio), { detalle: `Antes: ${F.moneda(b.ticketPromedio)}`, variacion: vr.ticket })
   );
@@ -654,7 +658,7 @@ function vistaComparativo(r, periodo) {
   } else {
     if (vr.ingresos === null) doc.hallazgos.push(`El período anterior no tuvo ingresos, por eso no se puede calcular una variación. El período actual vendió ${F.moneda(a.totalIngresos)}.`);
     else doc.hallazgos.push(`Los ingresos ${textoVariacion(vr.ingresos)}: ${F.moneda(b.totalIngresos)} antes y ${F.moneda(a.totalIngresos)} ahora (${F.moneda(a.totalIngresos - b.totalIngresos)} de diferencia).`);
-    if (vr.ganancia !== null) doc.hallazgos.push(`La plata real del negocio ${textoVariacion(vr.ganancia)}: de ${F.moneda(b.gananciaNeta)} a ${F.moneda(a.gananciaNeta)}.`);
+    if (vr.ganancia !== null) doc.hallazgos.push(`El resultado del período (ingresos menos lo que se pagó) ${textoVariacion(vr.ganancia)}: de ${F.moneda(b.gananciaNeta)} a ${F.moneda(a.gananciaNeta)}.`);
     if (vr.servicios !== null) doc.hallazgos.push(`Se atendieron ${F.entero(a.serviciosAtendidos)} servicios, ${a.serviciosAtendidos >= b.serviciosAtendidos ? 'frente a' : 'contra'} ${F.entero(b.serviciosAtendidos)} del período anterior.`);
     const dm = a.margenPorcentaje - b.margenPorcentaje;
     if (b.totalIngresos > 0 && a.totalIngresos > 0) doc.hallazgos.push(`El margen de rentabilidad ${dm >= 0 ? 'mejoró' : 'empeoró'} ${F.decimal(Math.abs(dm), 1)} puntos (de ${F.porcentaje(b.margenPorcentaje)} a ${F.porcentaje(a.margenPorcentaje)}).`);
@@ -674,7 +678,7 @@ function vistaComparativo(r, periodo) {
   doc.secciones.push(serie(
     'Ingresos, costos y ganancia',
     'Cada grupo compara el período actual con el anterior en las cuentas principales del negocio.',
-    'grupo', ['Ingresos', 'Insumos', 'Comisiones pagadas', 'Salarios pagados', 'Gastos', 'Plata que queda'],
+    'grupo', ['Ingresos', 'Insumos', 'Comisiones pagadas', 'Salarios pagados', 'Gastos', 'Resultado'],
     [
       { nombre: 'Período actual', valores: [a.totalIngresos, a.costoInsumos, a.comisionesPagadas, a.salariosPagados, a.totalGastos, Math.max(0, a.gananciaNeta)], color: PALETA[0] },
       { nombre: 'Período anterior', valores: [b.totalIngresos, b.costoInsumos, b.comisionesPagadas, b.salariosPagados, b.totalGastos, Math.max(0, b.gananciaNeta)], color: '#94a3b8' }
@@ -701,7 +705,7 @@ function vistaComparativo(r, periodo) {
       fila('Comisiones pagadas a lavadores', a.comisionesPagadas, b.comisionesPagadas, F.moneda, false),
       fila('Salarios pagados', a.salariosPagados, b.salariosPagados, F.moneda, false),
       fila('Gastos operativos', a.totalGastos, b.totalGastos, F.moneda, false),
-      fila('Plata real del negocio', a.gananciaNeta, b.gananciaNeta, F.moneda),
+      fila('Resultado del período', a.gananciaNeta, b.gananciaNeta, F.moneda),
       fila('Margen de rentabilidad (%)', a.margenPorcentaje, b.margenPorcentaje, (x) => F.porcentaje(x)),
       fila('Servicios atendidos', a.serviciosAtendidos, b.serviciosAtendidos, F.entero),
       fila('Ticket promedio', a.ticketPromedio, b.ticketPromedio, F.moneda),
